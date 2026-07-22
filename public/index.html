@@ -1,0 +1,1233 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Barra Fit 360 — Sistema de Control & Punto de Venta</title>
+  <meta name="description" content="Sistema integral de gestión para Barra Fit 360: Punto de Venta multimoneda, inventario automático, cuentas por cobrar y reportes de cierre.">
+  <!-- Google Fonts: Inter para texto general, Outfit para títulos y números -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Lucide Icons para iconografía limpia y moderna -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Estilos CSS -->
+  <link rel="stylesheet" href="index.css?v=9">
+</head>
+<body>
+
+  <!-- ============================================ -->
+  <!-- PANTALLA DE SELECCIÓN DE TURNO              -->
+  <!-- ============================================ -->
+  <div id="turno-screen">
+    <!-- Marca -->
+    <div class="turno-brand">
+      <div class="turno-brand-icon">360</div>
+      <h1>Barra Fit 360</h1>
+      <p>Selecciona tu turno para iniciar la jornada</p>
+    </div>
+
+    <!-- Card del formulario -->
+    <div class="turno-card">
+      <h2>¿Cuál es tu turno hoy?</h2>
+
+      <!-- Selector visual de turno -->
+      <div class="turno-options">
+        <label class="turno-option turno-manana">
+          <input type="radio" name="turno-sel" id="radio-manana" value="Mañana" checked>
+          <div class="turno-option-label">
+            <span class="turno-option-emoji">🌅</span>
+            <span class="turno-option-name">Mañana</span>
+            <span class="turno-option-hours">6:00 AM – 1:00 PM</span>
+          </div>
+          <div class="turno-check">✓</div>
+        </label>
+
+        <label class="turno-option turno-tarde">
+          <input type="radio" name="turno-sel" id="radio-tarde" value="Tarde">
+          <div class="turno-option-label">
+            <span class="turno-option-emoji">🌆</span>
+            <span class="turno-option-name">Tarde</span>
+            <span class="turno-option-hours">1:00 PM – 8:00 PM</span>
+          </div>
+          <div class="turno-check">✓</div>
+        </label>
+      </div>
+
+      <!-- Selección de cajero -->
+      <div class="turno-field">
+        <label for="turno-cajero-select">Cajero</label>
+        <select id="turno-cajero-select">
+          <option value="">-- Cargando usuarios... --</option>
+        </select>
+      </div>
+
+      <!-- Contraseña para cajero EXISTENTE -->
+      <div class="turno-field" id="turno-pass-field">
+        <label for="turno-password">Contraseña</label>
+        <div class="pass-input-wrap">
+          <input type="password" id="turno-password" placeholder="Ingresa tu contraseña" maxlength="40" autocomplete="current-password">
+          <button type="button" class="pass-toggle-btn" data-target="turno-password" title="Ver contraseña">
+            <i data-lucide="eye"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Fondo inicial -->
+      <div class="turno-field">
+      <div style="display:flex; gap:10px;">
+        <div class="form-group" style="flex:1;">
+          <label for="turno-fondo">Fondo de Caja (COP)</label>
+          <input type="number" id="turno-fondo" placeholder="Ej: 50000" min="0" step="1000" value="0">
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label for="turno-fondo-usd">Fondo (USD)</label>
+          <input type="number" id="turno-fondo-usd" placeholder="Ej: 20" min="0" step="1" value="0">
+        </div>
+      </div>
+      </div>
+
+      <!-- Botón iniciar -->
+      <button id="btn-iniciar-turno">
+        <i data-lucide="play-circle"></i>
+        Iniciar Turno
+      </button>
+
+      <!-- Error message -->
+      <div class="turno-error" id="turno-error"></div>
+
+      <!-- Banner sesión activa (si se refresca la página) -->
+      <div class="session-resume-banner" id="session-resume-banner" style="display:none;">
+        <strong>✅ Turno activo detectado.</strong><br>
+        Reanudando sesión en curso...
+      </div>
+    </div>
+  </div>
+
+  <!-- Contenedor Principal de la App -->
+  <div class="app-container">
+    
+    <!-- OVERLAY MÓVIL -->
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <!-- SIDEBAR DE NAVEGACIÓN -->
+    <nav class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-icon">360</div>
+        <div class="brand-text">
+          <h1>Barra Fit</h1>
+          <span>Sistema v1.0</span>
+        </div>
+      </div>
+
+      <div class="sidebar-menu">
+        <button class="nav-item active" data-view="pos" id="nav-pos">
+          <i data-lucide="shopping-cart"></i>
+          <span>Punto de Venta</span>
+        </button>
+        <button class="nav-item" data-view="inventario" id="nav-inventario">
+          <i data-lucide="package"></i>
+          <span>Inventario</span>
+        </button>
+        <button class="nav-item" data-view="credito" id="nav-credito">
+          <i data-lucide="credit-card"></i>
+          <span>Cuentas x Cobrar</span>
+        </button>
+        <button class="nav-item" data-view="reportes" id="nav-reportes">
+          <i data-lucide="bar-chart-3"></i>
+          <span>Reportes</span>
+        </button>
+        <button class="nav-item" data-view="caja" id="nav-caja">
+          <i data-lucide="wallet"></i>
+          <span>Caja y Gastos</span>
+        </button>
+        <button class="nav-item" data-view="tesoreria" id="nav-tesoreria">
+          <i data-lucide="landmark"></i>
+          <span>Tesorería</span>
+        </button>
+        <button class="nav-item" data-view="usuarios" id="nav-usuarios" style="display:none;">
+          <i data-lucide="users"></i>
+          <span>Gestión Usuarios</span>
+        </button>
+      </div>
+
+      <!-- Info de Turno Activo en Sidebar -->
+      <div class="sidebar-turno-info" id="sidebar-turno-info" style="display:none;">
+        <span class="st-name" id="st-cajero-name">Cajero</span>
+        <span class="st-turno" id="st-turno-label">Turno Mañana</span>
+      </div>
+
+      <div class="sidebar-footer">
+        <div id="sidebar-api-status" class="sidebar-status offline">
+          <i data-lucide="wifi-off"></i>
+          <span>Buscando...</span>
+        </div>
+        <div class="sidebar-time" id="sidebar-time">--</div>
+      </div>
+    </nav>
+
+    <!-- ÁREA DE CONTENIDO PRINCIPAL -->
+    <div class="main-content">
+
+      <!-- HEADER -->
+      <header class="app-header">
+        <div class="header-left">
+          <button class="sidebar-toggle" id="sidebar-toggle">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+          </button>
+          <h2 class="view-title" id="view-title">Punto de Venta</h2>
+        </div>
+        <div class="status-area">
+          <!-- Badge de Turno Activo -->
+          <span id="header-turno-badge" style="display:none;"></span>
+          <span id="api-status-badge" class="badge badge-offline">
+            <i data-lucide="wifi-off"></i>
+            <span class="status-text">Buscando Servidor...</span>
+          </span>
+          <div class="date-time" id="live-time">Cargando fecha...</div>
+        </div>
+      </header>
+
+      <!-- ============================================ -->
+      <!-- VISTA 1: PUNTO DE VENTA (POS)              -->
+      <!-- ============================================ -->
+      <div class="view-panel active" id="view-pos">
+        <main class="app-body">
+          
+          <!-- COLUMNA IZQUIERDA: Catálogo de Productos -->
+          <section class="catalog-section">
+            <!-- Navegación de Categorías -->
+            <nav class="categories-nav" id="categories-container">
+              <!-- Dinámico en app.js -->
+            </nav>
+            
+            <!-- Búsqueda y Filtro rápido -->
+            <div class="search-bar">
+              <i data-lucide="search" class="search-icon"></i>
+              <input type="text" id="search-input" placeholder="Buscar producto por nombre o código...">
+            </div>
+
+            <!-- Grid de Tarjetas de Productos -->
+            <div class="products-grid" id="products-grid">
+              <!-- Dinámico en app.js -->
+            </div>
+          </section>
+
+          <!-- COLUMNA DERECHA: Carrito de Compras -->
+          <aside class="cart-section">
+            <div class="cart-header">
+              <h2><i data-lucide="shopping-cart"></i> Orden de Compra</h2>
+              <span class="items-count" id="cart-count">0 items</span>
+            </div>
+
+            <!-- CONTENEDOR NUEVO: Tasas de Cambio Globales -->
+            <div class="global-rates-panel" style="padding: 10px 15px; border-bottom: 1px solid var(--border-glass); display: flex; flex-wrap: wrap; gap: 15px; background: rgba(255, 255, 255, 0.02);">
+              <div class="rate-input-group" style="display: flex; flex-direction: column; flex: 1;">
+                <label for="rate-usd" style="font-size: 0.75rem; color: var(--color-muted); margin-bottom: 4px; font-weight: 600;">Tasa USD (COP/USD)</label>
+                <div style="display: flex; align-items: center; background: var(--bg-surface); border: 1px solid var(--border-glass); border-radius: 6px; padding: 4px 8px;">
+                  <span style="color: var(--color-muted); font-size: 0.85rem; margin-right: 4px;">$</span>
+                  <input type="number" id="rate-usd" min="1" style="background: transparent; border: none; color: var(--color-text); width: 100%; outline: none; font-size: 0.9rem;" placeholder="0">
+                </div>
+              </div>
+              <div class="rate-input-group" style="display: flex; flex-direction: column; flex: 1;">
+                <label for="rate-ves" style="font-size: 0.75rem; color: var(--color-muted); margin-bottom: 4px; font-weight: 600;">Tasa VES (COP/VES)</label>
+                <div style="display: flex; align-items: center; background: var(--bg-surface); border: 1px solid var(--border-glass); border-radius: 6px; padding: 4px 8px;">
+                  <span style="color: var(--color-muted); font-size: 0.85rem; margin-right: 4px;">Bs</span>
+                  <input type="number" id="rate-ves" min="0.1" step="0.1" style="background: transparent; border: none; color: var(--color-text); width: 100%; outline: none; font-size: 0.9rem;" placeholder="0">
+                </div>
+              </div>
+            </div>
+
+            <!-- Contenedor de Items del Carrito -->
+            <div class="cart-items-wrapper" id="cart-items-container">
+              <!-- Estado Vacío -->
+              <div class="empty-cart-state" id="empty-cart-view">
+                <i data-lucide="shopping-bag" class="empty-icon"></i>
+                <p>El carrito está vacío</p>
+                <span>Selecciona productos del catálogo para comenzar la venta</span>
+              </div>
+            </div>
+
+            <!-- Resumen de Totales y Checkout -->
+            <div class="cart-footer">
+              <div class="summary-line">
+                <span>Subtotal (COP)</span>
+                <span id="summary-subtotal">$0 COP</span>
+              </div>
+              
+              <!-- TOTALES MULTIMONEDA -->
+              <div class="summary-line total-line" style="border-bottom: 1px dashed var(--border-glass); padding-bottom: 8px; margin-bottom: 8px;">
+                <span>Total a Pagar</span>
+                <span id="summary-total-cop" style="font-size: 1.2rem; color: var(--color-text);">$0 COP</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+                <div style="display: flex; flex-direction: column; align-items: flex-start;">
+                  <span style="font-size: 0.75rem; color: var(--color-muted);">Total USD</span>
+                  <strong id="summary-total-usd" style="color: var(--success); font-size: 1.1rem;">$0.00</strong>
+                </div>
+                <div style="display: flex; flex-direction: column; align-items: flex-end;">
+                  <span style="font-size: 0.75rem; color: var(--color-muted);">Total VES</span>
+                  <strong id="summary-total-ves" style="color: var(--cyan-neon); font-size: 1.1rem;">Bs 0.00</strong>
+                </div>
+              </div>
+              
+              <!-- PAGO RÁPIDO (ONE-CLICK) -->
+              <div class="quick-pay-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px;">
+                <button class="action-btn secondary quick-pay-btn" data-method="Efectivo COP" data-currency="COP" style="font-size: 0.8rem; padding: 6px;">💵 Efectivo COP</button>
+                <button class="action-btn secondary quick-pay-btn" data-method="Bancolombia" data-currency="COP" style="font-size: 0.8rem; padding: 6px; border-color: rgba(255, 216, 0, 0.4); color: #ffd800;">🏦 Bancolombia</button>
+                
+                <button class="action-btn secondary quick-pay-btn" data-method="Zelle" data-currency="USD" style="font-size: 0.8rem; padding: 6px; border-color: rgba(116, 67, 255, 0.4); color: #9d7bff;">🟣 Zelle USD</button>
+                <button class="action-btn secondary quick-pay-btn" data-method="Efectivo USD" data-currency="USD" style="font-size: 0.8rem; padding: 6px; border-color: rgba(34, 197, 94, 0.4); color: var(--success);">💵 Efectivo USD</button>
+                
+                <button class="action-btn secondary quick-pay-btn" data-method="Pago Móvil" data-currency="VES" style="font-size: 0.8rem; padding: 6px; border-color: rgba(56, 189, 248, 0.4); color: var(--cyan-neon);">📱 Pago Móvil</button>
+                <button class="action-btn secondary quick-pay-btn" data-method="Binance" data-currency="USD" style="font-size: 0.8rem; padding: 6px; border-color: rgba(243, 186, 47, 0.4); color: #f3ba2f;">🟡 Binance</button>
+              </div>
+
+              <!-- OTROS MÉTODOS -->
+              <div style="display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 10px;">
+                <button class="checkout-btn" id="btn-mixto" disabled style="background: var(--primary); height: auto; white-space: normal; text-align: center;">
+                  <span><i data-lucide="layers" style="width:16px; height:16px;"></i> Pago Mixto (Múltiples Métodos)</span>
+                </button>
+                <div class="secondary-pay-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px;">
+                  <button class="checkout-btn" id="btn-credito-directo" disabled style="background: var(--warning); padding: 10px; font-size: 0.9rem;">
+                    <span><i data-lucide="book-user" style="width:16px; height:16px;"></i> A Crédito (100%)</span>
+                  </button>
+                  <button class="checkout-btn" id="btn-cortesia-directo" disabled style="background: var(--success); padding: 10px; font-size: 0.9rem;">
+                    <span><i data-lucide="gift" style="width:16px; height:16px;"></i> Cortesía (100%)</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </aside>
+
+        </main>
+      </div>
+
+      <!-- ============================================ -->
+      <!-- VISTA 2: INVENTARIO                         -->
+      <!-- ============================================ -->
+      <div class="view-panel" id="view-inventario">
+        <div class="module-content">
+          
+          <!-- Tabs de Sub-navegación -->
+          <div class="module-tabs">
+            <button class="mod-tab active" data-inv-tab="insumos" id="tab-insumos">
+              <i data-lucide="boxes"></i> Insumos
+            </button>
+            <button class="mod-tab" data-inv-tab="mermas" id="tab-mermas">
+              <i data-lucide="trash-2"></i> Mermas
+            </button>
+            <button class="mod-tab" data-inv-tab="productos" id="tab-productos-admin">
+              <i data-lucide="tag"></i> Productos
+            </button>
+            <button class="mod-tab" data-inv-tab="orden" id="tab-orden">
+              <i data-lucide="shopping-cart"></i> Orden Compra
+            </button>
+          </div>
+
+          <!-- Sub-vista: Insumos -->
+          <div class="inv-panel active" id="inv-insumos">
+            <div class="panel-header">
+              <h3>Inventario de Insumos (Materia Prima)</h3>
+              <button class="action-btn" id="btn-add-insumo">
+                <i data-lucide="plus"></i> Agregar Insumo
+              </button>
+            </div>
+            
+            <!-- KPIs de Valorización -->
+            <div class="kpi-grid" style="margin-bottom: 20px;">
+              <div class="kpi-card" style="background: rgba(0, 242, 254, 0.05); border: 1px solid rgba(0, 242, 254, 0.2);">
+                <div class="kpi-icon"><i data-lucide="dollar-sign"></i></div>
+                <div class="kpi-data">
+                  <span class="kpi-label">Capital Actual</span>
+                  <span class="kpi-value" id="val-actual">$0</span>
+                  <span class="kpi-sub">Mercancía en existencia</span>
+                </div>
+              </div>
+              <div class="kpi-card" style="background: rgba(255, 179, 0, 0.05); border: 1px solid rgba(255, 179, 0, 0.2);">
+                <div class="kpi-icon"><i data-lucide="refresh-ccw"></i></div>
+                <div class="kpi-data">
+                  <span class="kpi-label">Costo Reposición</span>
+                  <span class="kpi-value" id="val-reposicion" style="color: var(--warning)">$0</span>
+                  <span class="kpi-sub">Para llegar al mínimo</span>
+                </div>
+              </div>
+              <div class="kpi-card" style="background: rgba(0, 230, 118, 0.05); border: 1px solid rgba(0, 230, 118, 0.2);">
+                <div class="kpi-icon"><i data-lucide="landmark"></i></div>
+                <div class="kpi-data">
+                  <span class="kpi-label">Capital Ideal (Stock Fijo)</span>
+                  <span class="kpi-value" id="val-ideal" style="color: var(--success)">$0</span>
+                  <span class="kpi-sub">Capital total si estuviera lleno</span>
+                </div>
+              </div>
+            </div>
+            <!-- Barra de búsqueda y ordenamiento de Insumos -->
+            <div class="search-bar" style="margin-bottom: 16px; display:flex; gap:12px; align-items:center;">
+              <div style="flex:1; position:relative;">
+                <i data-lucide="search" class="search-icon"></i>
+                <input type="text" id="search-insumos-input" placeholder="Buscar insumo por nombre...">
+              </div>
+              <select id="sort-insumos-select" style="padding:10px 14px; border-radius:10px; background:var(--surface); color:var(--text-primary); border:1px solid var(--border); font-size:0.9rem; cursor:pointer; min-width:170px;">
+                <option value="nombre-asc">Nombre A → Z</option>
+                <option value="nombre-desc">Nombre Z → A</option>
+                <option value="stock-asc">Stock ↑ (menor)</option>
+                <option value="stock-desc">Stock ↓ (mayor)</option>
+                <option value="costo-desc">Costo ↓ (mayor)</option>
+                <option value="costo-asc">Costo ↑ (menor)</option>
+                <option value="valor-fijo-desc">Valor Fijo ↓ (mayor)</option>
+                <option value="valor-fijo-asc">Valor Fijo ↑ (menor)</option>
+              </select>
+            </div>
+            <div class="data-table-wrapper">
+              <table class="data-table" id="table-insumos">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Nombre</th>
+                    <th>Unidad</th>
+                    <th>Stock Actual</th>
+                    <th>Stock Mínimo</th>
+                    <th>Stock Fijo</th>
+                    <th>Costo Unit.</th>
+                    <th>Valor Fijo</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-insumos">
+                  <tr><td colspan="10" class="loading-cell">Cargando insumos...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Sub-vista: Mermas -->
+          <div class="inv-panel" id="inv-mermas">
+            <div class="panel-header">
+              <h3>Registro de Mermas (Pérdidas)</h3>
+              <button class="action-btn" id="btn-add-merma">
+                <i data-lucide="plus"></i> Registrar Merma
+              </button>
+            </div>
+            <div class="data-table-wrapper">
+              <table class="data-table" id="table-mermas">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Insumo</th>
+                    <th>Cantidad</th>
+                    <th>Unidad</th>
+                    <th>Motivo</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-mermas">
+                  <tr><td colspan="5" class="loading-cell">Cargando mermas...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Sub-vista: Productos Admin -->
+          <div class="inv-panel" id="inv-productos">
+            <div class="panel-header">
+              <h3>Catálogo de Productos</h3>
+              <button class="action-btn" id="btn-add-producto">
+                <i data-lucide="plus"></i> Nuevo Producto
+              </button>
+            </div>
+            <div class="data-table-wrapper">
+              <table class="data-table" id="table-productos">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Nombre</th>
+                    <th>Categoría</th>
+                    <th>Costo Prod.</th>
+                    <th>Precio Venta</th>
+                    <th>Margen</th>
+                    <th>Stock Disp.</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-productos">
+                  <tr><td colspan="8" class="loading-cell">Cargando productos...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Sub-vista: Orden de Compra -->
+          <div class="inv-panel" id="inv-orden">
+            <div class="panel-header">
+              <h3>🛒 Orden de Compra Inteligente</h3>
+              <button class="action-btn" onclick="loadOrdenCompra()">
+                <i data-lucide="refresh-cw"></i> Actualizar
+              </button>
+            </div>
+            <div class="data-table-wrapper">
+              <table class="data-table" id="table-orden">
+                <thead>
+                  <tr>
+                    <th>Insumo</th>
+                    <th>Stock Actual</th>
+                    <th>Stock Fijo (Meta)</th>
+                    <th>Faltante (Por Comprar)</th>
+                    <th>Costo Unitario</th>
+                    <th>Total Reposición</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-orden">
+                  <tr><td colspan="6" class="loading-cell">Cargando orden...</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div style="margin-top:20px; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; text-align:right; font-size:1.5em; font-weight:bold; color:var(--text-bright);">
+              Total de la Orden: <span id="val-total-orden" style="color:var(--success)">$0</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ============================================ -->
+      <!-- VISTA 3: CUENTAS POR COBRAR                 -->
+      <!-- ============================================ -->
+      <div class="view-panel" id="view-credito">
+        <div class="module-content">
+          <div class="panel-header">
+            <h3>Clientes con Línea de Crédito</h3>
+            <button class="action-btn" id="btn-add-cliente">
+              <i data-lucide="user-plus"></i> Nuevo Cliente
+            </button>
+          </div>
+          
+          <div class="data-table-wrapper">
+            <table class="data-table" id="table-clientes">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Nombre</th>
+                  <th>Identificación</th>
+                  <th>Teléfono</th>
+                  <th>Límite Crédito</th>
+                  <th>Saldo Deudor</th>
+                  <th>Estado</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-clientes">
+                <tr><td colspan="8" class="loading-cell">Cargando clientes...</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Detalle del Cliente Seleccionado -->
+          <div class="client-detail-panel" id="client-detail-panel" style="display:none;">
+            <div class="panel-header">
+              <h3 id="detail-client-name">Detalle del Cliente</h3>
+              <button class="action-btn secondary" id="btn-close-detail">
+                <i data-lucide="x"></i> Cerrar
+              </button>
+            </div>
+            <div class="client-stats" id="client-stats">
+              <!-- Dinámico -->
+            </div>
+            <div class="panel-header" style="margin-top:16px;">
+              <h4>Historial de Movimientos</h4>
+              <button class="action-btn" id="btn-registrar-abono">
+                <i data-lucide="banknote"></i> Registrar Abono
+              </button>
+              <button class="action-btn" id="btn-registrar-deuda" style="background:var(--warning); color:#000;">
+                <i data-lucide="file-plus"></i> Registrar Deuda
+              </button>
+            </div>
+            <div class="data-table-wrapper">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Tipo</th>
+                    <th>Monto (COP)</th>
+                    <th>Notas</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-client-history">
+                  <!-- Dinámico -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================ -->
+      <!-- VISTA 4: CAJA Y GASTOS                      -->
+      <!-- ============================================ -->
+      <div class="view-panel" id="view-caja">
+        <div class="module-content">
+          <!-- Tabs de Sub-navegación -->
+          <div class="module-tabs">
+            <button class="mod-tab active" data-caja-tab="arqueo" id="tab-arqueo">
+              <i data-lucide="wallet"></i> Arqueo de Caja
+            </button>
+            <button class="mod-tab" data-caja-tab="gastos" id="tab-gastos">
+              <i data-lucide="receipt"></i> Gastos Operacionales
+            </button>
+          </div>
+
+          <!-- Sub-vista: Arqueo -->
+          <div class="caja-panel active" id="caja-arqueo">
+            <div class="panel-header">
+              <h3>Control de Turno</h3>
+              <div class="header-actions">
+                <button class="action-btn" id="btn-abrir-caja" style="display:none;"><i data-lucide="play"></i> Abrir Caja</button>
+                <button class="action-btn" id="btn-cerrar-caja" style="display:none; background:var(--danger);"><i data-lucide="square"></i> Cerrar Caja</button>
+              </div>
+            </div>
+            <div id="arqueo-estado-container">
+              <!-- El contenido del dashboard se inyectará aquí desde app3.js -->
+              <div class="loading-cell">Cargando estado de la caja...</div>
+            </div>
+          </div>
+
+          <!-- Sub-vista: Gastos -->
+          <div class="caja-panel" id="caja-gastos" style="display:none;">
+            <div class="panel-header">
+              <h3>Registro de Gastos Operacionales</h3>
+              <button class="action-btn" id="btn-add-gasto">
+                <i data-lucide="plus"></i> Nuevo Gasto
+              </button>
+            </div>
+            <div class="data-table-wrapper">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Categoría</th>
+                    <th>Descripción</th>
+                    <th>Monto (Original)</th>
+                    <th>Tasa</th>
+                    <th>Monto (COP)</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-gastos">
+                  <tr><td colspan="6" class="loading-cell">Cargando gastos...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================ -->
+      <!-- VISTA 4: REPORTES                           -->
+      <!-- ============================================ -->
+      <div class="view-panel" id="view-reportes">
+        <div class="module-content">
+          
+          <!-- Tabs de Sub-navegación -->
+          <div class="module-tabs">
+            <button class="mod-tab active" data-report-tab="diario" id="tab-diario">
+              <i data-lucide="calendar"></i> Cierre Diario
+            </button>
+            <button class="mod-tab" data-report-tab="semanal" id="tab-semanal">
+              <i data-lucide="calendar-range"></i> Cierre Semanal
+            </button>
+            <button class="mod-tab" data-report-tab="historial" id="tab-historial">
+              <i data-lucide="history"></i> Historial
+            </button>
+          </div>
+
+          <!-- Sub-vista: Cierre Diario -->
+          <div class="report-panel active" id="report-diario">
+            <div class="panel-header">
+              <h3>Cierre del Día</h3>
+              <div class="header-actions">
+                <input type="date" id="report-date" class="date-picker">
+                <button class="action-btn" id="btn-load-cierre">
+                  <i data-lucide="refresh-cw"></i> Cargar
+                </button>
+              </div>
+            </div>
+
+            <!-- KPI Cards -->
+            <div class="kpi-grid" id="kpi-grid">
+              <div class="kpi-card kpi-ventas">
+                <div class="kpi-icon"><i data-lucide="receipt"></i></div>
+                <div class="kpi-data">
+                  <span class="kpi-label">Ventas del Día</span>
+                  <span class="kpi-value" id="kpi-ventas">$0</span>
+                  <span class="kpi-sub" id="kpi-transacciones">0 transacciones</span>
+                </div>
+              </div>
+              <div class="kpi-card kpi-ventas" style="border-left-color: #32c8ff;">
+                <div class="kpi-icon"><i data-lucide="wallet"></i></div>
+                <div class="kpi-data">
+                  <span class="kpi-label">Deudas Cobradas</span>
+                  <span class="kpi-value" id="kpi-cobranza">$0</span>
+                  <span class="kpi-sub" id="kpi-flujo-caja">Flujo Total: $0</span>
+                </div>
+              </div>
+              <div class="kpi-card kpi-costo">
+                <div class="kpi-icon"><i data-lucide="trending-down"></i></div>
+                <div class="kpi-data">
+                  <span class="kpi-label">Costos (Prod + Cortesías)</span>
+                  <span class="kpi-value" id="kpi-costo">$0</span>
+                  <span class="kpi-sub" id="kpi-costo-cortesias">Materia prima consumida</span>
+                </div>
+              </div>
+              <div class="kpi-card kpi-gastos" id="kpi-card-gastos" style="cursor:pointer; position:relative;" title="Click para ver desglose">
+                <div class="kpi-icon"><i data-lucide="receipt"></i></div>
+                <div class="kpi-data">
+                  <span class="kpi-label">Gastos Operativos <i data-lucide="chevron-down" style="width:14px; height:14px; vertical-align:middle; opacity:0.5;"></i></span>
+                  <span class="kpi-value" id="kpi-gastos">$0</span>
+                  <span class="kpi-sub" id="kpi-diferencial">Dif. Cambiario: $0</span>
+                </div>
+              </div>
+              <div class="kpi-card kpi-utilidad">
+                <div class="kpi-icon"><i data-lucide="trending-up"></i></div>
+                <div class="kpi-data">
+                  <span class="kpi-label">Utilidad Neta</span>
+                  <span class="kpi-value" id="kpi-utilidad">$0</span>
+                  <span class="kpi-sub" id="kpi-margen">Margen: 0%</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Desglose por Método de Pago -->
+            <div class="report-section">
+              <h4><i data-lucide="wallet"></i> Desglose por Método de Pago</h4>
+              <div class="data-table-wrapper">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Método</th>
+                      <th>Moneda</th>
+                      <th>Cant. Pagos</th>
+                      <th>Total Original</th>
+                      <th>Total COP</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-pagos-diario">
+                    <tr><td colspan="5" class="loading-cell">Seleccione una fecha y presione Cargar</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Desglose de Gastos Operativos -->
+            <div class="report-section" id="section-gastos-desglose" style="display:none;">
+              <h4><i data-lucide="receipt"></i> Desglose de Gastos Operativos</h4>
+              <div class="data-table-wrapper">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Hora</th>
+                      <th>Categoría</th>
+                      <th>Descripción</th>
+                      <th>Monto Original</th>
+                      <th>Método Pago</th>
+                      <th>Monto COP</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-gastos-diario">
+                    <!-- Dinámico -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Productos Vendidos -->
+            <div class="report-section">
+              <h4><i data-lucide="package"></i> Productos Vendidos</h4>
+              <div class="data-table-wrapper">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Producto</th>
+                      <th>Categoría</th>
+                      <th>Unidades</th>
+                      <th>Ingreso</th>
+                      <th>Costo</th>
+                      <th>Utilidad</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-productos-diario">
+                    <!-- Dinámico -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Alertas de Inventario -->
+            <div class="report-section" id="section-alertas-inv" style="display:none;">
+              <h4><i data-lucide="alert-triangle"></i> Insumos Bajo Stock Mínimo</h4>
+              <div id="alertas-inv-list" class="alerts-list">
+                <!-- Dinámico -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Sub-vista: Cierre Semanal -->
+          <div class="report-panel" id="report-semanal">
+            <div class="panel-header">
+              <h3>Resumen Semanal (Últimos 7 días)</h3>
+              <button class="action-btn" id="btn-load-semanal">
+                <i data-lucide="refresh-cw"></i> Actualizar
+              </button>
+            </div>
+
+            <div class="kpi-grid" id="kpi-grid-semanal">
+              <div class="kpi-card kpi-ventas">
+                <div class="kpi-icon"><i data-lucide="receipt"></i></div>
+                <div class="kpi-data">
+                  <span class="kpi-label">Ventas Semana</span>
+                  <span class="kpi-value" id="kpi-ventas-sem">$0</span>
+                  <span class="kpi-sub" id="kpi-trans-sem">0 transacciones</span>
+                </div>
+              </div>
+              <div class="kpi-card kpi-utilidad">
+                <div class="kpi-icon"><i data-lucide="trending-up"></i></div>
+                <div class="kpi-data">
+                  <span class="kpi-label">Utilidad Semana</span>
+                  <span class="kpi-value" id="kpi-utilidad-sem">$0</span>
+                  <span class="kpi-sub" id="kpi-margen-sem">Margen: 0%</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Ventas por día -->
+            <div class="report-section">
+              <h4><i data-lucide="calendar-days"></i> Ventas por Día</h4>
+              <div class="chart-bars" id="chart-ventas-semana">
+                <!-- Dinámico: barras de gráfico -->
+              </div>
+            </div>
+
+            <!-- Top productos de la semana -->
+            <div class="report-section">
+              <h4><i data-lucide="trophy"></i> Top Productos de la Semana</h4>
+              <div class="data-table-wrapper">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Producto</th>
+                      <th>Categoría</th>
+                      <th>Unidades</th>
+                      <th>Ingreso</th>
+                      <th>Costo</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-productos-semanal">
+                    <tr><td colspan="5" class="loading-cell">Presione Actualizar para cargar datos</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sub-vista: Historial -->
+          <div class="report-panel" id="report-historial">
+            <div class="panel-header">
+              <h3>Historial de Ventas</h3>
+              <div class="header-actions">
+                <input type="date" id="hist-desde" class="date-picker">
+                <input type="date" id="hist-hasta" class="date-picker">
+                <button class="action-btn" id="btn-load-historial">
+                  <i data-lucide="search"></i> Buscar
+                </button>
+              </div>
+            </div>
+            <div class="data-table-wrapper">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Fecha</th>
+                    <th>Total COP</th>
+                    <th>Productos</th>
+                    <th>Métodos de Pago</th>
+                    <th>Notas</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-historial">
+                  <tr><td colspan="7" class="loading-cell">Seleccione un rango de fechas y presione Buscar</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================ -->
+      <!-- VISTA 6: TESORERÍA                           -->
+      <!-- ============================================ -->
+      <div class="view-panel" id="view-tesoreria" style="padding: 20px;">
+        <main class="app-body">
+          <div class="view-header-row" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
+            <h2>Saldos Bancarios y Efectivo</h2>
+            <button class="action-btn" onclick="showTransferenciaModal()">
+              <i data-lucide="arrow-right-left"></i> Transferencia Interna
+            </button>
+          </div>
+          
+          <!-- Contenedor dinámico de saldos -->
+          <div class="kpis-grid" id="tesoreria-saldos-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+            <div class="kpi-card"><div class="kpi-value">Cargando...</div></div>
+          </div>
+
+          <!-- ZONA DE PELIGRO: Reset del Sistema -->
+          <div id="reset-zona-peligro" style="margin-top: 3rem; border: 2px solid #ef4444; border-radius: 12px; padding: 24px; background: rgba(239, 68, 68, 0.04);">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+              <div style="width: 44px; height: 44px; border-radius: 50%; background: rgba(239, 68, 68, 0.12); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                <i data-lucide="alert-triangle" style="color: #ef4444; width: 24px; height: 24px;"></i>
+              </div>
+              <div>
+                <h3 style="margin: 0; color: #ef4444; font-size: 1.1rem; font-weight: 700;">Zona de Peligro — Reset del Sistema</h3>
+                <p style="margin: 4px 0 0; color: var(--color-muted); font-size: 0.85rem;">Esta acción es <strong>irreversible</strong>. Se recomienda hacer un respaldo antes de proceder.</p>
+              </div>
+            </div>
+            <div style="background: rgba(239, 68, 68, 0.06); border-radius: 8px; padding: 14px; margin-bottom: 16px; font-size: 0.88rem; color: var(--color-text); line-height: 1.6;">
+              <strong>¿Qué se eliminará?</strong>
+              <ul style="margin: 8px 0 0; padding-left: 20px;">
+                <li>📦 Todo el <strong>stock de insumos</strong> se pondrá en <strong>cero</strong></li>
+                <li>🧾 Todas las <strong>ventas</strong> y sus detalles de pago</li>
+                <li>💳 Todas las <strong>cuentas por cobrar</strong> (abonos y deudas de clientes)</li>
+                <li>💸 Todos los <strong>gastos</strong> y <strong>mermas</strong> registradas</li>
+                <li>🏦 Todos los <strong>saldos bancarios</strong> y movimientos de tesorería</li>
+                <li>📋 Todas las <strong>sesiones de caja</strong></li>
+              </ul>
+              <p style="margin-top: 10px; color: var(--color-muted);"><em>⚠️ Los productos, recetas, insumos (estructura) y usuarios <strong>NO</strong> serán eliminados.</em></p>
+            </div>
+            <button id="btn-reset-sistema" onclick="resetSistemaCompleto()" style="background: #ef4444; color: #fff; border: none; padding: 12px 28px; border-radius: 8px; font-weight: 700; font-size: 0.95rem; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s ease;">
+              <i data-lucide="trash-2" style="width: 18px; height: 18px;"></i>
+              Resetear Todo el Sistema
+            </button>
+          </div>
+
+        </main>
+      </div>
+
+      <!-- ============================================ -->
+      <!-- VISTA 7: USUARIOS (ADMIN)                    -->
+      <!-- ============================================ -->
+      <div class="view-panel" id="view-usuarios" style="padding: 20px;">
+        <main class="app-body">
+          <div class="view-header-row" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
+            <h2>Gestión de Usuarios y Permisos</h2>
+            <button class="action-btn btn-success" onclick="showEditarUsuarioModal()">
+              <i data-lucide="user-plus"></i> Añadir Cajero/Usuario
+            </button>
+          </div>
+          
+          <div class="data-table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Rol</th>
+                  <th>Turno</th>
+                  <th>Permisos</th>
+                  <th style="text-align:right;">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="tabla-usuarios">
+                <!-- Carga dinámica -->
+              </tbody>
+            </table>
+          </div>
+        </main>
+      </div>
+
+    </div> <!-- /main-content -->
+  </div> <!-- /app-container -->
+
+  <!-- ============================================ -->
+  <!-- MODAL DE PAGO MULTIMONEDA                    -->
+  <!-- ============================================ -->
+  <div class="modal-overlay" id="payment-modal">
+    <div class="modal-box">
+      <div class="modal-header" style="display: flex; align-items: center; justify-content: space-between;">
+        <h2><i data-lucide="wallet"></i> Registrar Pago Mixto</h2>
+        
+        <div style="display: flex; align-items: center; gap: 15px;">
+          <button class="close-modal-btn" id="btn-close-payment" style="margin: 0;"><i data-lucide="x"></i></button>
+        </div>
+      </div>
+      
+      <div class="modal-body">
+        
+        <!-- Panel Izquierdo del Modal: Configuración de Tasas y Formulario de Entradas -->
+        <div class="modal-inputs-panel" id="modal-payment-inputs">
+
+
+          <!-- Métodos de Pago Disponibles -->
+          <div class="section-card payments-card">
+            <h3>Montos Recibidos por Método</h3>
+            <div class="payment-methods-grid">
+              <!-- COP -->
+              <div class="payment-input-group currency-cop">
+                <span class="method-badge">COP</span>
+                <div class="form-group">
+                  <label for="pay-cop-cash">Efectivo COP</label>
+                  <input type="number" class="payment-input" id="pay-cop-cash" placeholder="0.00" min="0">
+                </div>
+                <div class="form-group">
+                  <label for="pay-cop-bank">Bancolombia (COP)</label>
+                  <input type="number" class="payment-input" id="pay-cop-bank" placeholder="0.00" min="0" data-ref="ref-cop-bank">
+                  <input type="text" class="ref-input" id="ref-cop-bank" placeholder="Ref. transacción">
+                </div>
+              </div>
+
+              <!-- USD -->
+              <div class="payment-input-group currency-usd">
+                <span class="method-badge">USD</span>
+                <div class="form-group">
+                  <label for="pay-usd-cash">Efectivo USD</label>
+                  <input type="number" class="payment-input" id="pay-usd-cash" placeholder="0.00" min="0">
+                  <span class="live-calc" id="calc-usd-cash">= $0 COP</span>
+                </div>
+                <div class="form-group">
+                  <label for="pay-usd-zelle">Zelle (USD)</label>
+                  <input type="number" class="payment-input" id="pay-usd-zelle" placeholder="0.00" min="0" data-ref="ref-usd-zelle">
+                  <input type="text" class="ref-input" id="ref-usd-zelle" placeholder="Ref. Zelle">
+                  <span class="live-calc" id="calc-usd-zelle">= $0 COP</span>
+                </div>
+              </div>
+
+              <!-- VES & BINANCE -->
+              <div class="payment-input-group currency-ves">
+                <span class="method-badge">VES</span>
+                <div class="form-group">
+                  <label for="pay-ves-movil">Pago Móvil (VES)</label>
+                  <input type="number" class="payment-input" id="pay-ves-movil" placeholder="0.00" min="0" data-ref="ref-ves-movil">
+                  <input type="text" class="ref-input" id="ref-ves-movil" placeholder="Ref. Pago Móvil">
+                  <span class="live-calc" id="calc-ves-movil">= $0 COP</span>
+                </div>
+                <div class="form-group">
+                  <label for="pay-binance">Binance (USD)</label>
+                  <input type="number" class="payment-input" id="pay-binance" placeholder="0.00" min="0" data-ref="ref-binance">
+                  <input type="text" class="ref-input" id="ref-binance" placeholder="ID de Orden / Tx">
+                  <span class="live-calc" id="calc-binance">= $0 COP</span>
+                </div>
+              </div>
+              
+              <!-- CRÉDITO BUTTON -->
+              <div class="payment-input-group currency-cop" style="grid-column: 1 / -1; border: 1px dashed var(--warning); border-radius: 8px; padding: 15px; display: flex; justify-content: space-between; align-items: center; background: rgba(245, 158, 11, 0.02);">
+                <div style="display: flex; flex-direction: column; gap: 5px;">
+                  <span style="font-weight: 600; color: var(--warning); display: flex; align-items: center; gap: 6px;">
+                    <i data-lucide="book-user" style="width: 18px; height: 18px;"></i> Pago a Crédito (Fiar)
+                  </span>
+                  <span id="credit-summary-text" style="font-size: 0.85rem; color: var(--color-muted);">No se ha registrado crédito.</span>
+                </div>
+                <button type="button" class="action-btn" id="btn-open-credit-modal" style="background: var(--warning); color: #fff; border: none; padding: 8px 16px;">
+                  Configurar Crédito
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel Derecho del Modal: Resumen de Cobro -->
+        <div class="modal-summary-panel">
+          <div class="summary-card">
+            <h3><i data-lucide="receipt"></i> Resumen de Transacción</h3>
+            
+            <div class="summary-details">
+              <div class="summary-row">
+                <span>Total a Cobrar:</span>
+                <span class="highlight-val font-outfit" id="modal-total-sale">$0 COP</span>
+              </div>
+              <div class="summary-row border-top">
+                <span>Total Recibido (COP):</span>
+                <span class="val-received font-outfit" id="modal-total-paid">$0 COP</span>
+              </div>
+            </div>
+
+            <!-- Caja de Estado Dinámica -->
+            <div class="payment-status-box status-insufficient" id="payment-status-box">
+              <div class="status-header">
+                <i data-lucide="info" id="status-box-icon"></i>
+                <span id="status-box-title">Esperando Pago...</span>
+              </div>
+              <p id="status-box-desc">Ingresa los métodos de pago para completar la transacción.</p>
+              <div class="status-value font-outfit" id="status-box-value">$0 COP</div>
+            </div>
+
+            <!-- Notas de Venta -->
+            <div class="form-group margin-top">
+              <label for="sale-notes">Notas / Comentarios Internos</label>
+              <textarea id="sale-notes" placeholder="Ej: Cliente solicita vaso sin pitillo..." rows="2"></textarea>
+            </div>
+
+            <!-- Acción de Cobrar -->
+            <button class="pay-confirm-btn" id="btn-confirm-payment" disabled>
+              <i data-lucide="check-circle-2"></i>
+              <span>Confirmar Venta</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================ -->
+  <!-- MODAL DE RECIBO DE COMPRA (EXITOSO)          -->
+  <!-- ============================================ -->
+  <div class="modal-overlay" id="receipt-modal">
+    <div class="receipt-box">
+      <div class="receipt-header">
+        <div class="receipt-icon"><i data-lucide="check"></i></div>
+        <h2>¡Venta Procesada!</h2>
+        <p>Transacción registrada exitosamente</p>
+      </div>
+
+      <div class="receipt-content">
+        <!-- Detalles del Ticket -->
+        <div class="receipt-ticket">
+          <div class="ticket-header">
+            <h4>BARRA FIT 360</h4>
+            <p>ID Transacción: <span id="receipt-id">#000</span></p>
+            <p id="receipt-date">Fecha</p>
+          </div>
+          
+          <div class="ticket-divider"></div>
+
+          <!-- Items -->
+          <div class="ticket-section">
+            <h5>PRODUCTOS</h5>
+            <div id="receipt-items-list">
+              <!-- Dinámico -->
+            </div>
+          </div>
+
+          <div class="ticket-divider"></div>
+
+          <!-- Resumen de Dinero -->
+          <div class="ticket-section">
+            <div class="ticket-row">
+              <span>Total Venta:</span>
+              <strong id="receipt-total">$0 COP</strong>
+            </div>
+            <div class="ticket-row text-muted">
+              <span>Total Recibido:</span>
+              <span id="receipt-paid">$0 COP</span>
+            </div>
+            <div class="ticket-row text-success font-bold" id="receipt-change-row">
+              <span>Vuelto/Cambio:</span>
+              <span id="receipt-change">$0 COP</span>
+            </div>
+          </div>
+
+          <div class="ticket-divider"></div>
+
+          <!-- Detalles de Métodos de Pago -->
+          <div class="ticket-section">
+            <h5>MÉTODOS DE PAGO</h5>
+            <div id="receipt-payments-list">
+              <!-- Dinámico -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Alertas de Inventario / Servidor -->
+        <div class="receipt-alerts" id="receipt-alerts-container">
+          <!-- Alertas de stock crítico del servidor -->
+        </div>
+      </div>
+
+      <div class="receipt-actions">
+        <button class="btn-primary" id="btn-new-sale"><i data-lucide="plus"></i> Nueva Venta</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================ -->
+  <!-- MODAL GENÉRICO (Para formularios CRUD)       -->
+  <!-- ============================================ -->
+  <div class="modal-overlay" id="generic-modal">
+    <div class="modal-box modal-sm">
+      <div class="modal-header">
+        <h2 id="generic-modal-title">Formulario</h2>
+        <button class="close-modal-btn" id="btn-close-generic"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body-simple" id="generic-modal-body">
+        <!-- Formulario dinámico -->
+      </div>
+      <div class="modal-footer">
+        <button class="action-btn secondary" id="btn-cancel-generic">Cancelar</button>
+        <button class="action-btn" id="btn-submit-generic">
+          <i data-lucide="check"></i> Guardar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Script Principal JavaScript -->
+  <!-- ============================================ -->
+  <!-- MODAL SECUNDARIO: CRÉDITO                    -->
+  <!-- ============================================ -->
+  <div class="modal-overlay" id="credit-modal" style="z-index: 2000;">
+    <div class="modal-box" style="max-width: 500px;">
+      <div class="modal-header">
+        <h2><i data-lucide="book-user"></i> Configurar Crédito</h2>
+        <button class="close-modal-btn" id="btn-close-credit-modal"><i data-lucide="x"></i></button>
+      </div>
+      
+      <div class="modal-body">
+        <div style="display: flex; flex-direction: column; gap: 20px;">
+          
+          <div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 15px; flex-wrap: wrap;">
+            <div class="form-group" style="flex: 1;">
+              <label for="pay-credito">Monto a Fiar (COP)</label>
+              <input type="number" class="payment-input" id="pay-credito" placeholder="0.00" min="0" style="border-color: var(--warning); font-size: 1.2rem; font-weight: bold; background: var(--bg-surface); color: var(--color-text);">
+            </div>
+            <button type="button" class="action-btn secondary" id="btn-cobrar-todo-credito" style="border-color: var(--warning); color: var(--warning); height: 42px;">
+              <i data-lucide="arrow-down-to-line"></i> Todo a Crédito
+            </button>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 12px; background: var(--bg-surface); padding: 15px; border-radius: 8px; border: 1px solid var(--border-glass);">
+            <h3 style="font-size: 0.95rem; color: var(--color-text); border-bottom: 1px solid var(--border-glass); padding-bottom: 8px; margin-bottom: 5px;">Cliente Deudor</h3>
+            <div class="form-group">
+              <label for="credit-client-selector">Seleccionar Cliente Existente</label>
+              <select id="credit-client-selector" style="background: var(--bg-app); color: var(--color-text); padding: 10px; border-radius: 8px; border: 1px solid var(--border-glass); font-size: 0.95rem;">
+                <option value="">-- Seleccione un cliente --</option>
+                <option value="__new__">➕ Crear Nuevo Cliente</option>
+              </select>
+            </div>
+            <div id="credit-client-info" style="display:none; background: rgba(0,230,118,0.08); border: 1px solid var(--success); border-radius: 8px; padding: 10px;">
+              <span id="credit-client-info-text" style="font-size:0.9rem; color: var(--success);"></span>
+            </div>
+            <div id="new-client-fields" style="display: none; flex-direction: column; gap: 12px;">
+              <div class="form-group">
+                <label for="new-client-name">Nombre Completo</label>
+                <input type="text" id="new-client-name" class="ref-input" placeholder="Ej. Juan Pérez" style="background: var(--bg-app); color: var(--color-text);">
+              </div>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px;">
+                <div class="form-group">
+                  <label for="new-client-id">Cédula / ID</label>
+                  <input type="text" id="new-client-id" class="ref-input" placeholder="Ej. 12345678" style="background: var(--bg-app); color: var(--color-text);">
+                </div>
+                <div class="form-group">
+                  <label for="new-client-phone">Teléfono</label>
+                  <input type="text" id="new-client-phone" class="ref-input" placeholder="Opcional" style="background: var(--bg-app); color: var(--color-text);">
+                </div>
+              </div>
+            </div>
+          </div>
+          
+        </div>
+      </div>
+      <div class="modal-footer" style="padding: 15px 24px; border-top: 1px solid var(--border-glass); display: flex; justify-content: flex-end; gap: 10px; background: var(--bg-surface); border-radius: 0 0 12px 12px;">
+        <button class="action-btn secondary" id="btn-cancel-credit" style="padding: 8px 20px;">Borrar / Cancelar</button>
+        <button class="action-btn" id="btn-confirm-credit" style="background: var(--warning); color: #fff; border: none; padding: 8px 20px;">Confirmar Monto</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app3.js?v=32"></script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{
+  "name": "barra-fit-360-backend",
+  "version": "1.0.0",
+  "description": "Backend de gestión y POS para Barra Fit 360",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "dev:tunnel": "npx concurrently \"npm run dev\" \"npx localtunnel --port 3000 --subdomain barrafit360\""
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "express": "^4.19.2",
+    "pg": "^8.12.0",
+    "sqlite3": "^5.1.7"
+  }
+}

@@ -1,0 +1,17 @@
+directories:
+  output: dist
+  buildResources: build
+appId: com.barrafit360.pos
+productName: Barra Fit 360
+win:
+  target:
+    - nsis
+    - portable
+asarUnpack:
+  - database.sqlite
+files:
+  - filter:
+      - '**/*'
+      - '!dist'
+      - '!.system_generated'
+electronVersion: 43.0.0

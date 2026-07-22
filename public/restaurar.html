@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Restaurar Base de Datos</title>
+  <style>
+    body { font-family: sans-serif; padding: 40px; background: #1a1a1a; color: white; }
+    .box { background: #2d2d2d; padding: 30px; border-radius: 12px; max-width: 500px; margin: 0 auto; text-align: center; border: 1px solid #444; }
+    input[type="file"] { margin: 20px 0; }
+    button { background: #00e676; color: black; border: none; padding: 10px 20px; font-weight: bold; border-radius: 6px; cursor: pointer; }
+    button:hover { background: #00c853; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h2>Restaurar Base de Datos</h2>
+    <p>Selecciona tu archivo <b>database_backup.sqlite</b> ya editado para reemplazar la base de datos actual en el servidor.</p>
+    <input type="file" id="fileInput" accept=".sqlite,.db">
+    <br>
+    <button onclick="uploadDb()">Subir y Restaurar</button>
+    <p id="status" style="margin-top:20px; font-weight:bold;"></p>
+  </div>
+  <script>
+    async function uploadDb() {
+      const fileInput = document.getElementById('fileInput');
+      const statusEl = document.getElementById('status');
+      if (!fileInput.files.length) {
+        statusEl.innerText = 'Por favor selecciona un archivo primero.';
+        statusEl.style.color = '#ff4444';
+        return;
+      }
+      const file = fileInput.files[0];
+      statusEl.innerText = 'Subiendo... no cierres esta página.';
+      statusEl.style.color = '#32c8ff';
+      try {
+        const response = await fetch('/api/restore-db', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/octet-stream' },
+          body: file
+        });
+        const text = await response.text();
+        if (response.ok) {
+          statusEl.innerText = '¡Éxito! ' + text;
+          statusEl.style.color = '#00e676';
+        } else {
+          statusEl.innerText = 'Error: ' + text;
+          statusEl.style.color = '#ff4444';
+        }
+      } catch (e) {
+        statusEl.innerText = 'Error de conexión.';
+        statusEl.style.color = '#ff4444';
+      }
+    }
+  </script>
+</body>
+</html>
