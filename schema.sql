@@ -180,3 +180,22 @@ CREATE TABLE sesiones_caja (
 
 CREATE INDEX idx_sesiones_caja_apertura ON sesiones_caja(fecha_apertura);
 
+-- 14. Tesorería - Cuentas Bancarias
+CREATE TABLE cuentas_bancarias (
+    id SERIAL PRIMARY KEY,
+    nombre TEXT NOT NULL UNIQUE,
+    moneda TEXT NOT NULL,
+    saldo REAL NOT NULL DEFAULT 0.0
+);
+
+-- 15. Tesorería - Movimientos Internos
+CREATE TABLE movimientos_tesoreria (
+    id SERIAL PRIMARY KEY,
+    cuenta_origen TEXT NOT NULL,
+    cuenta_destino TEXT NOT NULL,
+    monto_origen REAL NOT NULL,
+    monto_destino REAL NOT NULL,
+    tasa_cambio REAL NOT NULL DEFAULT 1.0,
+    motivo TEXT NOT NULL,
+    fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
