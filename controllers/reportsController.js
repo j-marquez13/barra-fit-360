@@ -107,8 +107,10 @@ export async function cierreDiario(req, res) {
       SELECT nombre, stock_actual, stock_minimo, unidad_medida FROM insumos WHERE stock_actual <= stock_minimo ORDER BY stock_actual ASC
     `);
 
+    const isPg = !!(process.env.DATABASE_URL || process.env.PGHOST);
+    const aggFunc = isPg ? "STRING_AGG(DISTINCT pv.metodo_pago, ', ')" : "GROUP_CONCAT(DISTINCT pv.metodo_pago)";
     const ventasDelDia = await db.query(`
-      SELECT v.id, v.fecha, v.tipo_transaccion, v.total, v.notas, GROUP_CONCAT(DISTINCT pv.metodo_pago) as metodos_pago
+      SELECT v.id, v.fecha, v.tipo_transaccion, v.total, v.notas, ${aggFunc} as metodos_pago
       FROM ventas v LEFT JOIN pagos_ventas pv ON pv.venta_id = v.id
       WHERE ${dateFilter} GROUP BY v.id ORDER BY v.fecha DESC
     `, [fecha]);
