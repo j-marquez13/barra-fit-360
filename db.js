@@ -82,7 +82,7 @@ if (usePostgres) {
   });
   
   pgPool.on('connect', (client) => {
-    client.query("SET TIME ZONE '-04:00'");
+    client.query("SET TIME ZONE 'America/Caracas'");
   });
 } else {
   const dbFile = process.env.DB_PATH || 'database.sqlite';
