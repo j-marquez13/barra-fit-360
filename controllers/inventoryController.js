@@ -335,7 +335,7 @@ export async function getProductos(req, res) {
            WHERE r.producto_id = p.id), 0
         ) as stock_disponible
       FROM productos p
-      WHERE p.activo = 1
+      WHERE p.activo = TRUE
       ORDER BY p.categoria ASC, p.nombre ASC
     `);
 
@@ -461,7 +461,7 @@ export async function getProductoReceta(req, res) {
 export async function deleteProducto(req, res) {
   try {
     const { id } = req.params;
-    const result = await db.execute('UPDATE productos SET activo = 0 WHERE id = $1', [id]);
+    const result = await db.execute('UPDATE productos SET activo = FALSE WHERE id = $1', [id]);
     if (result.changes === 0) return res.status(404).json({ error: 'Producto no encontrado' });
     return res.json({ mensaje: 'Producto eliminado correctamente' });
   } catch (error) {
