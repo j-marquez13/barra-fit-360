@@ -3,6 +3,8 @@ import sqlite3 from 'sqlite3';
 import path from 'path';
 import fs from 'fs';
 
+pg.types.setTypeParser(1700, val => parseFloat(val));
+
 // ============================================
 // Helpers de Zona Horaria (Venezuela UTC-4)
 // ============================================
