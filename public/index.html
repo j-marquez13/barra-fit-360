@@ -12,7 +12,7 @@
   <!-- Lucide Icons para iconografía limpia y moderna -->
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- Estilos CSS -->
-  <link rel="stylesheet" href="index.css?v=9">
+  <link rel="stylesheet" href="index.css?v=10">
 </head>
 <body>
 
@@ -101,6 +101,44 @@
         <strong>✅ Turno activo detectado.</strong><br>
         Reanudando sesión en curso...
       </div>
+    </div>
+
+    <!-- Quick Login Card (cuando ya hay caja abierta) -->
+    <div class="turno-card quick-login-card" id="quick-login-card" style="display:none;">
+      <div class="ql-active-badge">
+        <span class="ql-pulse"></span>
+        <span>Turno activo</span>
+      </div>
+      <h2><i data-lucide="log-in"></i> Identificarse para continuar</h2>
+      <p class="ql-subtitle">Hay un turno abierto. Ingresa tus credenciales para unirte.</p>
+
+      <!-- Selector de cajero -->
+      <div class="turno-field">
+        <label for="ql-cajero-select">Cajero</label>
+        <select id="ql-cajero-select">
+          <option value="">-- Cargando usuarios... --</option>
+        </select>
+      </div>
+
+      <!-- Contraseña -->
+      <div class="turno-field">
+        <label for="ql-password">Contraseña</label>
+        <div class="pass-input-wrap">
+          <input type="password" id="ql-password" placeholder="Ingresa tu contraseña" maxlength="40" autocomplete="current-password">
+          <button type="button" class="pass-toggle-btn" data-target="ql-password" title="Ver contraseña">
+            <i data-lucide="eye"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Botón entrar -->
+      <button id="btn-quick-login">
+        <i data-lucide="log-in"></i>
+        Entrar
+      </button>
+
+      <!-- Error message -->
+      <div class="turno-error" id="ql-error"></div>
     </div>
   </div>
 

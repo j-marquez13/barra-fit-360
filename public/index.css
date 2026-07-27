@@ -2405,6 +2405,96 @@ input, button, textarea, select {
   text-align: center;
 }
 
+/* Quick Login Card (cuando ya hay caja abierta) */
+.quick-login-card {
+  animation: slide-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 0.1s;
+}
+
+.ql-active-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 14px;
+  border-radius: 20px;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #22c55e;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: var(--font-title);
+  margin-bottom: 20px;
+}
+
+.ql-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  animation: ql-pulse-anim 2s ease-in-out infinite;
+}
+
+@keyframes ql-pulse-anim {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.6); }
+  50% { opacity: 0.7; box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
+}
+
+.quick-login-card h2 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.quick-login-card h2 svg {
+  width: 20px;
+  height: 20px;
+  color: var(--cyan-neon);
+}
+
+.ql-subtitle {
+  color: var(--color-muted);
+  font-size: 0.82rem;
+  text-align: center;
+  margin-bottom: 24px;
+  line-height: 1.5;
+}
+
+#btn-quick-login {
+  width: 100%;
+  padding: 14px;
+  border-radius: 12px;
+  border: none;
+  background: linear-gradient(135deg, #7f00ff, #00c3ff);
+  color: white;
+  font-family: var(--font-title);
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 8px;
+  box-shadow: 0 4px 20px rgba(127, 0, 255, 0.35);
+  letter-spacing: 0.02em;
+}
+
+#btn-quick-login:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(127, 0, 255, 0.5);
+}
+
+#btn-quick-login:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+#btn-quick-login:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 @media (max-width: 500px) {
   .turno-card {
     padding: 24px 20px;

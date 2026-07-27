@@ -3204,8 +3204,9 @@ const TURNO_STATE = {
 
 /**
  * Punto de entrada: verifica si hay sesión activa.
- * Si la hay, oculta la pantalla de turno y entra directo.
- * Si no, muestra la pantalla de selección.
+ * Si la hay Y el dispositivo ya se autenticó (sessionStorage), entra directo.
+ * Si la hay pero NO se autenticó, muestra Quick Login.
+ * Si no hay sesión, muestra pantalla completa de turno.
  */
 async function initTurnoSystem() {
   const turnoScreen = document.getElementById('turno-screen');
@@ -3215,25 +3216,177 @@ async function initTurnoSystem() {
     const data = await res.json();
     
     if (data.abierta) {
-      // Hay sesión activa: reanudar sin pedir turno
       TURNO_STATE.sesionActiva = data.sesion;
-      const banner = document.getElementById('session-resume-banner');
-      if (banner) banner.style.display = 'block';
       
-      // Breve pausa para mostrar el mensaje de reanudación
-      setTimeout(() => {
-        hideTurnoScreen(data.sesion);
-      }, 1200);
+      // Verificar si este dispositivo ya se autenticó
+      const savedAuth = sessionStorage.getItem('bf360_auth');
+      if (savedAuth) {
+        try {
+          const authData = JSON.parse(savedAuth);
+          // Verificar que el auth corresponda a la sesión activa
+          if (authData.sesion_id === data.sesion.id) {
+            const banner = document.getElementById('session-resume-banner');
+            if (banner) banner.style.display = 'block';
+            // Restaurar permisos del usuario guardado
+            const sesionConPermisos = { ...data.sesion, permisos: authData.permisos };
+            setTimeout(() => {
+              hideTurnoScreen(sesionConPermisos, authData.nombre);
+            }, 800);
+            return;
+          }
+        } catch(e) {
+          sessionStorage.removeItem('bf360_auth');
+        }
+      }
+      
+      // Dispositivo no autenticado → mostrar Quick Login
+      await loadTurnoUsuarios();
+      showQuickLogin(data.sesion);
     } else {
-      // Sin sesión: mostrar pantalla de turno
+      // Sin sesión: mostrar pantalla completa de turno
+      sessionStorage.removeItem('bf360_auth');
       await loadTurnoUsuarios();
       setupTurnoForm();
     }
   } catch (err) {
-    // Si el servidor no está disponible, mostrar pantalla de turno de todas formas
     console.warn('No se pudo verificar estado de caja:', err);
     await loadTurnoUsuarios();
     setupTurnoForm();
+  }
+}
+
+/**
+ * Muestra el Quick Login card (cuando ya hay caja abierta)
+ */
+function showQuickLogin(sesion) {
+  // Ocultar el formulario de turno completo
+  const turnoCard = document.querySelector('.turno-card:not(.quick-login-card)');
+  if (turnoCard) turnoCard.style.display = 'none';
+  
+  // Cambiar el subtítulo del branding
+  const brandP = document.querySelector('.turno-brand p');
+  if (brandP) brandP.textContent = 'Identifícate para unirte al turno activo';
+  
+  // Mostrar Quick Login card
+  const qlCard = document.getElementById('quick-login-card');
+  if (qlCard) qlCard.style.display = 'block';
+  
+  // Poblar el select de cajeros
+  const qlSelect = document.getElementById('ql-cajero-select');
+  if (qlSelect && TURNO_STATE.usuarios.length > 0) {
+    qlSelect.innerHTML = '';
+    TURNO_STATE.usuarios.forEach(u => {
+      const opt = document.createElement('option');
+      opt.value = u.id;
+      opt.textContent = `${u.nombre} (${u.turno})`;
+      qlSelect.appendChild(opt);
+    });
+  }
+  
+  // Setup listeners
+  setupQuickLoginForm(sesion);
+  lucide.createIcons();
+}
+
+/**
+ * Configura los listeners del formulario Quick Login
+ */
+function setupQuickLoginForm(sesion) {
+  const btnQL = document.getElementById('btn-quick-login');
+  const qlPass = document.getElementById('ql-password');
+  
+  btnQL?.addEventListener('click', () => handleQuickLogin(sesion));
+  qlPass?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') handleQuickLogin(sesion);
+  });
+  
+  // Reutilizar los toggle de ojo existentes
+  document.querySelectorAll('.pass-toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const targetId = btn.dataset.target;
+      const input = document.getElementById(targetId);
+      if (!input) return;
+      const isPassword = input.type === 'password';
+      input.type = isPassword ? 'text' : 'password';
+      btn.innerHTML = isPassword
+        ? '<i data-lucide="eye-off"></i>'
+        : '<i data-lucide="eye"></i>';
+      lucide.createIcons();
+      input.focus();
+    });
+  });
+}
+
+/**
+ * Procesa el Quick Login: valida credenciales y une al turno activo
+ */
+async function handleQuickLogin(sesion) {
+  const btnQL = document.getElementById('btn-quick-login');
+  const errorEl = document.getElementById('ql-error');
+  const qlSelect = document.getElementById('ql-cajero-select');
+  const qlPass = document.getElementById('ql-password');
+  
+  errorEl.classList.remove('visible');
+  if (qlPass) qlPass.classList.remove('input-error');
+  btnQL.disabled = true;
+  btnQL.innerHTML = '<i data-lucide="loader"></i> Verificando...';
+  lucide.createIcons();
+  
+  try {
+    const usuarioId = parseInt(qlSelect.value);
+    const password = qlPass?.value || '';
+    
+    if (!password) {
+      if (qlPass) {
+        qlPass.classList.add('input-error');
+        const wrap = qlPass.closest('.pass-input-wrap') || qlPass.parentElement;
+        wrap.classList.add('shake-anim');
+        setTimeout(() => wrap.classList.remove('shake-anim'), 600);
+        qlPass.focus();
+      }
+      throw new Error('Por favor ingresa tu contraseña.');
+    }
+    
+    // Validar credenciales
+    const resLogin = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario_id: usuarioId, password })
+    });
+    const dataLogin = await resLogin.json();
+    
+    if (!resLogin.ok) {
+      if (qlPass) {
+        qlPass.classList.add('input-error');
+        qlPass.value = '';
+        const wrap = qlPass.closest('.pass-input-wrap') || qlPass.parentElement;
+        wrap.classList.add('shake-anim');
+        setTimeout(() => wrap.classList.remove('shake-anim'), 600);
+        qlPass.focus();
+      }
+      throw new Error(dataLogin.error || 'Contraseña incorrecta');
+    }
+    
+    // Guardar autenticación del dispositivo
+    const permisos = dataLogin.usuario.permisos || ['pos', 'caja'];
+    sessionStorage.setItem('bf360_auth', JSON.stringify({
+      usuario_id: usuarioId,
+      nombre: dataLogin.usuario.nombre,
+      permisos: permisos,
+      sesion_id: sesion.id
+    }));
+    
+    // Unirse a la sesión activa con los permisos del usuario que hizo login
+    const sesionConPermisos = { ...sesion, permisos: permisos };
+    hideTurnoScreen(sesionConPermisos, dataLogin.usuario.nombre);
+    showToast(`✅ Bienvenido/a ${dataLogin.usuario.nombre}!`, 'success');
+    
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.classList.add('visible');
+    btnQL.disabled = false;
+    btnQL.innerHTML = '<i data-lucide="log-in"></i> Entrar';
+    lucide.createIcons();
   }
 }
 
@@ -3410,7 +3563,17 @@ async function iniciarTurno() {
     if (!resCaja.ok) throw new Error(dataCaja.error || 'Error al abrir caja');
 
     TURNO_STATE.sesionActiva = dataCaja.sesion;
-    hideTurnoScreen(dataCaja.sesion);
+    
+    // Guardar autenticación del dispositivo en sessionStorage
+    const permisos = dataLogin.usuario.permisos || ['pos', 'caja'];
+    sessionStorage.setItem('bf360_auth', JSON.stringify({
+      usuario_id: usuarioId,
+      nombre: nombreCajero,
+      permisos: permisos,
+      sesion_id: dataCaja.sesion.id
+    }));
+    
+    hideTurnoScreen(dataCaja.sesion, nombreCajero);
     showToast(`✅ Bienvenido/a ${nombreCajero}! Turno ${turnoSeleccionado} iniciado.`, 'success');
 
   } catch (err) {
@@ -3425,10 +3588,10 @@ async function iniciarTurno() {
 /**
  * Oculta la pantalla de turno y entra a la app mostrando la info del turno activo
  */
-function hideTurnoScreen(sesion) {
+function hideTurnoScreen(sesion, nombreOverride) {
   const turnoScreen = document.getElementById('turno-screen');
   const turno = sesion?.turno || 'Mañana';
-  const cajero = sesion?.nombre_cajero || sesion?.usuario_nombre || 'Cajero';
+  const cajero = nombreOverride || sesion?.nombre_cajero || sesion?.usuario_nombre || 'Cajero';
 
   // Actualizar badge del header
   const headerBadge = document.getElementById('header-turno-badge');
@@ -3488,11 +3651,20 @@ async function showTurnoScreen() {
   const sidebarInfo = document.getElementById('sidebar-turno-info');
   if (sidebarInfo) sidebarInfo.style.display = 'none';
 
-  // Limpiar estado
+  // Limpiar estado y sessionStorage
   TURNO_STATE.sesionActiva = null;
+  sessionStorage.removeItem('bf360_auth');
   document.getElementById('turno-fondo').value = '0';
   document.getElementById('turno-error').classList.remove('visible');
   document.getElementById('session-resume-banner').style.display = 'none';
+
+  // Ocultar Quick Login y mostrar formulario completo
+  const qlCard = document.getElementById('quick-login-card');
+  if (qlCard) qlCard.style.display = 'none';
+  const turnoCard = document.querySelector('.turno-card:not(.quick-login-card)');
+  if (turnoCard) turnoCard.style.display = 'block';
+  const brandP = document.querySelector('.turno-brand p');
+  if (brandP) brandP.textContent = 'Selecciona tu turno para iniciar la jornada';
 
   // Limpiar contraseña
 
