@@ -7,7 +7,7 @@ import bcrypt from 'bcryptjs';
 
 // 1. Crear Perfil de Cliente
 export async function createClient(req, res) {
-  const { nombre, identificacion, telefono, limite_credito } = req.body;
+  const { nombre, identificacion, telefono, limite_credito, permite_saldo_favor } = req.body;
 
   if (!nombre || !identificacion) {
     return res.status(400).json({ error: 'El nombre y la identificación son obligatorios.' });
@@ -17,6 +17,7 @@ export async function createClient(req, res) {
   if (limite < 0) {
     return res.status(400).json({ error: 'El límite de crédito no puede ser negativo.' });
   }
+  const saldoFavorFlag = permite_saldo_favor ? 1 : 0;
 
   try {
     const isPg = !process.env.DATABASE_URL && !process.env.PGHOST ? false : true;
@@ -28,10 +29,10 @@ export async function createClient(req, res) {
     }
 
     const insertSql = isPg
-      ? 'INSERT INTO clientes (nombre, identificacion, telefono, limite_credito, saldo_deudor) VALUES ($1, $2, $3, $4, 0.00) RETURNING *'
-      : 'INSERT INTO clientes (nombre, identificacion, telefono, limite_credito, saldo_deudor) VALUES ($1, $2, $3, $4, 0.00)';
+      ? 'INSERT INTO clientes (nombre, identificacion, telefono, limite_credito, saldo_deudor, permite_saldo_favor) VALUES ($1, $2, $3, $4, 0.00, $5) RETURNING *'
+      : 'INSERT INTO clientes (nombre, identificacion, telefono, limite_credito, saldo_deudor, permite_saldo_favor) VALUES ($1, $2, $3, $4, 0.00, $5)';
 
-    const resInsert = await db.execute(insertSql, [nombre, identificacion, telefono || '', limite]);
+    const resInsert = await db.execute(insertSql, [nombre, identificacion, telefono || '', limite, saldoFavorFlag]);
     
     let client = null;
     if (isPg) {
@@ -118,14 +119,15 @@ export async function processAbono(req, res) {
 
   try {
     // Verificar si el cliente existe
-    const clientRes = await db.query('SELECT id, nombre, saldo_deudor FROM clientes WHERE id = $1', [cliente_id]);
+    const clientRes = await db.query('SELECT id, nombre, saldo_deudor, permite_saldo_favor FROM clientes WHERE id = $1', [cliente_id]);
     if (clientRes.length === 0) {
       return res.status(404).json({ error: 'Cliente no encontrado.' });
     }
     const cliente = clientRes[0];
     const saldoActual = parseFloat(cliente.saldo_deudor);
+    const permiteFavor = cliente.permite_saldo_favor == 1 || cliente.permite_saldo_favor === true;
 
-    if (saldoActual <= 0) {
+    if (saldoActual <= 0 && !permiteFavor) {
       return res.status(400).json({ error: 'Este cliente no presenta deudas activas.' });
     }
 
@@ -158,9 +160,9 @@ export async function processAbono(req, res) {
     });
 
     // Validar que el abono no exceda la deuda (con un pequeño delta)
-    if (totalAbonoCop > saldoActual + 0.05) {
+    if (totalAbonoCop > saldoActual + 0.05 && !permiteFavor) {
       return res.status(400).json({
-        error: 'El monto abonado excede el saldo deudor del cliente.',
+        error: 'El monto abonado excede el saldo deudor del cliente y no se permiten saldos a favor.',
         saldo_deudor: saldoActual,
         monto_abono_ingresado: totalAbonoCop
       });
@@ -172,7 +174,7 @@ export async function processAbono(req, res) {
     // Ejecutar transacción
     const resultado = await db.transaction(async (tx) => {
       // A. Disminuir saldo deudor del cliente
-      const nuevoSaldo = Math.max(0, saldoActual - totalAbonoCop);
+      const nuevoSaldo = permiteFavor ? (saldoActual - totalAbonoCop) : Math.max(0, saldoActual - totalAbonoCop);
       await tx.execute('UPDATE clientes SET saldo_deudor = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [nuevoSaldo, cliente_id]);
 
       // B. Insertar cabecera del abono

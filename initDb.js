@@ -15,6 +15,13 @@ const usePostgres = process.env.DATABASE_URL || process.env.PGHOST;
 export async function initializeDatabase() {
   if (usePostgres) {
     console.log('⚡ Usando PostgreSQL — se asume que el esquema ya fue aplicado.');
+    try {
+      await db.execute('ALTER TABLE clientes ADD COLUMN IF NOT EXISTS permite_saldo_favor BOOLEAN DEFAULT FALSE;');
+      await db.execute('ALTER TABLE clientes DROP CONSTRAINT IF EXISTS clientes_saldo_deudor_check;');
+      console.log('   ✅ Migración PostgreSQL para saldo a favor ejecutada.');
+    } catch(e) {
+      console.log('   ⚠️ Migración PostgreSQL ignorada o error:', e.message);
+    }
     return;
   }
 
@@ -145,6 +152,7 @@ async function createTables() {
       telefono TEXT,
       limite_credito REAL NOT NULL DEFAULT 0.0,
       saldo_deudor REAL NOT NULL DEFAULT 0.0,
+      permite_saldo_favor INTEGER DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
@@ -320,6 +328,11 @@ async function runMigrations() {
     console.log('   🔄 Migración: columna permisos agregada a usuarios.'); 
     // Asegurar que los admins tengan permiso 'all'
     await db.execute("UPDATE usuarios SET permisos = '[\"all\"]' WHERE rol = 'Administrador'");
+  } catch(e) {}
+  // Agregar columna 'permite_saldo_favor' a clientes si no existe
+  try { 
+    await db.execute("ALTER TABLE clientes ADD COLUMN permite_saldo_favor INTEGER DEFAULT 0"); 
+    console.log('   ✅ Migración: columna permite_saldo_favor agregada a clientes.'); 
   } catch(e) {}
   // Agregar columna 'stock_fijo' a insumos si no existe
   try { 

@@ -1749,17 +1749,30 @@ function renderClientesTable(clientes) {
     const saldo = parseFloat(c.saldo_deudor);
     const limite = parseFloat(c.limite_credito);
     let statusClass = 'status-ok', statusText = 'Al día';
-    if (saldo > 0 && saldo >= limite) { statusClass = 'status-critical'; statusText = 'Límite'; }
-    else if (saldo > 0) { statusClass = 'status-warn'; statusText = 'Con deuda'; }
+    
+    if (saldo < 0) { 
+      statusClass = 'status-ok'; 
+      statusText = 'Saldo a Favor'; 
+    } else if (saldo > 0 && saldo >= limite) { 
+      statusClass = 'status-critical'; 
+      statusText = 'Límite'; 
+    } else if (saldo > 0) { 
+      statusClass = 'status-warn'; 
+      statusText = 'Con deuda'; 
+    }
+
+    const saldoDisplay = saldo < 0 
+      ? `<span style="color:var(--success)">$${Math.abs(saldo).toLocaleString()} (A favor)</span>` 
+      : `$${saldo.toLocaleString()}`;
 
     return `
       <tr>
         <td>${c.id}</td>
-        <td><strong>${c.nombre}</strong></td>
+        <td><strong>${c.nombre}</strong> ${c.permite_saldo_favor ? '<i data-lucide="award" style="width:12px; height:12px; color:var(--cyan-neon);" title="Permite Saldo a Favor"></i>' : ''}</td>
         <td>${c.identificacion}</td>
         <td>${c.telefono || '-'}</td>
         <td>$${limite.toLocaleString()}</td>
-        <td class="font-outfit">$${saldo.toLocaleString()}</td>
+        <td class="font-outfit">${saldoDisplay}</td>
         <td><span class="status-pill ${statusClass}">${statusText}</span></td>
         <td>
           <div class="table-actions">
@@ -1786,10 +1799,14 @@ window.loadClientDetail = async function(clientId) {
     const saldo = parseFloat(data.cliente.saldo_deudor);
     const limite = parseFloat(data.cliente.limite_credito);
     
+    const saldoLabel = saldo < 0 ? 'Saldo a Favor' : 'Saldo Deudor';
+    const saldoDisplay = saldo < 0 ? `+ $${Math.abs(saldo).toLocaleString()}` : `$${saldo.toLocaleString()}`;
+    const disponible = saldo < 0 ? limite + Math.abs(saldo) : Math.max(0, limite - saldo);
+
     document.getElementById('client-stats').innerHTML = `
       <div class="stat-card">
-        <span class="stat-label">Saldo Deudor</span>
-        <span class="stat-value" style="color: ${saldo > 0 ? 'var(--danger)' : 'var(--success)'}">$${saldo.toLocaleString()}</span>
+        <span class="stat-label">${saldoLabel}</span>
+        <span class="stat-value" style="color: ${saldo < 0 ? 'var(--cyan-neon)' : (saldo > 0 ? 'var(--danger)' : 'var(--success)')}">${saldoDisplay}</span>
       </div>
       <div class="stat-card">
         <span class="stat-label">Límite Crédito</span>
@@ -1797,7 +1814,7 @@ window.loadClientDetail = async function(clientId) {
       </div>
       <div class="stat-card">
         <span class="stat-label">Disponible</span>
-        <span class="stat-value" style="color: var(--cyan-neon)">$${Math.max(0, limite - saldo).toLocaleString()}</span>
+        <span class="stat-value" style="color: var(--cyan-neon)">$${disponible.toLocaleString()}</span>
       </div>
       <div class="stat-card">
         <span class="stat-label">Compras Registradas</span>
@@ -2526,17 +2543,33 @@ window.removeExtra = function(index, extraIndex) {
 };
 
 function showAddClienteModal() {
+  let adminCheckbox = '';
+  const auth = JSON.parse(sessionStorage.getItem('bf360_auth') || '{}');
+  if (auth.permisos && auth.permisos.includes('all')) {
+    adminCheckbox = `
+      <div class="form-group" style="margin-top: 15px;">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input type="checkbox" id="inp-cli-saldo-favor" style="width:18px;height:18px;"> 
+          <strong>Permitir Saldo a Favor (Cliente Prepago)</strong>
+        </label>
+        <small style="color:var(--text-muted); font-size:12px; display:block; margin-left: 26px;">Permite que el saldo baje de $0 si abona más de lo que debe.</small>
+      </div>
+    `;
+  }
+
   openGenericModal('Nuevo Cliente', `
     <div class="form-group"><label>Nombre Completo</label><input type="text" id="inp-cli-nombre" placeholder="Ej: Juan Pérez"></div>
     <div class="form-group"><label>Identificación</label><input type="text" id="inp-cli-id" placeholder="Ej: V-12345678"></div>
     <div class="form-group"><label>Teléfono</label><input type="text" id="inp-cli-tel" placeholder="Ej: +57 300 123 4567"></div>
     <div class="form-group"><label>Límite de Crédito (COP)</label><input type="number" id="inp-cli-limite" placeholder="0" min="0"></div>
+    ${adminCheckbox}
   `, async () => {
     const payload = {
       nombre: document.getElementById('inp-cli-nombre').value,
       identificacion: document.getElementById('inp-cli-id').value,
       telefono: document.getElementById('inp-cli-tel').value,
-      limite_credito: document.getElementById('inp-cli-limite').value
+      limite_credito: document.getElementById('inp-cli-limite').value,
+      permite_saldo_favor: document.getElementById('inp-cli-saldo-favor') ? document.getElementById('inp-cli-saldo-favor').checked : false
     };
     try {
       const res = await fetch('/api/clientes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });

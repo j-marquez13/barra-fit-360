@@ -67,7 +67,8 @@ CREATE TABLE clientes (
     identificacion VARCHAR(50) NOT NULL UNIQUE,
     telefono VARCHAR(50),
     limite_credito NUMERIC(12, 2) NOT NULL DEFAULT 0.00 CHECK (limite_credito >= 0.00),
-    saldo_deudor NUMERIC(12, 2) NOT NULL DEFAULT 0.00 CHECK (saldo_deudor >= 0.00),
+    saldo_deudor NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
+    permite_saldo_favor BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
