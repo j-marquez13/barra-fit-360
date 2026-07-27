@@ -2587,6 +2587,58 @@ function showAddClienteModal() {
   });
 }
 
+window.showEditClienteModal = function() {
+  const client = STATE.clientes.find(c => c.id === STATE.selectedClientId);
+  if (!client) return;
+
+  let adminCheckbox = '';
+  const auth = JSON.parse(sessionStorage.getItem('bf360_auth') || '{}');
+  if (auth.permisos && auth.permisos.includes('all')) {
+    adminCheckbox = `
+      <div class="form-group" style="margin-top: 15px;">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input type="checkbox" id="edit-cli-saldo-favor" style="width:18px;height:18px;" ${client.permite_saldo_favor ? 'checked' : ''}> 
+          <strong>Permitir Saldo a Favor (Cliente Prepago)</strong>
+        </label>
+        <small style="color:var(--text-muted); font-size:12px; display:block; margin-left: 26px;">Permite que el saldo baje de $0 si abona más de lo que debe.</small>
+      </div>
+    `;
+  }
+
+  openGenericModal('Editar Cliente', `
+    <div class="form-group"><label>Nombre Completo</label><input type="text" id="edit-cli-nombre" value="${client.nombre}"></div>
+    <div class="form-group"><label>Identificación</label><input type="text" id="edit-cli-id" value="${client.identificacion}"></div>
+    <div class="form-group"><label>Teléfono</label><input type="text" id="edit-cli-tel" value="${client.telefono || ''}"></div>
+    <div class="form-group"><label>Límite de Crédito (COP)</label><input type="number" id="edit-cli-limite" value="${parseFloat(client.limite_credito)}" min="0"></div>
+    ${adminCheckbox}
+  `, async () => {
+    const payload = {
+      nombre: document.getElementById('edit-cli-nombre').value,
+      identificacion: document.getElementById('edit-cli-id').value,
+      telefono: document.getElementById('edit-cli-tel').value,
+      limite_credito: document.getElementById('edit-cli-limite').value,
+      permite_saldo_favor: document.getElementById('edit-cli-saldo-favor') ? document.getElementById('edit-cli-saldo-favor').checked : !!client.permite_saldo_favor
+    };
+    try {
+      const res = await fetch(\`/api/clientes/\${client.id}\`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(data.mensaje, 'success');
+        closeGenericModal();
+        loadClientesData();
+        // Update detail panel if it is still open
+        document.getElementById('detail-client-name').textContent = \`\${payload.nombre} - Detalle de Cuenta\`;
+        // Refresh detail panel data
+        loadClientDetail(client.id);
+      } else {
+        showToast(data.error, 'danger');
+      }
+    } catch (err) {
+      showToast('Error de conexión', 'danger');
+    }
+  });
+}
+
 function showAbonoModal(clientId, clientName, saldoActual) {
   openGenericModal(`Registrar Abono — ${clientName}`, `
     <div class="alert-item alert-warning" style="margin-bottom:8px;">

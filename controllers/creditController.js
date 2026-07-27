@@ -60,11 +60,50 @@ export async function getClients(req, res) {
     return res.json(clientes);
   } catch (error) {
     console.error('Error al listar clientes:', error);
-    return res.status(500).json({ error: 'Error al consultar catálogo de clientes.' });
+    return res.status(500).json({ error: 'Error interno del servidor.' });
   }
 }
 
-// 3. Detalle de Cuenta (Historial de compras a crédito y abonos)
+// 2.1 Editar Cliente
+export async function updateClient(req, res) {
+  const { id } = req.params;
+  const { nombre, identificacion, telefono, limite_credito, permite_saldo_favor } = req.body;
+
+  if (!nombre || !identificacion) {
+    return res.status(400).json({ error: 'El nombre y la identificación son obligatorios.' });
+  }
+
+  const limite = parseFloat(limite_credito) || 0;
+  if (limite < 0) {
+    return res.status(400).json({ error: 'El límite de crédito no puede ser negativo.' });
+  }
+  const saldoFavorFlag = permite_saldo_favor ? 1 : 0;
+
+  try {
+    const existing = await db.query('SELECT id FROM clientes WHERE id = $1', [id]);
+    if (existing.length === 0) {
+      return res.status(404).json({ error: 'Cliente no encontrado.' });
+    }
+
+    const checkIdent = await db.query('SELECT id FROM clientes WHERE identificacion = $1 AND id != $2', [identificacion, id]);
+    if (checkIdent.length > 0) {
+      return res.status(409).json({ error: 'Ya existe otro cliente con esa identificación.' });
+    }
+
+    await db.execute(
+      'UPDATE clientes SET nombre = $1, identificacion = $2, telefono = $3, limite_credito = $4, permite_saldo_favor = $5, updated_at = CURRENT_TIMESTAMP WHERE id = $6',
+      [nombre, identificacion, telefono || '', limite, saldoFavorFlag, id]
+    );
+
+    const updated = await db.query('SELECT * FROM clientes WHERE id = $1', [id]);
+    return res.json({ mensaje: 'Cliente actualizado con éxito.', cliente: updated[0] });
+  } catch (error) {
+    console.error('Error al actualizar cliente:', error);
+    return res.status(500).json({ error: 'Error al actualizar el cliente.', detalle: error.message });
+  }
+}
+
+// 3. Obtener Detalle de Cliente (Historial) de compras a crédito y abonos)
 export async function getClientDetails(req, res) {
   const { id } = req.params;
 

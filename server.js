@@ -5,7 +5,7 @@ import os from 'os';
 import fs from 'fs';
 import path from 'path';
 import { processSale, anularVenta } from './controllers/salesController.js';
-import { createClient, getClients, getClientDetails, processAbono, registrarDeuda, deleteAbono } from './controllers/creditController.js';
+import { createClient, getClients, getClientDetails, processAbono, registrarDeuda, deleteAbono, updateClient } from './controllers/creditController.js';
 import { getInsumos, createInsumo, updateInsumo, restockInsumo, getMermas, createMerma, getProductos, createProducto, updateProducto, deleteProducto, deleteInsumo, getValorizacionInventario, getOrdenCompra, getProductoReceta } from './controllers/inventoryController.js';
 import { cierreDiario, cierreSemanal, historialVentas } from './controllers/reportsController.js';
 import { listarGastos, registrarGasto } from './controllers/expensesController.js';
@@ -110,6 +110,7 @@ app.post('/api/ventas/:id/anular', anularVenta);
 // ============================================
 app.get('/api/clientes', getClients);
 app.post('/api/clientes', createClient);
+app.put('/api/clientes/:id', updateClient);
 app.get('/api/clientes/:id', getClientDetails);
 app.post('/api/abonos', processAbono);
 app.delete('/api/abonos/:id', deleteAbono);

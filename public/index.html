@@ -563,9 +563,14 @@
           <div class="client-detail-panel" id="client-detail-panel" style="display:none;">
             <div class="panel-header">
               <h3 id="detail-client-name">Detalle del Cliente</h3>
-              <button class="action-btn secondary" id="btn-close-detail">
-                <i data-lucide="x"></i> Cerrar
-              </button>
+              <div style="display:flex; gap:10px;">
+                <button class="action-btn" id="btn-edit-client" style="background:var(--cyan-neon); color:#000;" onclick="showEditClienteModal()">
+                  <i data-lucide="edit"></i> Editar
+                </button>
+                <button class="action-btn secondary" id="btn-close-detail">
+                  <i data-lucide="x"></i> Cerrar
+                </button>
+              </div>
             </div>
             <div class="client-stats" id="client-stats">
               <!-- Dinámico -->
