@@ -154,8 +154,9 @@ export async function cierreSemanal(req, res) {
     `);
 
     // 2. Ventas por día de la semana
+    const diaSelect = isPg ? `${dateExpr('v.fecha')}::text` : dateExpr('v.fecha');
     const ventasPorDia = await db.query(`
-      SELECT ${dateExpr('v.fecha')} as dia, COUNT(*) as transacciones, SUM(v.total) as total_cop
+      SELECT ${diaSelect} as dia, COUNT(*) as transacciones, SUM(v.total) as total_cop
       FROM ventas v WHERE ${dateFilter} AND v.tipo_transaccion = 'Venta'
       GROUP BY ${dateExpr('v.fecha')} ORDER BY dia ASC
     `);

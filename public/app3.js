@@ -2005,12 +2005,16 @@ async function loadCierreSemanal() {
       chartContainer.innerHTML = data.ventas_por_dia.map(d => {
         const val = parseFloat(d.total_cop) || 0;
         const height = maxVal > 0 ? Math.max(4, (val / maxVal) * 100) : 4;
-        const dayName = new Date(d.dia + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'short' });
+        // Handle both string ("2026-07-27") and Date object from PostgreSQL
+        const diaStr = typeof d.dia === 'string' ? d.dia : (d.dia instanceof Date ? d.dia.toISOString().slice(0, 10) : String(d.dia).slice(0, 10));
+        const dateObj = new Date(diaStr + 'T12:00:00');
+        const dayName = dateObj.toLocaleDateString('es-ES', { weekday: 'short' });
+        const dayDate = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
         return `
           <div class="chart-bar-item">
             <span class="chart-bar-value">$${(val / 1000).toFixed(0)}k</span>
             <div class="chart-bar" style="height: ${height}%"></div>
-            <span class="chart-bar-label">${dayName}</span>
+            <span class="chart-bar-label">${dayName}<br>${dayDate}</span>
           </div>
         `;
       }).join('');
