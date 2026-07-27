@@ -2620,14 +2620,14 @@ window.showEditClienteModal = function() {
       permite_saldo_favor: document.getElementById('edit-cli-saldo-favor') ? document.getElementById('edit-cli-saldo-favor').checked : !!client.permite_saldo_favor
     };
     try {
-      const res = await fetch(\`/api/clientes/\${client.id}\`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const res = await fetch(`/api/clientes/${client.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const data = await res.json();
       if (res.ok) {
         showToast(data.mensaje, 'success');
         closeGenericModal();
         loadClientesData();
         // Update detail panel if it is still open
-        document.getElementById('detail-client-name').textContent = \`\${payload.nombre} - Detalle de Cuenta\`;
+        document.getElementById('detail-client-name').textContent = `${payload.nombre} - Detalle de Cuenta`;
         // Refresh detail panel data
         loadClientDetail(client.id);
       } else {
