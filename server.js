@@ -84,6 +84,8 @@ app.get('/api/backup-db', (req, res) => {
 app.get('/api/productos', getProductos);
 app.post('/api/productos', createProducto);
 app.put('/api/productos/:id', updateProducto);
+app.get('/api/productos/:id/receta', getProductoReceta);
+app.delete('/api/productos/:id', deleteProducto);
 app.get('/api/insumos', getInsumos);
 app.post('/api/insumos', createInsumo);
 app.put('/api/insumos/:id', updateInsumo);
