@@ -2581,7 +2581,216 @@ input, button, textarea, select {
   box-shadow: 0 0 0 3px rgba(255, 23, 68, 0.15) !important;
 }
 
+/* ============================================ */
+/* CIERRE DE CAJA PREMIUM                       */
+/* ============================================ */
 
+.cierre-caja-box {
+  width: 900px !important;
+  max-width: 95vw !important;
+}
+
+.cierre-caja-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.2);
+  border-bottom: 1px solid var(--border-glass);
+}
+
+.cierre-col-left, .cierre-col-right {
+  display: flex;
+  flex-direction: column;
+}
+
+.cierre-col-left h3, .cierre-col-right h3 {
+  font-size: 1.1rem;
+  color: var(--cyan-neon);
+  margin-bottom: 15px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid rgba(0, 242, 254, 0.15);
+  padding-bottom: 8px;
+}
+
+.cierre-col-left h3 i, .cierre-col-right h3 i {
+  width: 18px;
+  height: 18px;
+}
+
+.cierre-stats-list {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-glass);
+  border-radius: 12px;
+  padding: 15px;
+  margin-bottom: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cierre-stat-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.95rem;
+  color: var(--color-text);
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.1);
+  padding-bottom: 8px;
+}
+
+.cierre-stat-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.cierre-total-esperado {
+  background: rgba(127, 0, 255, 0.1);
+  border: 1px solid rgba(127, 0, 255, 0.3);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cierre-total-esperado span {
+  font-size: 1.05rem;
+  color: #d8b4fe;
+  font-weight: 600;
+}
+
+.cierre-total-esperado strong {
+  font-size: 1.8rem;
+  color: #fff;
+  font-family: var(--font-title);
+  text-shadow: 0 0 10px rgba(127, 0, 255, 0.5);
+}
+
+.cierre-inputs-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.cierre-inputs-grid .form-group label {
+  font-size: 0.8rem;
+}
+
+.cierre-inputs-grid .form-group input {
+  font-size: 1.05rem;
+  font-family: var(--font-title);
+  padding: 10px 12px;
+}
+
+.cierre-bottom-panel {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.cierre-diff-box {
+  background: rgba(0, 0, 0, 0.4);
+  border: 2px solid var(--border-glass);
+  border-radius: 16px;
+  padding: 20px 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 500px;
+  transition: all 0.3s ease;
+}
+
+.cierre-diff-box .diff-label {
+  font-size: 1rem;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 5px;
+}
+
+.cierre-diff-box .diff-value {
+  font-size: 2.5rem;
+  font-family: var(--font-title);
+  color: white;
+  margin-bottom: 8px;
+  transition: color 0.3s ease, text-shadow 0.3s ease;
+}
+
+.cierre-diff-box .diff-status {
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  transition: all 0.3s ease;
+}
+
+/* Status variants para diferencia */
+.cierre-diff-box.diff-perfect {
+  border-color: rgba(34, 197, 94, 0.5);
+  box-shadow: 0 0 30px rgba(34, 197, 94, 0.15);
+  background: rgba(34, 197, 94, 0.05);
+}
+.cierre-diff-box.diff-perfect .diff-value {
+  color: #22c55e;
+  text-shadow: 0 0 15px rgba(34, 197, 94, 0.4);
+}
+.cierre-diff-box.diff-perfect .diff-status {
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+}
+
+.cierre-diff-box.diff-missing {
+  border-color: rgba(239, 68, 68, 0.5);
+  box-shadow: 0 0 30px rgba(239, 68, 68, 0.15);
+  background: rgba(239, 68, 68, 0.05);
+}
+.cierre-diff-box.diff-missing .diff-value {
+  color: #ef4444;
+  text-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
+}
+.cierre-diff-box.diff-missing .diff-status {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+.cierre-diff-box.diff-extra {
+  border-color: rgba(234, 179, 8, 0.5);
+  box-shadow: 0 0 30px rgba(234, 179, 8, 0.15);
+  background: rgba(234, 179, 8, 0.05);
+}
+.cierre-diff-box.diff-extra .diff-value {
+  color: #eab308;
+  text-shadow: 0 0 15px rgba(234, 179, 8, 0.4);
+}
+.cierre-diff-box.diff-extra .diff-status {
+  background: rgba(234, 179, 8, 0.2);
+  color: #facc15;
+}
+
+.success-icon-anim i {
+  animation: pulse-success 2s infinite;
+}
+
+@keyframes pulse-success {
+  0% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(34, 197, 94, 0.7)); }
+  50% { transform: scale(1.1); filter: drop-shadow(0 0 15px rgba(34, 197, 94, 0.9)); }
+  100% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(34, 197, 94, 0)); }
+}
+
+@media (max-width: 768px) {
+  .cierre-caja-grid {
+    grid-template-columns: 1fr;
+  }
+}
 
 /* ============================================ */
 /* 9. RESPONSIVE / MOBILE DESIGN                */

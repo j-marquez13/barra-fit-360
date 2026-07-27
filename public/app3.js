@@ -2907,81 +2907,218 @@ async function loadCajaData() {
   }
 }
 
-function cerrarTurnoActual() {
-  DOM.genericModalTitle.innerHTML = '<i data-lucide="square"></i> Cerrar Caja';
-  DOM.genericModalBody.innerHTML = `
-    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-      <div class="form-group">
-        <label>Bs Digital / Pago Móvil (VES)</label>
-        <input type="number" id="caja-dec-bs" value="0" min="0" step="any">
-      </div>
-      <div class="form-group">
-        <label>Zelle (USD)</label>
-        <input type="number" id="caja-dec-zelle" value="0" min="0" step="any">
-      </div>
-      <div class="form-group">
-        <label>Binance (USD)</label>
-        <input type="number" id="caja-dec-binance" value="0" min="0" step="any">
-      </div>
-      <div class="form-group">
-        <label>Pesos Efectivo (COP)</label>
-        <input type="number" id="caja-dec-pesos" value="0" min="0" step="any">
-      </div>
-      <div class="form-group" style="grid-column: 1 / -1;">
-        <label>Bancolombia (COP)</label>
-        <input type="number" id="caja-dec-bancolombia" value="0" min="0" step="any">
-      </div>
-    </div>
-    <div class="payment-status-box status-warn" style="margin-top:10px;">
-      <div class="status-header">
-        <i data-lucide="alert-triangle"></i>
-        <span>Atención</span>
-      </div>
-      <p>Una vez cerrada la caja, el sistema cerrará la sesión y regresará a la pantalla de selección de turno.</p>
-    </div>
-  `;
-  lucide.createIcons();
+async function cerrarTurnoActual() {
+  if (!STATE.apiOnline) {
+    showToast('Modo Local. Conecta al servidor para cerrar la caja.', 'warning');
+    return;
+  }
+
+  // 1. Mostrar loading y cargar estado actual de la caja
+  const overlay = document.getElementById('cierre-caja-overlay');
+  const viewArqueo = document.getElementById('cierre-caja-view-arqueo');
+  const viewSuccess = document.getElementById('cierre-caja-view-success');
   
-  DOM.btnSubmitGeneric.onclick = async () => {
+  viewArqueo.style.display = 'block';
+  viewSuccess.style.display = 'none';
+  overlay.classList.add('open');
+  lucide.createIcons();
+
+  let totalEsperado = 0;
+  let currentSessionData = null;
+
+  try {
+    const res = await fetch('/api/caja/estado');
+    const data = await res.json();
+    
+    if (!data.abierta) {
+      overlay.classList.remove('open');
+      showToast('No hay caja abierta', 'warning');
+      return;
+    }
+    
+    currentSessionData = data;
+    const arqueo = data.arqueo || { ventas_moneda: {}, abonos_moneda: {}, total_gastos_cop: 0 };
+    const fondoBaseCop = parseFloat(data.sesion.fondo_inicial_cop) || 0;
+    const gastosCop = parseFloat(arqueo.total_gastos_cop) || 0;
+    
+    // Calcular totales convirtiendo a COP usando tasas actuales
+    const rateUsd = STATE.tasas.USD || 1;
+    const rateVes = STATE.tasas.VES || 1;
+    
+    let ventasCop = 0;
+    Object.entries(arqueo.ventas_moneda || {}).forEach(([moneda, monto]) => {
+      if (moneda === 'COP') ventasCop += monto;
+      else if (moneda === 'USD') ventasCop += monto * rateUsd;
+      else if (moneda === 'VES') ventasCop += monto * rateVes;
+    });
+
+    let abonosCop = 0;
+    Object.entries(arqueo.abonos_moneda || {}).forEach(([moneda, monto]) => {
+      if (moneda === 'COP') abonosCop += monto;
+      else if (moneda === 'USD') abonosCop += monto * rateUsd;
+      else if (moneda === 'VES') abonosCop += monto * rateVes;
+    });
+
+    totalEsperado = fondoBaseCop + ventasCop + abonosCop - gastosCop;
+
+    // Actualizar UI - Valores Teóricos
+    document.getElementById('cc-fondo-inicial').textContent = `$${fondoBaseCop.toLocaleString()} COP`;
+    document.getElementById('cc-total-ventas').textContent = `$${ventasCop.toLocaleString()} COP`;
+    document.getElementById('cc-total-abonos').textContent = `$${abonosCop.toLocaleString()} COP`;
+    document.getElementById('cc-total-gastos').textContent = `-$${gastosCop.toLocaleString()} COP`;
+    document.getElementById('cc-total-esperado').textContent = `$${totalEsperado.toLocaleString()}`;
+
+  } catch (err) {
+    console.error('Error al cargar estado para cierre', err);
+    showToast('Error cargando estado de la caja', 'danger');
+    overlay.classList.remove('open');
+    return;
+  }
+
+  // 2. Setup de inputs y cálculos en tiempo real
+  const inputs = ['cc-dec-bs', 'cc-dec-zelle', 'cc-dec-binance', 'cc-dec-pesos', 'cc-dec-bancolombia', 'cc-dec-usd'];
+  const diffBox = document.getElementById('cc-diff-box');
+  const diffValue = document.getElementById('cc-diferencia');
+  const diffStatus = document.getElementById('cc-diff-status');
+
+  // Limpiar inputs
+  inputs.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '0';
+  });
+
+  const calcularDiferenciaReal = () => {
+    const decBs = parseFloat(document.getElementById('cc-dec-bs').value) || 0;
+    const decZelle = parseFloat(document.getElementById('cc-dec-zelle').value) || 0;
+    const decBinance = parseFloat(document.getElementById('cc-dec-binance').value) || 0;
+    const decUsd = parseFloat(document.getElementById('cc-dec-usd').value) || 0;
+    const decPesos = parseFloat(document.getElementById('cc-dec-pesos').value) || 0;
+    const decBanco = parseFloat(document.getElementById('cc-dec-bancolombia').value) || 0;
+
+    const rateUsd = STATE.tasas.USD || 1;
+    const rateVes = STATE.tasas.VES || 1;
+
+    // USD total declarado = Zelle + Binance + Efectivo USD
+    const totalUsd = decZelle + decBinance + decUsd;
+    const declaradoCop = decPesos + decBanco + (totalUsd * rateUsd) + (decBs * rateVes);
+    
+    const diferencia = declaradoCop - totalEsperado;
+
+    // Actualizar UI
+    diffValue.textContent = `$${Math.abs(diferencia).toLocaleString()} COP`;
+    
+    diffBox.className = 'cierre-diff-box';
+    if (Math.abs(diferencia) < 100) { // Margen de tolerancia pequeño (centavos/redondeo)
+      diffBox.classList.add('diff-perfect');
+      diffStatus.textContent = 'CUADRE PERFECTO';
+      diffValue.textContent = `$0 COP`;
+    } else if (diferencia < 0) {
+      diffBox.classList.add('diff-missing');
+      diffStatus.textContent = 'FALTANTE EN CAJA';
+      diffValue.textContent = `-$${Math.abs(diferencia).toLocaleString()} COP`;
+    } else {
+      diffBox.classList.add('diff-extra');
+      diffStatus.textContent = 'SOBRANTE EN CAJA';
+      diffValue.textContent = `+$${Math.abs(diferencia).toLocaleString()} COP`;
+    }
+  };
+
+  // Bind listeners
+  inputs.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', calcularDiferenciaReal);
+  });
+  
+  // Calcular inicial (puros ceros)
+  calcularDiferenciaReal();
+
+  // 3. Botones del Modal
+  const btnClose = document.getElementById('btn-close-cierre');
+  const btnCancel = document.getElementById('btn-cancel-cierre');
+  const btnConfirm = document.getElementById('btn-confirm-cierre');
+  
+  const closeCierre = () => {
+    overlay.classList.remove('open');
+  };
+  
+  btnClose.onclick = closeCierre;
+  btnCancel.onclick = closeCierre;
+
+  btnConfirm.onclick = async () => {
+    btnConfirm.disabled = true;
+    btnConfirm.innerHTML = '<i data-lucide="loader"></i> Procesando...';
+    lucide.createIcons();
+    
     try {
-      const dec_bs = parseFloat(document.getElementById('caja-dec-bs').value) || 0;
-      const dec_zelle = parseFloat(document.getElementById('caja-dec-zelle').value) || 0;
-      const dec_binance = parseFloat(document.getElementById('caja-dec-binance').value) || 0;
-      const dec_pesos = parseFloat(document.getElementById('caja-dec-pesos').value) || 0;
-      const dec_bancolombia = parseFloat(document.getElementById('caja-dec-bancolombia').value) || 0;
+      const decBs = parseFloat(document.getElementById('cc-dec-bs').value) || 0;
+      const decZelle = parseFloat(document.getElementById('cc-dec-zelle').value) || 0;
+      const decBinance = parseFloat(document.getElementById('cc-dec-binance').value) || 0;
+      const decUsd = parseFloat(document.getElementById('cc-dec-usd').value) || 0;
+      const decPesos = parseFloat(document.getElementById('cc-dec-pesos').value) || 0;
+      const decBanco = parseFloat(document.getElementById('cc-dec-bancolombia').value) || 0;
 
       const rateUsd = STATE.tasas.USD || 1;
       const rateVes = STATE.tasas.VES || 1;
       
-      const monto_declarado_cop = dec_pesos + dec_bancolombia + (dec_zelle * rateUsd) + (dec_binance * rateUsd) + (dec_bs * rateVes);
+      const totalUsd = decZelle + decBinance + decUsd;
+      const monto_declarado_cop = decPesos + decBanco + (totalUsd * rateUsd) + (decBs * rateVes);
 
       const res = await fetch('/api/caja/cerrar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           monto_declarado_cop,
-          declarado_efectivo_bs: dec_bs,
-          declarado_zelle: dec_zelle,
-          declarado_binance: dec_binance,
-          declarado_efectivo_pesos: dec_pesos,
-          declarado_bancolombia: dec_bancolombia
-        })
+          declarado_efectivo_bs: decBs,
+          declarado_zelle: decZelle,
+          declarado_binance: decBinance,
+          declarado_efectivo_pesos: decPesos,
+          declarado_bancolombia: decBanco
+        }) // Backend no guarda Efectivo USD separado ahora mismo, lo suma en monto_declarado_cop
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error);
-      closeGenericModal();
       
-      // Mostrar resumen de cierre
-      showToast(`✅ Caja cerrada. Ventas: $${d.resumen.total_ventas.toLocaleString()} COP | Gastos: $${d.resumen.total_gastos.toLocaleString()} COP | Diferencia: $${d.resumen.diferencia.toLocaleString()} COP`, 'success');
+      // Mostrar Ticket de Éxito
+      viewArqueo.style.display = 'none';
+      viewSuccess.style.display = 'block';
       
-      // Regresar a pantalla de turno luego de 2 segundos
-      setTimeout(() => showTurnoScreen(), 2000);
+      document.getElementById('ticket-ventas').textContent = `$${d.resumen.total_ventas.toLocaleString()}`;
+      document.getElementById('ticket-gastos').textContent = `$${d.resumen.total_gastos.toLocaleString()}`;
+      document.getElementById('ticket-esperado').textContent = `$${d.resumen.saldo_teorico.toLocaleString()}`;
+      document.getElementById('ticket-declarado').textContent = `$${d.resumen.monto_declarado.toLocaleString()}`;
+      
+      const diff = d.resumen.diferencia;
+      const diffEl = document.getElementById('ticket-diferencia');
+      const diffRow = document.getElementById('ticket-diff-row');
+      
+      if (Math.abs(diff) < 100) {
+        diffEl.textContent = `$0`;
+        diffRow.style.color = 'var(--success)';
+      } else if (diff < 0) {
+        diffEl.textContent = `-$${Math.abs(diff).toLocaleString()}`;
+        diffRow.style.color = 'var(--danger)';
+      } else {
+        diffEl.textContent = `+$${Math.abs(diff).toLocaleString()}`;
+        diffRow.style.color = 'var(--warning)';
+      }
       
     } catch (e) {
       alert('Error: ' + e.message);
+      btnConfirm.disabled = false;
+      btnConfirm.innerHTML = '<i data-lucide="check-square"></i> Confirmar Cierre';
+      lucide.createIcons();
     }
   };
-  DOM.genericModal.classList.add('open');
+
+  // Botones finales
+  document.getElementById('btn-cierre-salir').onclick = () => {
+    overlay.classList.remove('open');
+    showTurnoScreen();
+  };
+  
+  document.getElementById('btn-cierre-imprimir').onclick = () => {
+    window.print(); // Solución simple de impresión, idealmente conectada a un thermal printer handler
+  };
 }
 
 
