@@ -416,6 +416,9 @@ export async function updateProducto(req, res) {
     }
 
     await db.transaction(async (tx) => {
+      const activoVal = activo !== undefined ? !!activo : true;
+      const esBatidoVal = !!es_batido;
+      console.log('UPDATE producto params:', { nombre, categoria, costo_produccion, precio_venta, activoVal, esBatidoVal, id });
       await tx.execute(`
         UPDATE productos 
         SET nombre = $1, categoria = $2, costo_produccion = $3, precio_venta = $4, activo = $5, es_batido = $6, updated_at = CURRENT_TIMESTAMP
@@ -425,8 +428,8 @@ export async function updateProducto(req, res) {
         categoria || 'General',
         parseFloat(costo_produccion) || 0,
         parseFloat(precio_venta) || 0,
-        activo !== undefined ? !!activo : true,
-        !!es_batido,
+        activoVal,
+        esBatidoVal,
         id
       ]);
 
@@ -452,6 +455,7 @@ export async function updateProducto(req, res) {
     });
 
     const updated = await db.query('SELECT * FROM productos WHERE id = $1', [id]);
+    console.log('Producto after update:', updated[0]);
     return res.json({ mensaje: 'Producto y receta actualizados.', producto: updated[0] });
   } catch (error) {
     console.error('Error al actualizar producto:', error);
