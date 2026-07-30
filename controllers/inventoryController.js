@@ -419,6 +419,7 @@ export async function updateProducto(req, res) {
       const activoVal = activo !== undefined ? !!activo : true;
       const esBatidoVal = !!es_batido;
       console.log('UPDATE producto params:', { nombre, categoria, costo_produccion, precio_venta, activoVal, esBatidoVal, id });
+      console.log('RECETA recibida:', JSON.stringify(receta));
       await tx.execute(`
         UPDATE productos 
         SET nombre = $1, categoria = $2, costo_produccion = $3, precio_venta = $4, activo = $5, es_batido = $6, updated_at = CURRENT_TIMESTAMP
