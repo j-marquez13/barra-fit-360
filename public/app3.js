@@ -1711,9 +1711,12 @@ window.showEditProductoModal = async function(prod_id) {
       const res = await fetch(`/api/productos/${prod_id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nombre, categoria, precio_venta, costo_produccion, receta, es_batido, activo: 1 })
+        body: JSON.stringify({ nombre, categoria, precio_venta, costo_produccion, receta, es_batido, activo: true })
       });
-      if (!res.ok) throw new Error('Error al actualizar');
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.detalle || d.error || 'Error al actualizar');
+      }
       
       closeGenericModal();
       await loadInventarioData();
