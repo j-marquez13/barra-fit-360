@@ -374,12 +374,21 @@ export async function createProducto(req, res) {
       ]);
       const prodId = res[0].id;
 
-      // Insertar recetas si se proporcionaron
+      // Insertar recetas si se proporcionaron (deduplicar por insumo_id)
       if (receta && Array.isArray(receta)) {
+        const dedup = {};
         for (const item of receta) {
+          const key = item.insumo_id;
+          if (dedup[key]) {
+            dedup[key].cantidad += parseFloat(item.cantidad);
+          } else {
+            dedup[key] = { insumo_id: item.insumo_id, cantidad: parseFloat(item.cantidad) };
+          }
+        }
+        for (const item of Object.values(dedup)) {
           await tx.execute(
             'INSERT INTO recetas (producto_id, insumo_id, cantidad) VALUES ($1, $2, $3)',
-            [prodId, item.insumo_id, parseFloat(item.cantidad)]
+            [prodId, item.insumo_id, item.cantidad]
           );
         }
       }
@@ -421,13 +430,22 @@ export async function updateProducto(req, res) {
         id
       ]);
 
-      // Si se envía una receta, borrar la anterior y guardar la nueva
+      // Si se envía una receta, borrar la anterior y guardar la nueva (deduplicar por insumo_id)
       if (receta && Array.isArray(receta)) {
         await tx.execute('DELETE FROM recetas WHERE producto_id = $1', [id]);
+        const dedup = {};
         for (const item of receta) {
+          const key = item.insumo_id;
+          if (dedup[key]) {
+            dedup[key].cantidad += parseFloat(item.cantidad);
+          } else {
+            dedup[key] = { insumo_id: item.insumo_id, cantidad: parseFloat(item.cantidad) };
+          }
+        }
+        for (const item of Object.values(dedup)) {
           await tx.execute(
             'INSERT INTO recetas (producto_id, insumo_id, cantidad) VALUES ($1, $2, $3)',
-            [id, item.insumo_id, parseFloat(item.cantidad)]
+            [id, item.insumo_id, item.cantidad]
           );
         }
       }
