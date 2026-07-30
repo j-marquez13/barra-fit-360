@@ -1587,7 +1587,7 @@ window.showEditProductoModal = async function(prod_id) {
 
   DOM.genericModalTitle.innerHTML = `<i data-lucide="edit"></i> Editar Producto: ${prod.nombre}`;
   
-  let insumosOptions = STATE.insumos.map(i => `<option value="${i.id}">${i.nombre} (${i.unidad_medida})</option>`).join('');
+  let insumosOptions = `<option value="" disabled selected>-- Seleccione un insumo --</option>` + STATE.insumos.map(i => `<option value="${i.id}">${i.nombre} (${i.unidad_medida})</option>`).join('');
   
   DOM.genericModalBody.innerHTML = `
     <div class="form-group">
@@ -1651,7 +1651,7 @@ window.showEditProductoModal = async function(prod_id) {
       row.className = 'receta-row';
       row.innerHTML = `
         <select class="receta-insumo" style="flex: 2; min-width: 0;">
-          ${STATE.insumos.map(i => `<option value="${i.id}" ${i.id === item.insumo_id ? 'selected' : ''}>${i.nombre} (${i.unidad_medida})</option>`).join('')}
+          ${STATE.insumos.map(i => `<option value="${i.id}" ${i.id == item.insumo_id ? 'selected' : ''}>${i.nombre} (${i.unidad_medida})</option>`).join('')}
         </select>
         <input type="number" class="receta-cantidad" value="${item.cantidad}" placeholder="Cant." style="flex: 1; min-width: 0;" min="0.1" step="0.1">
         <button type="button" class="action-btn" onclick="this.parentElement.remove()" style="background:var(--danger); border:none; padding:5px 10px;"><i data-lucide="trash-2"></i></button>
@@ -1694,7 +1694,7 @@ window.showEditProductoModal = async function(prod_id) {
     rows.forEach(row => {
       const ins_id = row.querySelector('.receta-insumo').value;
       const cant = parseFloat(row.querySelector('.receta-cantidad').value) || 0;
-      if (cant > 0) {
+      if (ins_id && cant > 0) {
         receta.push({ insumo_id: parseInt(ins_id), cantidad: cant });
         const insObj = STATE.insumos.find(i => i.id == ins_id);
         if (insObj) {
