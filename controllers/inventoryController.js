@@ -436,6 +436,7 @@ export async function updateProducto(req, res) {
 
       // Si se envía una receta, borrar la anterior y guardar la nueva (deduplicar por insumo_id)
       if (receta && Array.isArray(receta)) {
+        console.log('RECETA: Borrando receta anterior del producto', id);
         await tx.execute('DELETE FROM recetas WHERE producto_id = $1', [id]);
         const dedup = {};
         for (const item of receta) {
@@ -446,14 +447,23 @@ export async function updateProducto(req, res) {
             dedup[key] = { insumo_id: item.insumo_id, cantidad: parseFloat(item.cantidad) };
           }
         }
-        for (const item of Object.values(dedup)) {
-          await tx.execute(
+        const dedupItems = Object.values(dedup);
+        console.log('RECETA: Insertando', dedupItems.length, 'ingredientes deduplicados:', JSON.stringify(dedupItems));
+        for (const item of dedupItems) {
+          const insertResult = await tx.execute(
             'INSERT INTO recetas (producto_id, insumo_id, cantidad) VALUES ($1, $2, $3)',
             [id, item.insumo_id, item.cantidad]
           );
+          console.log('RECETA INSERT result:', insertResult);
         }
+      } else {
+        console.log('RECETA: No se envió receta o no es array. receta=', receta);
       }
     });
+
+    // Verificar que la receta se guardó
+    const recetaGuardada = await db.query('SELECT * FROM recetas WHERE producto_id = $1', [id]);
+    console.log('RECETA VERIFICACION: recetas guardadas para producto', id, ':', JSON.stringify(recetaGuardada));
 
     const updated = await db.query('SELECT * FROM productos WHERE id = $1', [id]);
     console.log('Producto after update:', updated[0]);
