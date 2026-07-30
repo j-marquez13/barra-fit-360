@@ -1706,6 +1706,9 @@ window.showEditProductoModal = async function(prod_id) {
     let costo_manual = parseFloat(document.getElementById('edit-prod-costo').value) || 0;
     let costo_produccion = costo_manual > 0 ? costo_manual : costo_produccion_calc;
 
+    console.log('DEBUG receta a enviar:', receta);
+    console.log('DEBUG filas encontradas:', rows.length);
+    alert(`DEBUG: Se encontraron ${rows.length} filas de receta. Se enviarán ${receta.length} ingredientes: ${JSON.stringify(receta)}`);
 
     try {
       const res = await fetch(`/api/productos/${prod_id}`, {
