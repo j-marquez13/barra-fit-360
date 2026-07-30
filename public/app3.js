@@ -1527,8 +1527,8 @@ window.showAddProductoModal = function() {
     row.style.marginBottom = '10px';
     row.className = 'receta-row';
     row.innerHTML = `
-      <select class="receta-insumo" style="flex: 2;">${insumosOptions}</select>
-      <input type="number" class="receta-cantidad" placeholder="Cant." style="flex: 1;" min="0.1" step="0.1">
+      <select class="receta-insumo" style="flex: 2; min-width: 0;">${insumosOptions}</select>
+      <input type="number" class="receta-cantidad" placeholder="Cant." style="flex: 1; min-width: 0;" min="0.1" step="0.1">
       <button type="button" class="action-btn" onclick="this.parentElement.remove()" style="background:var(--danger); border:none; padding:5px 10px;"><i data-lucide="trash-2"></i></button>
     `;
     recetaItems.appendChild(row);
@@ -1650,10 +1650,10 @@ window.showEditProductoModal = async function(prod_id) {
       row.style.marginBottom = '10px';
       row.className = 'receta-row';
       row.innerHTML = `
-        <select class="receta-insumo" style="flex: 2;">
+        <select class="receta-insumo" style="flex: 2; min-width: 0;">
           ${STATE.insumos.map(i => `<option value="${i.id}" ${i.id === item.insumo_id ? 'selected' : ''}>${i.nombre} (${i.unidad_medida})</option>`).join('')}
         </select>
-        <input type="number" class="receta-cantidad" value="${item.cantidad}" placeholder="Cant." style="flex: 1;" min="0.1" step="0.1">
+        <input type="number" class="receta-cantidad" value="${item.cantidad}" placeholder="Cant." style="flex: 1; min-width: 0;" min="0.1" step="0.1">
         <button type="button" class="action-btn" onclick="this.parentElement.remove()" style="background:var(--danger); border:none; padding:5px 10px;"><i data-lucide="trash-2"></i></button>
       `;
       recetaItems.appendChild(row);
@@ -1673,8 +1673,8 @@ window.showEditProductoModal = async function(prod_id) {
     row.style.marginBottom = '10px';
     row.className = 'receta-row';
     row.innerHTML = `
-      <select class="receta-insumo" style="flex: 2;">${insumosOptions}</select>
-      <input type="number" class="receta-cantidad" placeholder="Cant." style="flex: 1;" min="0.1" step="0.1">
+      <select class="receta-insumo" style="flex: 2; min-width: 0;">${insumosOptions}</select>
+      <input type="number" class="receta-cantidad" placeholder="Cant." style="flex: 1; min-width: 0;" min="0.1" step="0.1">
       <button type="button" class="action-btn" onclick="this.parentElement.remove()" style="background:var(--danger); border:none; padding:5px 10px;"><i data-lucide="trash-2"></i></button>
     `;
     recetaItems.appendChild(row);
