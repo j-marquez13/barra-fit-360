@@ -1706,10 +1706,6 @@ window.showEditProductoModal = async function(prod_id) {
     let costo_manual = parseFloat(document.getElementById('edit-prod-costo').value) || 0;
     let costo_produccion = costo_manual > 0 ? costo_manual : costo_produccion_calc;
 
-    console.log('DEBUG receta a enviar:', receta);
-    console.log('DEBUG filas encontradas:', rows.length);
-    alert(`DEBUG: Se encontraron ${rows.length} filas de receta. Se enviarán ${receta.length} ingredientes: ${JSON.stringify(receta)}`);
-
     try {
       const bodyData = { nombre, categoria, precio_venta, costo_produccion, receta, es_batido, activo: true };
       const res = await fetch(`/api/productos/${prod_id}`, {
@@ -1717,17 +1713,11 @@ window.showEditProductoModal = async function(prod_id) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bodyData)
       });
-      const responseData = await res.json();
-      alert('RESPUESTA DEL SERVIDOR (status ' + res.status + '): ' + JSON.stringify(responseData));
       
       if (!res.ok) {
+        const responseData = await res.json();
         throw new Error(responseData.detalle || responseData.error || 'Error al actualizar');
       }
-      
-      // Verificar receta guardada
-      const recetaCheck = await fetch(`/api/productos/${prod_id}/receta`);
-      const recetaData = await recetaCheck.json();
-      alert('RECETA GUARDADA EN DB: ' + recetaData.length + ' ingredientes: ' + JSON.stringify(recetaData));
       
       closeGenericModal();
       await loadInventarioData();
