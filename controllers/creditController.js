@@ -17,7 +17,7 @@ export async function createClient(req, res) {
   if (limite < 0) {
     return res.status(400).json({ error: 'El límite de crédito no puede ser negativo.' });
   }
-  const saldoFavorFlag = permite_saldo_favor ? 1 : 0;
+  const saldoFavorFlag = !!permite_saldo_favor;
 
   try {
     const isPg = !process.env.DATABASE_URL && !process.env.PGHOST ? false : true;
@@ -77,7 +77,7 @@ export async function updateClient(req, res) {
   if (limite < 0) {
     return res.status(400).json({ error: 'El límite de crédito no puede ser negativo.' });
   }
-  const saldoFavorFlag = permite_saldo_favor ? 1 : 0;
+  const saldoFavorFlag = !!permite_saldo_favor;
 
   try {
     const existing = await db.query('SELECT id FROM clientes WHERE id = $1', [id]);

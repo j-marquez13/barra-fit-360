@@ -49,9 +49,9 @@ export async function createInsumo(req, res) {
       parseFloat(stock_minimo) || 0,
       parseFloat(stock_fijo) || 0,
       parseFloat(costo_unitario) || 0,
-      es_para_batidos ? 1 : 0,
-      es_base_liquida ? 1 : 0,
-      es_sabor_batido ? 1 : 0,
+      !!es_para_batidos,
+      !!es_base_liquida,
+      !!es_sabor_batido,
       parseFloat(cantidad_sola) || 0,
       parseFloat(cantidad_combinada) || 0
     ]);
@@ -93,9 +93,9 @@ export async function updateInsumo(req, res) {
       parseFloat(stock_minimo) || 0,
       parseFloat(stock_fijo) || 0,
       parseFloat(costo_unitario) || 0,
-      es_para_batidos ? 1 : 0,
-      es_base_liquida ? 1 : 0,
-      es_sabor_batido ? 1 : 0,
+      !!es_para_batidos,
+      !!es_base_liquida,
+      !!es_sabor_batido,
       parseFloat(cantidad_sola) || 0,
       parseFloat(cantidad_combinada) || 0,
       id
@@ -370,7 +370,7 @@ export async function createProducto(req, res) {
         categoria || 'General',
         parseFloat(costo_produccion) || 0,
         parseFloat(precio_venta),
-        es_batido ? 1 : 0
+        !!es_batido
       ]);
       const prodId = res[0].id;
 
@@ -416,8 +416,8 @@ export async function updateProducto(req, res) {
         categoria || 'General',
         parseFloat(costo_produccion) || 0,
         parseFloat(precio_venta) || 0,
-        activo !== undefined ? (activo ? 1 : 0) : 1,
-        es_batido ? 1 : 0,
+        activo !== undefined ? !!activo : true,
+        !!es_batido,
         id
       ]);
 
