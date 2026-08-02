@@ -10,7 +10,7 @@ CREATE TABLE insumos (
     unidad_medida VARCHAR(20) NOT NULL, -- Ej: 'unidad', 'gr', 'ml', 'oz', 'scoop'
     stock_actual NUMERIC(12, 4) NOT NULL DEFAULT 0.0000 CHECK (stock_actual >= 0.0000),
     stock_minimo NUMERIC(12, 4) NOT NULL DEFAULT 0.0000 CHECK (stock_minimo >= 0.0000),
-    costo_unitario NUMERIC(12, 2) NOT NULL DEFAULT 0.00 CHECK (costo_unitario >= 0.00),
+    costo_unitario DOUBLE PRECISION NOT NULL DEFAULT 0.00 CHECK (costo_unitario >= 0.00),
     es_para_batidos BOOLEAN DEFAULT FALSE,
     es_base_liquida BOOLEAN DEFAULT FALSE,
     es_sabor_batido BOOLEAN DEFAULT FALSE,
@@ -38,8 +38,8 @@ CREATE TABLE productos (
     id SERIAL PRIMARY KEY,
     nombre VARCHAR(150) NOT NULL UNIQUE,
     categoria VARCHAR(50) NOT NULL DEFAULT 'General', -- Ej: 'Batidos', 'Nevera', 'Extras', 'Meriendas'
-    costo_produccion NUMERIC(12, 2) NOT NULL DEFAULT 0.00 CHECK (costo_produccion >= 0.00),
-    precio_venta NUMERIC(12, 2) NOT NULL DEFAULT 0.00 CHECK (precio_venta >= 0.00),
+    costo_produccion DOUBLE PRECISION NOT NULL DEFAULT 0.00 CHECK (costo_produccion >= 0.00),
+    precio_venta DOUBLE PRECISION NOT NULL DEFAULT 0.00 CHECK (precio_venta >= 0.00),
     activo BOOLEAN DEFAULT TRUE,
     es_batido BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

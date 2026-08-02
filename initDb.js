@@ -126,6 +126,12 @@ async function createTables() {
   `);
 
   // Migrations for new columns (ignoring errors if they already exist)
+  
+  if (isPg) {
+    try { await db.execute('ALTER TABLE insumos ALTER COLUMN costo_unitario TYPE DOUBLE PRECISION'); console.log('Migracion: costo_unitario -> DOUBLE PRECISION'); } catch(e) {}
+    try { await db.execute('ALTER TABLE productos ALTER COLUMN costo_produccion TYPE DOUBLE PRECISION'); } catch(e) {}
+    try { await db.execute('ALTER TABLE productos ALTER COLUMN precio_venta TYPE DOUBLE PRECISION'); } catch(e) {}
+  }
   try { await db.execute('ALTER TABLE productos ADD COLUMN es_batido BOOLEAN DEFAULT 0'); } catch (e) {}
   try { await db.execute('ALTER TABLE insumos ADD COLUMN es_para_batidos BOOLEAN DEFAULT 0'); } catch (e) {}
   try { await db.execute('ALTER TABLE insumos ADD COLUMN es_base_liquida BOOLEAN DEFAULT 0'); } catch (e) {}
