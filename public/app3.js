@@ -211,7 +211,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let html = '<option value="">-- Seleccione un cliente --</option>';
     STATE.clientes.forEach(c => {
       const saldo = parseFloat(c.saldo_deudor) || 0;
-      const saldoTxt = saldo > 0 ? ' (Deuda: $' + saldo.toLocaleString() + ')' : '';
+      const saldoTxt = saldo > 0 ? ' (Deuda: $' + saldo.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 }) + ')' : '';
       html += '<option value="' + c.id + '">' + c.nombre + ' — ' + c.identificacion + saldoTxt + '</option>';
     });
     html += '<option value="__new__">\u27A5 Crear Nuevo Cliente</option>';
@@ -242,7 +242,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const saldo = parseFloat(cliente.saldo_deudor) || 0;
         const limite = parseFloat(cliente.limite_credito) || 0;
         infoBox.style.display = 'block';
-        infoText.innerHTML = '<span style="color:var(--success)">✅ <strong>' + cliente.nombre + '</strong> — Saldo: $' + saldo.toLocaleString() + ' | Límite: $' + limite.toLocaleString() + '</span>';
+        infoText.innerHTML = '<span style="color:var(--success)">✅ <strong>' + cliente.nombre + '</strong> — Saldo: $' + saldo.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 }) + ' | Límite: $' + limite.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 }) + '</span>';
       }
     } else {
       newFields.style.display = 'none';
@@ -285,7 +285,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       if (amt > 0) {
-        DOM.creditSummaryText.textContent = `$${amt.toLocaleString()} COP configurados.`;
+        DOM.creditSummaryText.textContent = `$${amt.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP configurados.`;
         DOM.creditSummaryText.style.color = 'var(--success)';
       } else {
         DOM.creditSummaryText.textContent = 'No se ha registrado crédito.';
@@ -555,8 +555,8 @@ function renderProducts() {
       <div class="card-footer">
         <div class="price-box">
           <span class="price-label">Precio</span>
-          <span class="price-val">$${Number(p.precio_venta).toLocaleString()}</span>
-          <span class="production-cost">Costo: $${Number(p.costo_produccion).toLocaleString()}</span>
+          <span class="price-val">$${Number(p.precio_venta).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span>
+          <span class="production-cost">Costo: $${Number(p.costo_produccion).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span>
         </div>
         <button class="add-btn" ${isDisabled ? 'disabled' : ''}>
           <i data-lucide="plus"></i>
@@ -607,7 +607,7 @@ function renderCart() {
         const extraCosto = parseFloat(ext.precio_adicional) || 0;
         extrasSubtotal += extraCosto * ext.cantidad;
         extrasHtml += `<div class="cart-extra-item" style="font-size:0.8rem; color:var(--text-color); margin-left:10px;">
-          + ${ext.nombre} (x${ext.cantidad}) $${extraCosto.toLocaleString()}
+          + ${ext.nombre} (x${ext.cantidad}) $${extraCosto.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}
           <button style="background:none; border:none; color:var(--danger); cursor:pointer; margin-left:5px;" onclick="event.stopPropagation(); removeExtra(${index}, ${idx})"><i data-lucide="x" style="width:12px;height:12px;"></i></button>
         </div>`;
       });
@@ -624,14 +624,14 @@ function renderCart() {
       <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
         <div class="item-details">
           <h4>${prod.nombre}${item.notas ? `<br><small style="color:var(--color-muted);font-weight:normal;font-size:0.85rem;">${item.notas}</small>` : ''}</h4>
-          <span class="price">$${Number(prod.precio_venta).toLocaleString()} x ${item.cantidad}</span>
+          <span class="price">$${Number(prod.precio_venta).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} x ${item.cantidad}</span>
         </div>
         <div class="quantity-controls">
           <button class="qty-btn" onclick="event.stopPropagation(); changeQty(${index}, -1)"><i data-lucide="minus"></i></button>
           <span class="qty-val">${item.cantidad}</span>
           <button class="qty-btn" onclick="event.stopPropagation(); changeQty(${index}, 1)"><i data-lucide="plus"></i></button>
         </div>
-        <div class="item-total">$${subtotal.toLocaleString()}</div>
+        <div class="item-total">$${subtotal.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</div>
         <button class="remove-item-btn" onclick="event.stopPropagation(); removeFromCart(${index})"><i data-lucide="trash-2"></i></button>
       </div>
       ${extrasHtml}
@@ -646,8 +646,8 @@ function renderCart() {
   const totalVes = totalCop / tasaVes;
 
   DOM.cartCount.textContent = `${totalItems} items`;
-  DOM.summarySubtotal.textContent = `$${totalCop.toLocaleString()} COP`;
-  if(DOM.summaryTotalCop) DOM.summaryTotalCop.textContent = `$${totalCop.toLocaleString()} COP`;
+  DOM.summarySubtotal.textContent = `$${totalCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
+  if(DOM.summaryTotalCop) DOM.summaryTotalCop.textContent = `$${totalCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
   if(DOM.summaryTotalUsd) DOM.summaryTotalUsd.textContent = `$${totalUsd.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}`;
   if(DOM.summaryTotalVes) DOM.summaryTotalVes.textContent = `Bs ${totalVes.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}`;
   
@@ -707,7 +707,7 @@ async function quickPay(method, currency) {
     
     // Mostrar ticket
     document.getElementById('receipt-id').textContent = `#${String(resData.ventaId).padStart(5, '0')}`;
-    document.getElementById('receipt-date').textContent = new Date().toLocaleString();
+    document.getElementById('receipt-date').textContent = new Date().toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 });
     
     let itemsHtml = '';
     payload.items.forEach(item => {
@@ -715,13 +715,13 @@ async function quickPay(method, currency) {
       if (p) {
         itemsHtml += `<div class="ticket-row text-sm">
           <span>${item.cantidad}x ${p.nombre}</span>
-          <span>$${(p.precio_venta * item.cantidad).toLocaleString()}</span>
+          <span>$${(p.precio_venta * item.cantidad).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span>
         </div>`;
       }
     });
     document.getElementById('receipt-items-list').innerHTML = itemsHtml;
-    document.getElementById('receipt-total').textContent = `$${totalCop.toLocaleString()} COP`;
-    document.getElementById('receipt-paid').textContent = `$${totalCop.toLocaleString()} COP`;
+    document.getElementById('receipt-total').textContent = `$${totalCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
+    document.getElementById('receipt-paid').textContent = `$${totalCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
     document.getElementById('receipt-change-row').style.display = 'none';
     
     document.getElementById('receipt-payments-list').innerHTML = `<div class="ticket-row text-sm">
@@ -876,7 +876,7 @@ window.removeFromCart = function(index) {
 
 function openPaymentModal() {
   const totalCop = calculateCartTotal();
-  DOM.modalTotalSale.textContent = `$${totalCop.toLocaleString()} COP`;
+  DOM.modalTotalSale.textContent = `$${totalCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
   DOM.payInputs.forEach(i => i.value = '');
   DOM.refInputs.forEach(i => i.value = '');
   DOM.saleNotes.value = '';
@@ -961,7 +961,7 @@ function recalculatePayments() {
     DOM.statusBoxIcon.setAttribute('data-lucide', 'info');
     DOM.statusBoxTitle.textContent = 'Esperando Pago...';
     DOM.statusBoxDesc.textContent = 'Ingresa los montos por los métodos elegidos.';
-    DOM.statusBoxValue.textContent = `$${totalVentaCop.toLocaleString()} COP`;
+    DOM.statusBoxValue.textContent = `$${totalVentaCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
     DOM.btnConfirmPayment.disabled = true;
   } else if (diff < -10.0) {
     DOM.paymentStatusBox.className = 'payment-status-box status-insufficient';
@@ -1198,17 +1198,17 @@ function showReceipt(data) {
     row.className = 'ticket-row';
     row.innerHTML = `
       <span>${item.nombre} x ${item.cantidad}</span>
-      <span>$${item.subtotal.toLocaleString()}</span>
+      <span>$${item.subtotal.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span>
     `;
     DOM.receiptItemsList.appendChild(row);
   });
 
-  DOM.receiptTotal.textContent = `$${data.resumen.total_venta_cop.toLocaleString()} COP`;
-  DOM.receiptPaid.textContent = `$${data.resumen.total_pagado_cop.toLocaleString()} COP`;
+  DOM.receiptTotal.textContent = `$${data.resumen.total_venta_cop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
+  DOM.receiptPaid.textContent = `$${data.resumen.total_pagado_cop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
   
   if (data.resumen.cambio_cop > 0.1) {
     DOM.receiptChangeRow.style.display = 'flex';
-    DOM.receiptChange.innerHTML = `$${data.resumen.cambio_cop.toLocaleString()} COP <span style="font-size:0.7rem; color:var(--color-muted); font-weight:normal;">(o $${data.resumen.cambio_usd.toFixed(2)} USD)</span>`;
+    DOM.receiptChange.innerHTML = `$${data.resumen.cambio_cop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP <span style="font-size:0.7rem; color:var(--color-muted); font-weight:normal;">(o $${data.resumen.cambio_usd.toFixed(2)} USD)</span>`;
   } else {
     DOM.receiptChangeRow.style.display = 'none';
   }
@@ -1220,7 +1220,7 @@ function showReceipt(data) {
     const refText = p.referencia ? ` (Ref: ${p.referencia})` : '';
     row.innerHTML = `
       <span>${p.metodo_pago}${refText}</span>
-      <span>${p.moneda} ${p.monto_original.toLocaleString()} (= $${p.monto_base.toLocaleString()} COP)</span>
+      <span>${p.moneda} ${p.monto_original.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} (= $${p.monto_base.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP)</span>
     `;
     DOM.receiptPaymentsList.appendChild(row);
   });
@@ -1271,23 +1271,23 @@ async function loadInventarioData() {
     const valActual = document.getElementById('val-actual');
     const valRepos = document.getElementById('val-reposicion');
     const valIdeal = document.getElementById('val-ideal');
-    if (valActual && valRes.Actual !== undefined) valActual.textContent = `$${valRes.Actual.toLocaleString()}`;
+    if (valActual && valRes.Actual !== undefined) valActual.textContent = `$${valRes.Actual.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     if (valRepos && valRes.Reposición !== undefined) {
       const reposVal = valRes.Reposición;
       if (reposVal < 0) {
         // Excedente: el stock actual supera al fijo en general
-        valRepos.textContent = `-$${Math.abs(reposVal).toLocaleString()}`;
+        valRepos.textContent = `-$${Math.abs(reposVal).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
         valRepos.style.color = 'var(--success)';
         const sub = valRepos.closest('.kpi-data')?.querySelector('.kpi-sub');
         if (sub) sub.textContent = 'Excedente a favor (sobra stock)';
       } else {
-        valRepos.textContent = `$${reposVal.toLocaleString()}`;
+        valRepos.textContent = `$${reposVal.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
         valRepos.style.color = 'var(--warning)';
         const sub = valRepos.closest('.kpi-data')?.querySelector('.kpi-sub');
         if (sub) sub.textContent = 'Para llegar al stock fijo';
       }
     }
-    if (valIdeal && valRes['Stock Fijo'] !== undefined) valIdeal.textContent = `$${valRes['Stock Fijo'].toLocaleString()}`;
+    if (valIdeal && valRes['Stock Fijo'] !== undefined) valIdeal.textContent = `$${valRes['Stock Fijo'].toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
 
     STATE._allInsumos = insumosRes;
     renderInsumosTable(insumosRes);
@@ -1321,7 +1321,7 @@ window.loadOrdenCompra = async function() {
     if (!res.ok) throw new Error('Error al generar la orden');
     const data = await res.json();
     
-    valTotal.textContent = (data.total_orden_cop < 0 ? '-$' + Math.abs(data.total_orden_cop).toLocaleString() : '$' + data.total_orden_cop.toLocaleString());
+    valTotal.textContent = (data.total_orden_cop < 0 ? '-$' + Math.abs(data.total_orden_cop).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 }) : '$' + data.total_orden_cop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 }));
     if (data.total_orden_cop < 0) {
       valTotal.style.color = 'var(--success)';
     } else {
@@ -1344,15 +1344,15 @@ window.loadOrdenCompra = async function() {
       const colorCosto = esSobrante ? 'var(--success)' : 'var(--success)';
       const etiqueta = esSobrante ? 'Sobra ' + Math.abs(item.por_comprar) : item.por_comprar;
       const costTxt = esSobrante 
-        ? '-$' + Math.abs(item.reposicion_cop).toLocaleString()
-        : '$' + item.reposicion_cop.toLocaleString();
+        ? '-$' + Math.abs(item.reposicion_cop).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })
+        : '$' + item.reposicion_cop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 });
       return `
       <tr style="${esSobrante ? 'opacity:0.75;' : ''}">
         <td><strong>${item.nombre}</strong></td>
         <td>${item.stock_actual} ${item.unidad_medida}</td>
         <td>${item.stock_fijo} ${item.unidad_medida}</td>
         <td style="color:${colorCantidad}; font-weight:bold;">${etiqueta} ${item.unidad_medida}</td>
-        <td>$${item.costo_unitario.toLocaleString()}</td>
+        <td>$${item.costo_unitario.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
         <td style="color:${colorCosto}; font-weight:bold;">${costTxt}</td>
       </tr>
     `}).join('');
@@ -1403,11 +1403,11 @@ function renderInsumosTable(insumos) {
         <td>${ins.id}</td>
         <td><strong>${ins.nombre}</strong></td>
         <td>${ins.unidad_medida}</td>
-        <td class="font-outfit">${stock.toLocaleString()}</td>
-        <td>${min.toLocaleString()}</td>
-        <td>${stockFijo.toLocaleString()}</td>
-        <td>$${costoUnit.toLocaleString()}</td>
-        <td style="color:var(--accent-cyan); font-weight:bold;">$${valorFijo.toLocaleString()}</td>
+        <td class="font-outfit">${stock.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+        <td>${min.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+        <td>${stockFijo.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+        <td>$${costoUnit.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+        <td style="color:var(--accent-cyan); font-weight:bold;">$${valorFijo.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
         <td><span class="status-pill ${statusClass}">${statusText}</span></td>
         <td>
           <div class="table-actions">
@@ -1431,7 +1431,7 @@ function renderMermasTable(mermas) {
     <tr>
       <td>${new Date(m.fecha).toLocaleString('es-ES')}</td>
       <td><strong>${m.insumo_nombre}</strong></td>
-      <td>${parseFloat(m.cantidad).toLocaleString()}</td>
+      <td>${parseFloat(m.cantidad).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
       <td>${m.unidad_medida}</td>
       <td>${m.motivo}</td>
     </tr>
@@ -1458,8 +1458,8 @@ function renderProductosTable(productos) {
         <td>${p.id}</td>
         <td><strong>${p.nombre}</strong></td>
         <td>${p.categoria}</td>
-        <td>$${costo.toLocaleString()}</td>
-        <td>$${precio.toLocaleString()}</td>
+        <td>$${costo.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+        <td>$${precio.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
         <td><span class="text-success">${margen}%</span></td>
         <td><span class="status-pill ${stockClass}">${stock}</span></td>
         <td>
@@ -1492,11 +1492,11 @@ window.showAddProductoModal = function() {
     </div>
     <div class="form-group">
       <label>Precio de Venta (COP)</label>
-      <input type="number" id="prod-precio" value="0" min="0">
+      <input type="number" step="any" id="prod-precio" value="0" min="0">
     </div>
     <div class="form-group" style="margin-top: 10px;">
       <label>Costo de Producción (Manual)</label>
-      <input type="number" id="prod-costo" value="0" min="0">
+      <input type="number" step="any" id="prod-costo" value="0" min="0">
       <small style="color:var(--text-muted); font-size:12px;">Para calcular desde la receta, déjalo en 0.</small>
     </div>
     <div class="form-group" style="margin-top: 10px;">
@@ -1528,7 +1528,7 @@ window.showAddProductoModal = function() {
     row.className = 'receta-row';
     row.innerHTML = `
       <select class="receta-insumo" style="flex: 2; min-width: 0;">${insumosOptions}</select>
-      <input type="number" class="receta-cantidad" placeholder="Cant." style="flex: 1; min-width: 0;" min="0.1" step="0.1">
+      <input type="number" step="any" class="receta-cantidad" placeholder="Cant." style="flex: 1; min-width: 0;" min="0.1" step="0.1">
       <button type="button" class="action-btn" onclick="this.parentElement.remove()" style="background:var(--danger); border:none; padding:5px 10px;"><i data-lucide="trash-2"></i></button>
     `;
     recetaItems.appendChild(row);
@@ -1602,11 +1602,11 @@ window.showEditProductoModal = async function(prod_id) {
     </div>
     <div class="form-group">
       <label>Precio de Venta (COP)</label>
-      <input type="number" id="edit-prod-precio" value="${prod.precio_venta}">
+      <input type="number" step="any" id="edit-prod-precio" value="${prod.precio_venta}">
     </div>
     <div class="form-group" style="margin-top: 10px;">
       <label>Costo de Producción (Manual)</label>
-      <input type="number" id="edit-prod-costo" value="${prod.costo_produccion}">
+      <input type="number" step="any" id="edit-prod-costo" value="${prod.costo_produccion}">
       <small style="color:var(--text-muted); font-size:12px;">Para calcular desde la receta, déjalo en 0.</small>
     </div>
     <div class="form-group" style="margin-top: 10px;">
@@ -1653,7 +1653,7 @@ window.showEditProductoModal = async function(prod_id) {
         <select class="receta-insumo" style="flex: 2; min-width: 0;">
           ${STATE.insumos.map(i => `<option value="${i.id}" ${i.id == item.insumo_id ? 'selected' : ''}>${i.nombre} (${i.unidad_medida})</option>`).join('')}
         </select>
-        <input type="number" class="receta-cantidad" value="${item.cantidad}" placeholder="Cant." style="flex: 1; min-width: 0;" min="0.1" step="0.1">
+        <input type="number" step="any" class="receta-cantidad" value="${item.cantidad}" placeholder="Cant." style="flex: 1; min-width: 0;" min="0.1" step="0.1">
         <button type="button" class="action-btn" onclick="this.parentElement.remove()" style="background:var(--danger); border:none; padding:5px 10px;"><i data-lucide="trash-2"></i></button>
       `;
       recetaItems.appendChild(row);
@@ -1674,7 +1674,7 @@ window.showEditProductoModal = async function(prod_id) {
     row.className = 'receta-row';
     row.innerHTML = `
       <select class="receta-insumo" style="flex: 2; min-width: 0;">${insumosOptions}</select>
-      <input type="number" class="receta-cantidad" placeholder="Cant." style="flex: 1; min-width: 0;" min="0.1" step="0.1">
+      <input type="number" step="any" class="receta-cantidad" placeholder="Cant." style="flex: 1; min-width: 0;" min="0.1" step="0.1">
       <button type="button" class="action-btn" onclick="this.parentElement.remove()" style="background:var(--danger); border:none; padding:5px 10px;"><i data-lucide="trash-2"></i></button>
     `;
     recetaItems.appendChild(row);
@@ -1766,8 +1766,8 @@ function renderClientesTable(clientes) {
     }
 
     const saldoDisplay = saldo < 0 
-      ? `<span style="color:var(--success)">$${Math.abs(saldo).toLocaleString()} (A favor)</span>` 
-      : `$${saldo.toLocaleString()}`;
+      ? `<span style="color:var(--success)">$${Math.abs(saldo).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} (A favor)</span>` 
+      : `$${saldo.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
 
     return `
       <tr>
@@ -1775,7 +1775,7 @@ function renderClientesTable(clientes) {
         <td><strong>${c.nombre}</strong> ${c.permite_saldo_favor ? '<i data-lucide="award" style="width:12px; height:12px; color:var(--cyan-neon);" title="Permite Saldo a Favor"></i>' : ''}</td>
         <td>${c.identificacion}</td>
         <td>${c.telefono || '-'}</td>
-        <td>$${limite.toLocaleString()}</td>
+        <td>$${limite.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
         <td class="font-outfit">${saldoDisplay}</td>
         <td><span class="status-pill ${statusClass}">${statusText}</span></td>
         <td>
@@ -1804,7 +1804,7 @@ window.loadClientDetail = async function(clientId) {
     const limite = parseFloat(data.cliente.limite_credito);
     
     const saldoLabel = saldo < 0 ? 'Saldo a Favor' : 'Saldo Deudor';
-    const saldoDisplay = saldo < 0 ? `+ $${Math.abs(saldo).toLocaleString()}` : `$${saldo.toLocaleString()}`;
+    const saldoDisplay = saldo < 0 ? `+ $${Math.abs(saldo).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}` : `$${saldo.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     const disponible = saldo < 0 ? limite + Math.abs(saldo) : Math.max(0, limite - saldo);
 
     document.getElementById('client-stats').innerHTML = `
@@ -1814,11 +1814,11 @@ window.loadClientDetail = async function(clientId) {
       </div>
       <div class="stat-card">
         <span class="stat-label">Límite Crédito</span>
-        <span class="stat-value">$${limite.toLocaleString()}</span>
+        <span class="stat-value">$${limite.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span>
       </div>
       <div class="stat-card">
         <span class="stat-label">Disponible</span>
-        <span class="stat-value" style="color: var(--cyan-neon)">$${disponible.toLocaleString()}</span>
+        <span class="stat-value" style="color: var(--cyan-neon)">$${disponible.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span>
       </div>
       <div class="stat-card">
         <span class="stat-label">Compras Registradas</span>
@@ -1848,7 +1848,7 @@ window.loadClientDetail = async function(clientId) {
         <tr>
           <td>${new Date(m.fecha).toLocaleString('es-ES')}</td>
           <td><span class="status-pill ${m.tipo === 'Abono' ? 'status-ok' : 'status-warn'}">${m.tipo}</span></td>
-          <td class="font-outfit">${m.tipo === 'Abono' ? '-' : ''}$${m.monto.toLocaleString()}</td>
+          <td class="font-outfit">${m.tipo === 'Abono' ? '-' : ''}$${m.monto.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
           <td>${m.notas} ${m.tipo === 'Abono' ? `<button class="action-btn btn-danger" style="padding: 2px 5px; font-size: 12px; margin-left: 10px;" onclick="eliminarAbono(${m.id})">Borrar</button>` : ''}</td>
         </tr>
       `).join('');
@@ -1878,20 +1878,20 @@ async function loadCierreDiario() {
   try {
     const data = await fetch(`/api/reportes/cierre-diario?fecha=${fecha}`).then(r => r.json());
     
-    document.getElementById('kpi-ventas').textContent = `${data.resumen.ingresos_totales_cop.toLocaleString()}`;
+    document.getElementById('kpi-ventas').textContent = `${data.resumen.ingresos_totales_cop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     document.getElementById('kpi-transacciones').textContent = `${data.resumen.total_transacciones} transacciones`;
     if (document.getElementById('kpi-cobranza')) {
-      document.getElementById('kpi-cobranza').textContent = `${data.resumen.cobranza_deudas_cop.toLocaleString()}`;
-      document.getElementById('kpi-flujo-caja').textContent = `Flujo Total: ${data.resumen.flujo_caja_ingresos.toLocaleString()}`;
+      document.getElementById('kpi-cobranza').textContent = `${data.resumen.cobranza_deudas_cop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      document.getElementById('kpi-flujo-caja').textContent = `Flujo Total: ${data.resumen.flujo_caja_ingresos.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     }
     
-    document.getElementById('kpi-costo').textContent = `$${data.resumen.costo_produccion.toLocaleString()}`;
-    document.getElementById('kpi-costo-cortesias').textContent = `+ Cortesías: $${data.resumen.costo_cortesias.toLocaleString()}`;
+    document.getElementById('kpi-costo').textContent = `$${data.resumen.costo_produccion.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+    document.getElementById('kpi-costo-cortesias').textContent = `+ Cortesías: $${data.resumen.costo_cortesias.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     
-    document.getElementById('kpi-gastos').textContent = `$${data.resumen.gastos_operacionales.toLocaleString()}`;
-    document.getElementById('kpi-diferencial').textContent = `Dif. Cambiario: ${data.resumen.diferencial_cambiario > 0 ? '+' : ''}$${data.resumen.diferencial_cambiario.toLocaleString()}`;
+    document.getElementById('kpi-gastos').textContent = `$${data.resumen.gastos_operacionales.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+    document.getElementById('kpi-diferencial').textContent = `Dif. Cambiario: ${data.resumen.diferencial_cambiario > 0 ? '+' : ''}$${data.resumen.diferencial_cambiario.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     
-    document.getElementById('kpi-utilidad').textContent = `$${data.resumen.utilidad_neta.toLocaleString()}`;
+    document.getElementById('kpi-utilidad').textContent = `$${data.resumen.utilidad_neta.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     
     const isProfit = data.resumen.utilidad_neta >= 0;
     document.getElementById('kpi-utilidad').style.color = isProfit ? 'var(--success)' : 'var(--danger)';
@@ -1907,8 +1907,8 @@ async function loadCierreDiario() {
           <td><strong>${p.metodo_pago}</strong></td>
           <td>${p.moneda}</td>
           <td>${p.cantidad_pagos}</td>
-          <td>${parseFloat(p.total_original).toLocaleString()}</td>
-          <td class="font-outfit">$${parseFloat(p.total_cop).toLocaleString()}</td>
+          <td>${parseFloat(p.total_original).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+          <td class="font-outfit">$${parseFloat(p.total_cop).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
         </tr>
       `).join('');
     }
@@ -1931,15 +1931,15 @@ async function loadCierreDiario() {
             <td>${hora}</td>
             <td><span style="${catClass}; font-weight:600;">${catLabel}</span></td>
             <td>${g.descripcion || '—'}</td>
-            <td>${g.moneda} ${parseFloat(g.monto).toLocaleString()}</td>
+            <td>${g.moneda} ${parseFloat(g.monto).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
             <td>${g.metodo_pago || '—'}</td>
-            <td class="font-outfit" style="color:var(--danger)">-$${parseFloat(g.monto_cop).toLocaleString()}</td>
+            <td class="font-outfit" style="color:var(--danger)">-$${parseFloat(g.monto_cop).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
           </tr>
         `;
       }).join('');
       
       // Update KPI sub-text to show count
-      document.getElementById('kpi-diferencial').textContent = `${data.desglose_gastos.length} gasto(s) | Dif. Cambiario: ${data.resumen.diferencial_cambiario > 0 ? '+' : ''}$${data.resumen.diferencial_cambiario.toLocaleString()}`;
+      document.getElementById('kpi-diferencial').textContent = `${data.desglose_gastos.length} gasto(s) | Dif. Cambiario: ${data.resumen.diferencial_cambiario > 0 ? '+' : ''}$${data.resumen.diferencial_cambiario.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     } else {
       tbodyGastos.innerHTML = '<tr><td colspan="6" class="loading-cell">Sin gastos registrados para esta fecha.</td></tr>';
       gastosSection.style.display = 'none';
@@ -1975,9 +1975,9 @@ async function loadCierreDiario() {
             <td><strong>${p.nombre}</strong></td>
             <td>${p.categoria}</td>
             <td>${parseFloat(p.unidades_vendidas)}</td>
-            <td class="font-outfit">$${ingreso.toLocaleString()}</td>
-            <td>$${costo.toLocaleString()}</td>
-            <td class="text-success font-outfit">$${(ingreso - costo).toLocaleString()}</td>
+            <td class="font-outfit">$${ingreso.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+            <td>$${costo.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+            <td class="text-success font-outfit">$${(ingreso - costo).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
           </tr>
         `;
       }).join('');
@@ -2013,9 +2013,9 @@ async function loadCierreSemanal() {
     const utilidad = data.resumen.utilidad_neta || 0;
     const margen = ingresos > 0 ? Math.round((utilidad / ingresos) * 100) : 0;
 
-    document.getElementById('kpi-ventas-sem').textContent = `$${ingresos.toLocaleString()}`;
+    document.getElementById('kpi-ventas-sem').textContent = `$${ingresos.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     document.getElementById('kpi-trans-sem').textContent = `${data.resumen.total_transacciones} transacciones`;
-    document.getElementById('kpi-utilidad-sem').textContent = `$${utilidad.toLocaleString()}`;
+    document.getElementById('kpi-utilidad-sem').textContent = `$${utilidad.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     document.getElementById('kpi-margen-sem').textContent = `Margen: ${margen}%`;
     document.getElementById('kpi-utilidad-sem').style.color = utilidad >= 0 ? 'var(--success)' : 'var(--danger)';
 
@@ -2053,8 +2053,8 @@ async function loadCierreSemanal() {
           <td><strong>${p.nombre}</strong></td>
           <td>${p.categoria}</td>
           <td>${parseFloat(p.unidades_vendidas)}</td>
-          <td class="font-outfit">$${parseFloat(p.ingreso_total).toLocaleString()}</td>
-          <td>$${parseFloat(p.costo_total).toLocaleString()}</td>
+          <td class="font-outfit">$${parseFloat(p.ingreso_total).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+          <td>$${parseFloat(p.costo_total).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
         </tr>
       `).join('');
     }
@@ -2089,7 +2089,7 @@ async function loadHistorial() {
         <tr ${rowClass}>
           <td>#${v.id}</td>
           <td>${new Date(v.fecha).toLocaleString('es-ES')}</td>
-          <td class="font-outfit">$${parseFloat(v.total).toLocaleString()}</td>
+          <td class="font-outfit">$${parseFloat(v.total).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
           <td>${prods}</td>
           <td>${metodos}</td>
           <td>${v.notas || '-'}</td>
@@ -2180,12 +2180,12 @@ function showAddInsumoModal() {
     <div class="form-group"><label>Nombre</label><input type="text" id="inp-ins-nombre" placeholder="Ej: Proteína Whey Vainilla"></div>
     <div class="form-group"><label>Unidad de Medida</label><input type="text" id="inp-ins-unidad" placeholder="Ej: scoop, gr, ml, unidad"></div>
     <div class="rates-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-      <div class="form-group"><label>Stock Inicial</label><input type="number" id="inp-ins-stock" placeholder="0" min="0"></div>
-      <div class="form-group"><label>Stock Mínimo</label><input type="number" id="inp-ins-minimo" placeholder="0" min="0"></div>
+      <div class="form-group"><label>Stock Inicial</label><input type="number" step="any" id="inp-ins-stock" placeholder="0" min="0"></div>
+      <div class="form-group"><label>Stock Mínimo</label><input type="number" step="any" id="inp-ins-minimo" placeholder="0" min="0"></div>
     </div>
     <div class="rates-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-      <div class="form-group"><label>Stock Fijo (Meta)</label><input type="number" id="inp-ins-fijo" placeholder="0" min="0"></div>
-      <div class="form-group"><label>Costo Unitario (COP)</label><input type="number" id="inp-ins-costo" placeholder="0" min="0"></div>
+      <div class="form-group"><label>Stock Fijo (Meta)</label><input type="number" step="any" id="inp-ins-fijo" placeholder="0" min="0"></div>
+      <div class="form-group"><label>Costo Unitario (COP)</label><input type="number" step="any" id="inp-ins-costo" placeholder="0" min="0"></div>
     </div>
     <div class="form-group" style="margin-top: 10px;">
       <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
@@ -2210,11 +2210,11 @@ function showAddInsumoModal() {
       <div id="cantidades-base-add" style="display:none; grid-template-columns: 1fr 1fr; gap:10px;">
         <div class="form-group">
           <label>Cantidad Sola</label>
-          <input type="number" id="inp-ins-cant-sola" placeholder="Ej: 1 o 150" min="0" step="any">
+          <input type="number" step="any" id="inp-ins-cant-sola" placeholder="Ej: 1 o 150" min="0" step="any">
         </div>
         <div class="form-group">
           <label>Cantidad Combinada</label>
-          <input type="number" id="inp-ins-cant-comb" placeholder="Ej: 0.5 o 75" min="0" step="any">
+          <input type="number" step="any" id="inp-ins-cant-comb" placeholder="Ej: 0.5 o 75" min="0" step="any">
         </div>
       </div>
     </div>
@@ -2253,7 +2253,7 @@ function showAddMermaModal() {
   const insOptions = STATE.insumos.map(i => `<option value="${i.id}">${i.nombre} (${i.stock_actual} ${i.unidad_medida})</option>`).join('');
   openGenericModal('Registrar Merma', `
     <div class="form-group"><label>Insumo</label><select id="inp-merma-insumo">${insOptions}</select></div>
-    <div class="form-group"><label>Cantidad Perdida</label><input type="number" id="inp-merma-cantidad" placeholder="0" min="0.01" step="0.01"></div>
+    <div class="form-group"><label>Cantidad Perdida</label><input type="number" step="any" id="inp-merma-cantidad" placeholder="0" min="0.01" step="0.01"></div>
     <div class="form-group"><label>Motivo</label><input type="text" id="inp-merma-motivo" placeholder="Ej: Vencimiento, derrame, rotura"></div>
   `, async () => {
     const payload = {
@@ -2280,8 +2280,8 @@ function showAddMermaModal() {
 
 window.showRestockModal = function(insumoId, nombre) {
   openGenericModal(`Reabastecer: ${nombre}`, `
-    <div class="form-group"><label>Cantidad a Agregar</label><input type="number" id="inp-restock-qty" placeholder="0" min="0.01" step="0.01"></div>
-    <div class="form-group"><label>Nuevo Costo Unitario (opcional)</label><input type="number" id="inp-restock-costo" placeholder="Dejar vacío para mantener el actual" min="0"></div>
+    <div class="form-group"><label>Cantidad a Agregar</label><input type="number" step="any" id="inp-restock-qty" placeholder="0" min="0.01" step="0.01"></div>
+    <div class="form-group"><label>Nuevo Costo Unitario (opcional)</label><input type="number" step="any" id="inp-restock-costo" placeholder="Dejar vacío para mantener el actual" min="0"></div>
     <div class="form-group" style="margin-top: 15px; border-top: 1px solid var(--border-color); padding-top: 15px;">
       <label>Método de Pago (Opcional - Para Flujo de Caja)</label>
       <select id="inp-restock-metodo">
@@ -2296,7 +2296,7 @@ window.showRestockModal = function(insumoId, nombre) {
     </div>
     <div class="rates-grid" id="restock-currency-group" style="display:none; grid-template-columns: 1fr 1fr; gap:10px;">
       <div class="form-group"><label>Moneda</label><select id="inp-restock-moneda"><option value="COP">COP</option><option value="USD">USD</option><option value="VES">VES</option></select></div>
-      <div class="form-group"><label>Tasa de Cambio</label><input type="number" id="inp-restock-tasa" value="1" step="0.1" min="0.1"></div>
+      <div class="form-group"><label>Tasa de Cambio</label><input type="number" step="any" id="inp-restock-tasa" value="1" step="0.1" min="0.1"></div>
     </div>
   `, async () => {
     const payload = {
@@ -2392,11 +2392,11 @@ window.showTransferenciaModal = function() {
     <div class="rates-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
       <div class="form-group">
         <label>Monto a transferir (Moneda Origen)</label>
-        <input type="number" id="trans-monto" min="0" step="0.01">
+        <input type="number" step="any" id="trans-monto" min="0" step="0.01">
       </div>
       <div class="form-group">
         <label>Tasa de Cambio Aplicada</label>
-        <input type="number" id="trans-tasa" value="1" min="0" step="0.01">
+        <input type="number" step="any" id="trans-tasa" value="1" min="0" step="0.01">
       </div>
     </div>
     <div class="form-group">
@@ -2514,11 +2514,11 @@ window.showAddExtraModal = function(index) {
     <div class="rates-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
       <div class="form-group">
         <label>Cantidad (Ej: 1 scoop, 0.5 lt)</label>
-        <input type="number" id="extra-cantidad" value="1" min="0.01" step="0.01">
+        <input type="number" step="any" id="extra-cantidad" value="1" min="0.01" step="0.01">
       </div>
       <div class="form-group">
         <label>Precio Adicional (a cobrar) COP</label>
-        <input type="number" id="extra-precio" value="0" min="0" step="100">
+        <input type="number" step="any" id="extra-precio" value="0" min="0" step="100">
       </div>
     </div>
   `, async () => {
@@ -2565,7 +2565,7 @@ function showAddClienteModal() {
     <div class="form-group"><label>Nombre Completo</label><input type="text" id="inp-cli-nombre" placeholder="Ej: Juan Pérez"></div>
     <div class="form-group"><label>Identificación</label><input type="text" id="inp-cli-id" placeholder="Ej: V-12345678"></div>
     <div class="form-group"><label>Teléfono</label><input type="text" id="inp-cli-tel" placeholder="Ej: +57 300 123 4567"></div>
-    <div class="form-group"><label>Límite de Crédito (COP)</label><input type="number" id="inp-cli-limite" placeholder="0" min="0"></div>
+    <div class="form-group"><label>Límite de Crédito (COP)</label><input type="number" step="any" id="inp-cli-limite" placeholder="0" min="0"></div>
     ${adminCheckbox}
   `, async () => {
     const payload = {
@@ -2613,7 +2613,7 @@ window.showEditClienteModal = function() {
     <div class="form-group"><label>Nombre Completo</label><input type="text" id="edit-cli-nombre" value="${client.nombre}"></div>
     <div class="form-group"><label>Identificación</label><input type="text" id="edit-cli-id" value="${client.identificacion}"></div>
     <div class="form-group"><label>Teléfono</label><input type="text" id="edit-cli-tel" value="${client.telefono || ''}"></div>
-    <div class="form-group"><label>Límite de Crédito (COP)</label><input type="number" id="edit-cli-limite" value="${parseFloat(client.limite_credito)}" min="0"></div>
+    <div class="form-group"><label>Límite de Crédito (COP)</label><input type="number" step="any" id="edit-cli-limite" value="${parseFloat(client.limite_credito)}" min="0"></div>
     ${adminCheckbox}
   `, async () => {
     const payload = {
@@ -2647,7 +2647,7 @@ function showAbonoModal(clientId, clientName, saldoActual) {
   openGenericModal(`Registrar Abono — ${clientName}`, `
     <div class="alert-item alert-warning" style="margin-bottom:8px;">
       <i data-lucide="info"></i>
-      <span>Saldo deudor actual: <strong>$${saldoActual.toLocaleString()} COP</strong></span>
+      <span>Saldo deudor actual: <strong>$${saldoActual.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP</strong></span>
     </div>
     <div class="form-group"><label>Método de Pago</label>
       <select id="inp-abono-metodo">
@@ -2659,7 +2659,7 @@ function showAbonoModal(clientId, clientName, saldoActual) {
         <option value="Binance">Binance</option>
       </select>
     </div>
-    <div class="form-group"><label>Monto a Abonar</label><input type="number" id="inp-abono-monto" placeholder="0" min="0.01" step="0.01"></div>
+    <div class="form-group"><label>Monto a Abonar</label><input type="number" step="any" id="inp-abono-monto" placeholder="0" min="0.01" step="0.01"></div>
     <div class="form-group"><label>Referencia (opcional)</label><input type="text" id="inp-abono-ref" placeholder="Ref. transacción"></div>
     <div class="form-group"><label>Notas</label><input type="text" id="inp-abono-notas" placeholder="Ej: Abono parcial"></div>
   `, async () => {
@@ -2750,9 +2750,9 @@ window.showRegistrarDeudaModal = function(clientId, clientName, saldoActual, lim
   openGenericModal(`Registrar Deuda — ${clientName}`, `
     <div class="alert-item alert-warning" style="margin-bottom:8px;">
       <i data-lucide="info"></i>
-      <span>Saldo deudor actual: <strong>$${saldoActual.toLocaleString()} COP</strong> | Límite: <strong>$${limiteCredito.toLocaleString()}</strong> | Disponible: <strong>$${disponible.toLocaleString()}</strong></span>
+      <span>Saldo deudor actual: <strong>$${saldoActual.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP</strong> | Límite: <strong>$${limiteCredito.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</strong> | Disponible: <strong>$${disponible.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</strong></span>
     </div>
-    <div class="form-group"><label>Monto de la Deuda (COP)</label><input type="number" id="inp-deuda-monto" placeholder="0" min="0.01" step="0.01"></div>
+    <div class="form-group"><label>Monto de la Deuda (COP)</label><input type="number" step="any" id="inp-deuda-monto" placeholder="0" min="0.01" step="0.01"></div>
     <div class="form-group"><label>Notas / Concepto</label><input type="text" id="inp-deuda-notas" placeholder="Ej: Consumo pendiente, préstamo, etc."></div>
   `, async () => {
     const monto = parseFloat(document.getElementById('inp-deuda-monto').value);
@@ -2766,7 +2766,7 @@ window.showRegistrarDeudaModal = function(clientId, clientName, saldoActual, lim
       });
       const data = await res.json();
       if (res.status === 201) {
-        showToast(data.mensaje + ` Nuevo saldo: $${data.nuevo_saldo.toLocaleString()}`, 'success');
+        showToast(data.mensaje + ` Nuevo saldo: $${data.nuevo_saldo.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`, 'success');
         closeGenericModal();
         loadClientesData();
         if (STATE.selectedClientId === clientId) loadClientDetail(clientId);
@@ -2931,13 +2931,13 @@ async function loadCajaData() {
               <h3 style="margin:0; color:var(--success);">🇨🇴 COP (Pesos)</h3>
               <i data-lucide="coins" style="color:var(--success)"></i>
             </div>
-            <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px;"><span>Base Inicial (Efvo):</span> <span style="color:var(--success)">+$${fondoBase.toLocaleString()}</span></div>
-            <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px;"><span>Ventas Efectivo:</span> <span style="color:var(--success)">+${copEfectivoVenta.toLocaleString()}</span></div>
-            ${copEfectivoAbono > 0 ? `<div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px;"><span>Deudas Cobradas (Efvo):</span> <span style="color:var(--success)">+${copEfectivoAbono.toLocaleString()}</span></div>` : ''}
-            <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px; color:var(--danger);"><span>Gastos (Efvo):</span> <span>-${gastosCop.toLocaleString()}</span></div>
+            <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px;"><span>Base Inicial (Efvo):</span> <span style="color:var(--success)">+$${fondoBase.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>
+            <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px;"><span>Ventas Efectivo:</span> <span style="color:var(--success)">+${copEfectivoVenta.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>
+            ${copEfectivoAbono > 0 ? `<div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px;"><span>Deudas Cobradas (Efvo):</span> <span style="color:var(--success)">+${copEfectivoAbono.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>` : ''}
+            <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px; color:var(--danger);"><span>Gastos (Efvo):</span> <span>-${gastosCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>
             <hr style="border-color:rgba(255,255,255,0.1); margin: 10px 0;">
-            <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:18px; color:var(--text-bright);"><span>Físico a entregar:</span> <span>$${copCajaNeto.toLocaleString()}</span></div>
-            <div style="display:flex; justify-content:space-between; font-size:12px; margin-top:10px; color:var(--text-dim);"><span>Bancos/Nequi (Digital):</span> <span>$${copBancos.toLocaleString()}</span></div>
+            <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:18px; color:var(--text-bright);"><span>Físico a entregar:</span> <span>$${copCajaNeto.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>
+            <div style="display:flex; justify-content:space-between; font-size:12px; margin-top:10px; color:var(--text-dim);"><span>Bancos/Nequi (Digital):</span> <span>$${copBancos.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>
           </div>
 
           <!-- Tarjeta USD -->
@@ -2946,14 +2946,14 @@ async function loadCajaData() {
               <h3 style="margin:0; color:#32c8ff;">🇺🇸 USD (Dólares)</h3>
               <i data-lucide="dollar-sign" style="color:#32c8ff"></i>
             </div>
-            <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px;"><span>Base Inicial (Efvo):</span> <span style="color:#32c8ff">+$${fondoBaseUsd.toLocaleString()}</span></div>
-            <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px;"><span>Ventas Efectivo:</span> <span style="color:#32c8ff">+${usdEfectivoVenta.toLocaleString()}</span></div>
-            ${usdEfectivoAbono > 0 ? `<div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px;"><span>Deudas Cobradas (Efvo):</span> <span style="color:#32c8ff">+${usdEfectivoAbono.toLocaleString()}</span></div>` : ''}
+            <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px;"><span>Base Inicial (Efvo):</span> <span style="color:#32c8ff">+$${fondoBaseUsd.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>
+            <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px;"><span>Ventas Efectivo:</span> <span style="color:#32c8ff">+${usdEfectivoVenta.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>
+            ${usdEfectivoAbono > 0 ? `<div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px;"><span>Deudas Cobradas (Efvo):</span> <span style="color:#32c8ff">+${usdEfectivoAbono.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>` : ''}
             <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px; color:var(--text-dim);"><span>(No restan gastos)</span></div>
             <hr style="border-color:rgba(255,255,255,0.1); margin: 10px 0;">
-            <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:18px; color:var(--text-bright);"><span>Físico a entregar:</span> <span>${usdCajaNeto.toLocaleString()}</span></div>
-            <div style="display:flex; justify-content:space-between; font-size:12px; margin-top:10px; color:var(--text-dim);"><span>Zelle (Digital):</span> <span>${usdZelleTotal.toLocaleString()}</span></div>
-            <div style="display:flex; justify-content:space-between; font-size:12px; margin-top:5px; color:var(--text-dim);"><span>Binance (Digital):</span> <span>${usdBinanceTotal.toLocaleString()}</span></div>
+            <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:18px; color:var(--text-bright);"><span>Físico a entregar:</span> <span>${usdCajaNeto.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>
+            <div style="display:flex; justify-content:space-between; font-size:12px; margin-top:10px; color:var(--text-dim);"><span>Zelle (Digital):</span> <span>${usdZelleTotal.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>
+            <div style="display:flex; justify-content:space-between; font-size:12px; margin-top:5px; color:var(--text-dim);"><span>Binance (Digital):</span> <span>${usdBinanceTotal.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>
           </div>
 
           <!-- Tarjeta VES -->
@@ -2962,11 +2962,11 @@ async function loadCajaData() {
               <h3 style="margin:0; color:#ff9632;">🇻🇪 VES (Bolívares)</h3>
               <i data-lucide="smartphone" style="color:#ff9632"></i>
             </div>
-            <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px;"><span>Ventas Pago Móvil:</span> <span style="color:#ff9632">+Bs.${vesVenta.toLocaleString()}</span></div>
-            ${vesAbono > 0 ? `<div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px;"><span>Deudas Cobradas:</span> <span style="color:#ff9632">+Bs.${vesAbono.toLocaleString()}</span></div>` : ''}
+            <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px;"><span>Ventas Pago Móvil:</span> <span style="color:#ff9632">+Bs.${vesVenta.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>
+            ${vesAbono > 0 ? `<div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px;"><span>Deudas Cobradas:</span> <span style="color:#ff9632">+Bs.${vesAbono.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>` : ''}
             <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px; color:var(--text-dim);"><span>(100% Digital)</span></div>
             <hr style="border-color:rgba(255,255,255,0.1); margin: 10px 0;">
-            <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:18px; color:var(--text-bright);"><span>Total Pago Móvil:</span> <span>Bs.${vesTotal.toLocaleString()}</span></div>
+            <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:18px; color:var(--text-bright);"><span>Total Pago Móvil:</span> <span>Bs.${vesTotal.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>
           </div>
 
         </div>
@@ -3051,11 +3051,11 @@ async function cerrarTurnoActual() {
     totalEsperado = fondoBaseCop + ventasCop + abonosCop - gastosCop;
 
     // Actualizar UI - Valores Teóricos
-    document.getElementById('cc-fondo-inicial').textContent = `$${fondoBaseCop.toLocaleString()} COP`;
-    document.getElementById('cc-total-ventas').textContent = `$${ventasCop.toLocaleString()} COP`;
-    document.getElementById('cc-total-abonos').textContent = `$${abonosCop.toLocaleString()} COP`;
-    document.getElementById('cc-total-gastos').textContent = `-$${gastosCop.toLocaleString()} COP`;
-    document.getElementById('cc-total-esperado').textContent = `$${totalEsperado.toLocaleString()}`;
+    document.getElementById('cc-fondo-inicial').textContent = `$${fondoBaseCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
+    document.getElementById('cc-total-ventas').textContent = `$${ventasCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
+    document.getElementById('cc-total-abonos').textContent = `$${abonosCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
+    document.getElementById('cc-total-gastos').textContent = `-$${gastosCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
+    document.getElementById('cc-total-esperado').textContent = `$${totalEsperado.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
 
   } catch (err) {
     console.error('Error al cargar estado para cierre', err);
@@ -3094,7 +3094,7 @@ async function cerrarTurnoActual() {
     const diferencia = declaradoCop - totalEsperado;
 
     // Actualizar UI
-    diffValue.textContent = `$${Math.abs(diferencia).toLocaleString()} COP`;
+    diffValue.textContent = `$${Math.abs(diferencia).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
     
     diffBox.className = 'cierre-diff-box';
     if (Math.abs(diferencia) < 100) { // Margen de tolerancia pequeño (centavos/redondeo)
@@ -3104,11 +3104,11 @@ async function cerrarTurnoActual() {
     } else if (diferencia < 0) {
       diffBox.classList.add('diff-missing');
       diffStatus.textContent = 'FALTANTE EN CAJA';
-      diffValue.textContent = `-$${Math.abs(diferencia).toLocaleString()} COP`;
+      diffValue.textContent = `-$${Math.abs(diferencia).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
     } else {
       diffBox.classList.add('diff-extra');
       diffStatus.textContent = 'SOBRANTE EN CAJA';
-      diffValue.textContent = `+$${Math.abs(diferencia).toLocaleString()} COP`;
+      diffValue.textContent = `+$${Math.abs(diferencia).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
     }
   };
 
@@ -3171,10 +3171,10 @@ async function cerrarTurnoActual() {
       viewArqueo.style.display = 'none';
       viewSuccess.style.display = 'block';
       
-      document.getElementById('ticket-ventas').textContent = `$${d.resumen.total_ventas.toLocaleString()}`;
-      document.getElementById('ticket-gastos').textContent = `$${d.resumen.total_gastos.toLocaleString()}`;
-      document.getElementById('ticket-esperado').textContent = `$${d.resumen.saldo_teorico.toLocaleString()}`;
-      document.getElementById('ticket-declarado').textContent = `$${d.resumen.monto_declarado.toLocaleString()}`;
+      document.getElementById('ticket-ventas').textContent = `$${d.resumen.total_ventas.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      document.getElementById('ticket-gastos').textContent = `$${d.resumen.total_gastos.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      document.getElementById('ticket-esperado').textContent = `$${d.resumen.saldo_teorico.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      document.getElementById('ticket-declarado').textContent = `$${d.resumen.monto_declarado.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       
       const diff = d.resumen.diferencia;
       const diffEl = document.getElementById('ticket-diferencia');
@@ -3184,10 +3184,10 @@ async function cerrarTurnoActual() {
         diffEl.textContent = `$0`;
         diffRow.style.color = 'var(--success)';
       } else if (diff < 0) {
-        diffEl.textContent = `-$${Math.abs(diff).toLocaleString()}`;
+        diffEl.textContent = `-$${Math.abs(diff).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
         diffRow.style.color = 'var(--danger)';
       } else {
-        diffEl.textContent = `+$${Math.abs(diff).toLocaleString()}`;
+        diffEl.textContent = `+$${Math.abs(diff).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
         diffRow.style.color = 'var(--warning)';
       }
       
@@ -3223,12 +3223,12 @@ async function loadGastos() {
     }
     tbody.innerHTML = data.gastos.map(g => `
       <tr>
-        <td>${new Date(g.fecha).toLocaleString()}</td>
+        <td>${new Date(g.fecha).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
         <td><span class="category-tag">${g.categoria}</span></td>
         <td>${g.descripcion}</td>
-        <td>${g.moneda} ${parseFloat(g.monto).toLocaleString()}</td>
+        <td>${g.moneda} ${parseFloat(g.monto).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
         <td>${parseFloat(g.tasa_cambio)}</td>
-        <td class="font-outfit" style="color:var(--danger)">-$${parseFloat(g.monto_cop).toLocaleString()}</td>
+        <td class="font-outfit" style="color:var(--danger)">-$${parseFloat(g.monto_cop).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
       </tr>
     `).join('');
   } catch (err) {
@@ -3261,11 +3261,11 @@ function showAddGastoModal() {
       </div>
       <div class="form-group">
         <label>Monto</label>
-        <input type="number" id="gasto-monto" value="0" min="0">
+        <input type="number" step="any" id="gasto-monto" value="0" min="0">
       </div>
       <div class="form-group">
         <label>Tasa Aplicada</label>
-        <input type="number" id="gasto-tasa" value="1" min="0.1" step="0.1">
+        <input type="number" step="any" id="gasto-tasa" value="1" min="0.1" step="0.1">
       </div>
     </div>
     <div class="form-group" style="margin-top:10px;">
@@ -3331,19 +3331,19 @@ function showEditInsumoModal(id) {
     <div class="rates-grid" style="display:grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap:10px;">
       <div class="form-group">
         <label>Stock Actual</label>
-        <input type="number" id="edit-ins-actual" value="${ins.stock_actual}" min="0" step="any">
+        <input type="number" step="any" id="edit-ins-actual" value="${ins.stock_actual}" min="0" step="any">
       </div>
       <div class="form-group">
         <label>Stock Mínimo</label>
-        <input type="number" id="edit-ins-min" value="${ins.stock_minimo}" min="0" step="any">
+        <input type="number" step="any" id="edit-ins-min" value="${ins.stock_minimo}" min="0" step="any">
       </div>
       <div class="form-group">
         <label>Stock Fijo</label>
-        <input type="number" id="edit-ins-fijo" value="${ins.stock_fijo}" min="0" step="any">
+        <input type="number" step="any" id="edit-ins-fijo" value="${ins.stock_fijo}" min="0" step="any">
       </div>
       <div class="form-group">
         <label>Costo Unit.</label>
-        <input type="number" id="edit-ins-costo" value="${ins.costo_unitario}" min="0" step="any">
+        <input type="number" step="any" id="edit-ins-costo" value="${ins.costo_unitario}" min="0" step="any">
       </div>
     </div>
     <div class="form-group" style="margin-top: 10px;">
@@ -3369,11 +3369,11 @@ function showEditInsumoModal(id) {
       <div id="cantidades-base-edit" style="display:${(esBaseLiquida || ins.es_sabor_batido) ? 'grid' : 'none'}; grid-template-columns: 1fr 1fr; gap:10px;">
         <div class="form-group">
           <label>Cantidad Sola</label>
-          <input type="number" id="edit-ins-cant-sola" value="${parseFloat(ins.cantidad_sola) || 0}" min="0" step="any">
+          <input type="number" step="any" id="edit-ins-cant-sola" value="${parseFloat(ins.cantidad_sola) || 0}" min="0" step="any">
         </div>
         <div class="form-group">
           <label>Cantidad Combinada</label>
-          <input type="number" id="edit-ins-cant-comb" value="${parseFloat(ins.cantidad_combinada) || 0}" min="0" step="any">
+          <input type="number" step="any" id="edit-ins-cant-comb" value="${parseFloat(ins.cantidad_combinada) || 0}" min="0" step="any">
         </div>
       </div>
     </div>
