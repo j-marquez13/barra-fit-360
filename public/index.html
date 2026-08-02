@@ -1398,5 +1398,41 @@
   </div>
 
   <script src="app3.js?v=32"></script>
+<!-- Script to automatically replace commas with dots in number inputs -->
+  <script>
+    document.addEventListener('keydown', function(e) {
+      if (e.target.tagName === 'INPUT' && e.target.type === 'number' && e.key === ',') {
+        e.preventDefault();
+        const target = e.target;
+        // Temporarily change type to text to manipulate selection
+        target.type = 'text';
+        const start = target.selectionStart;
+        const end = target.selectionEnd;
+        target.value = target.value.substring(0, start) + '.' + target.value.substring(end);
+        target.selectionStart = target.selectionEnd = start + 1;
+        target.type = 'number';
+        // Dispatch input event so JS frameworks/listeners catch the change
+        target.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    }, true);
+
+    document.addEventListener('paste', function(e) {
+      if (e.target.tagName === 'INPUT' && e.target.type === 'number') {
+        let paste = (e.clipboardData || window.clipboardData).getData('text');
+        if (paste.includes(',')) {
+          e.preventDefault();
+          paste = paste.replace(/,/g, '.');
+          const target = e.target;
+          target.type = 'text';
+          const start = target.selectionStart;
+          const end = target.selectionEnd;
+          target.value = target.value.substring(0, start) + paste + target.value.substring(end);
+          target.selectionStart = target.selectionEnd = start + paste.length;
+          target.type = 'number';
+          target.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      }
+    }, true);
+  </script>
 </body>
 </html>
