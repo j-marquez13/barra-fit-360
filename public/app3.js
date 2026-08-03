@@ -635,6 +635,7 @@ function renderCart() {
         <button class="remove-item-btn" onclick="event.stopPropagation(); removeFromCart(${index})"><i data-lucide="trash-2"></i></button>
       </div>
       ${extrasHtml}
+      ${item.costo_produccion_calculado !== undefined ? `<div style="font-size:0.75rem; color:var(--cyan-neon); margin-left:10px; margin-top:4px; padding: 4px 8px; background: rgba(0,210,255,0.08); border-radius: 4px; display:inline-block;">💰 Costo: $${item.costo_produccion_calculado.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</div>` : ''}
     `;
 
     DOM.cartItemsContainer.appendChild(div);
@@ -752,6 +753,7 @@ function addToCart(productId) {
               <th style="padding: 8px; border-bottom: 1px solid var(--border-color); text-align: center;">Sel.</th>
               <th style="padding: 8px; border-bottom: 1px solid var(--border-color); text-align: left;">Ingrediente</th>
               <th style="padding: 8px; border-bottom: 1px solid var(--border-color); text-align: left;">Tipo</th>
+              <th style="padding: 8px; border-bottom: 1px solid var(--border-color); text-align: right;">Costo</th>
             </tr>
           </thead>
           <tbody>
@@ -760,6 +762,7 @@ function addToCart(productId) {
               const cantSola = parseFloat(ins.cantidad_sola) || 0;
               const cantComb = parseFloat(ins.cantidad_combinada) || 0;
               const esSabor = ins.es_sabor_batido ? 1 : 0;
+              const costoUnit = parseFloat(ins.costo_unitario) || 0;
               let tipoStr = `<span class="badge" style="background:var(--card-bg-light); color:var(--color-text); font-size:0.7rem; padding:2px 6px;">Extra</span>`;
               if (esBase) tipoStr = `<span class="badge" style="background:var(--cyan-neon); color:black; font-size:0.7rem; padding:2px 6px;">Líquido</span>`;
               else if (esSabor) tipoStr = `<span class="badge" style="background:#ff4d4d; color:white; font-size:0.7rem; padding:2px 6px;">Fruta/Sabor</span>`;
@@ -773,7 +776,9 @@ function addToCart(productId) {
                       data-es-sabor="${ins.es_sabor_batido ? 1 : 0}"
                       data-cantidad-sola="${cantSola}"
                       data-cantidad-combinada="${cantComb}"
-                      style="width:18px;height:18px; cursor:pointer;">
+                      data-costo-unitario="${costoUnit}"
+                      style="width:18px;height:18px; cursor:pointer;"
+                      onchange="window._recalcBatidoCosto && window._recalcBatidoCosto()">
                   </td>
                   <td style="padding: 8px;">
                     <label style="cursor:pointer; display:block; width:100%; height:100%;" onclick="this.previousElementSibling ? this.previousElementSibling.click() : this.parentElement.previousElementSibling.querySelector('input').click()">
@@ -782,6 +787,9 @@ function addToCart(productId) {
                   </td>
                   <td style="padding: 8px;">
                     ${tipoStr}
+                  </td>
+                  <td style="padding: 8px; text-align: right; font-size: 0.85rem; color: var(--color-muted);">
+                    $${costoUnit.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                   </td>
                 </tr>
               `;
@@ -797,6 +805,10 @@ function addToCart(productId) {
             ${batidoInsumos.length > 0 ? checkboxesHtml : '<p style="color:var(--color-muted); font-size:0.9rem; padding: 15px;">No hay ingredientes para batidos. Ve a Inventario y edita tus insumos marcando "Disponible como opción para Batidos".</p>'}
           </div>
         </div>
+        <div id="batido-costo-resumen" style="margin-top: 10px; padding: 12px 15px; background: linear-gradient(135deg, rgba(0,210,255,0.08), rgba(88,86,214,0.08)); border: 1px solid var(--border-glass); border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-weight: 600; font-size: 0.9rem; color: var(--color-muted);">💰 Costo de producción estimado:</span>
+          <span id="batido-costo-total" style="font-weight: 700; font-size: 1.1rem; color: var(--cyan-neon);">$0</span>
+        </div>
       `, () => {
         const extras = [];
         const checkedCbs = document.querySelectorAll('.batido-extra-cb:checked');
@@ -804,6 +816,8 @@ function addToCart(productId) {
         const saboresSeleccionados = [...checkedCbs].filter(cb => cb.dataset.esSabor === '1');
         const combinacionLiquidos = basesSeleccionadas.length > 1;
         const combinacionSabores = saboresSeleccionados.length > 1;
+
+        let costoProduccionBatido = 0;
 
         checkedCbs.forEach(cb => {
           const esBase = cb.dataset.esBase === '1';
@@ -817,6 +831,9 @@ function addToCart(productId) {
               : parseFloat(cb.dataset.cantidadSola) || 1;
           }
 
+          const costoUnitario = parseFloat(cb.dataset.costoUnitario) || 0;
+          costoProduccionBatido += costoUnitario * cantidad;
+
           extras.push({
             insumo_id: parseInt(cb.dataset.id),
             nombre: cb.dataset.nombre,
@@ -828,12 +845,37 @@ function addToCart(productId) {
         STATE.cart.push({ 
           producto_id: productId, 
           cantidad: 1, 
-          extras: extras 
+          extras: extras,
+          costo_produccion_calculado: costoProduccionBatido
         });
         
         renderCart();
         closeGenericModal();
+        // Limpiar referencia global
+        window._recalcBatidoCosto = null;
       });
+
+      // Función para recalcular el costo en tiempo real al marcar/desmarcar
+      window._recalcBatidoCosto = function() {
+        const allCbs = document.querySelectorAll('.batido-extra-cb:checked');
+        const bases = [...allCbs].filter(cb => cb.dataset.esBase === '1');
+        const sabores = [...allCbs].filter(cb => cb.dataset.esSabor === '1');
+        const combLiq = bases.length > 1;
+        const combSab = sabores.length > 1;
+        let totalCosto = 0;
+        allCbs.forEach(cb => {
+          const esBase = cb.dataset.esBase === '1';
+          const esSabor = cb.dataset.esSabor === '1';
+          let cant = 1;
+          if (esBase || esSabor) {
+            const isComb = (esBase && combLiq) || (esSabor && combSab);
+            cant = isComb ? (parseFloat(cb.dataset.cantidadCombinada) || 1) : (parseFloat(cb.dataset.cantidadSola) || 1);
+          }
+          totalCosto += (parseFloat(cb.dataset.costoUnitario) || 0) * cant;
+        });
+        const el = document.getElementById('batido-costo-total');
+        if (el) el.textContent = '$' + totalCosto.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+      };
       return;
     }
   }
