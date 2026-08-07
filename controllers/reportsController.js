@@ -29,7 +29,7 @@ export async function cierreDiario(req, res) {
       FROM (
         SELECT pv.metodo_pago, pv.moneda, COUNT(*) as cantidad_pagos, SUM(pv.monto_original) as total_original, SUM(pv.monto_base) as total_cop
         FROM pagos_ventas pv JOIN ventas v ON pv.venta_id = v.id
-        WHERE ${dateFilter} GROUP BY pv.metodo_pago, pv.moneda
+        WHERE ${dateFilter} AND v.tipo_transaccion != 'Anulada' GROUP BY pv.metodo_pago, pv.moneda
         UNION ALL
         SELECT pa.metodo_pago, pa.moneda, COUNT(*) as cantidad_pagos, SUM(pa.monto_original) as total_original, SUM(pa.monto_base) as total_cop
         FROM pagos_abonos pa JOIN abonos_credito a ON pa.abono_id = a.id
@@ -62,7 +62,7 @@ export async function cierreDiario(req, res) {
 
     // 4. Cortesías
     const cortesiasResumen = await db.query(`
-      SELECT COALESCE(SUM(dv.cantidad * p.costo_produccion), 0) as costo_cortesias
+      SELECT COALESCE(SUM(dv.cantidad * COALESCE(dv.costo_unitario, p.costo_produccion)), 0) as costo_cortesias
       FROM detalle_ventas dv
       JOIN ventas v ON dv.venta_id = v.id
       JOIN productos p ON dv.producto_id = p.id
@@ -73,7 +73,7 @@ export async function cierreDiario(req, res) {
     // 5. Productos vendidos (Top) y Costo de Producción (Solo ventas reales)
     const topProductos = await db.query(`
       SELECT p.nombre, p.categoria, SUM(dv.cantidad) as unidades_vendidas,
-             SUM(dv.subtotal) as ingreso_total, SUM(dv.cantidad * p.costo_produccion) as costo_total
+             SUM(dv.subtotal) as ingreso_total, SUM(dv.cantidad * COALESCE(dv.costo_unitario, p.costo_produccion)) as costo_total
       FROM detalle_ventas dv
       JOIN ventas v ON dv.venta_id = v.id JOIN productos p ON dv.producto_id = p.id
       WHERE ${dateFilter} AND v.tipo_transaccion = 'Venta'
@@ -84,7 +84,7 @@ export async function cierreDiario(req, res) {
     const pagosDivisas = await db.query(`
       SELECT pv.moneda, SUM(pv.monto_original) as total_divisas, SUM(pv.monto_base) as total_cop_recibido, MAX(pv.tasa_cambio) as ultima_tasa
       FROM pagos_ventas pv JOIN ventas v ON pv.venta_id = v.id
-      WHERE ${dateFilter} AND pv.moneda != 'COP' GROUP BY pv.moneda
+      WHERE ${dateFilter} AND pv.moneda != 'COP' AND v.tipo_transaccion != 'Anulada' GROUP BY pv.moneda
     `, [fecha]);
 
     let diferencialCambiarioTotal = 0;
@@ -165,7 +165,7 @@ export async function cierreSemanal(req, res) {
     const pagosSemanal = await db.query(`
       SELECT pv.metodo_pago, pv.moneda, COUNT(*) as cantidad, SUM(pv.monto_original) as total_original, SUM(pv.monto_base) as total_cop
       FROM pagos_ventas pv JOIN ventas v ON pv.venta_id = v.id
-      WHERE ${dateFilter} GROUP BY pv.metodo_pago, pv.moneda ORDER BY total_cop DESC
+      WHERE ${dateFilter} AND v.tipo_transaccion != 'Anulada' GROUP BY pv.metodo_pago, pv.moneda ORDER BY total_cop DESC
     `);
 
     // 4. Gastos Operacionales
@@ -177,7 +177,7 @@ export async function cierreSemanal(req, res) {
 
     // 5. Cortesías
     const cortesiasResumen = await db.query(`
-      SELECT COALESCE(SUM(dv.cantidad * p.costo_produccion), 0) as costo_cortesias
+      SELECT COALESCE(SUM(dv.cantidad * COALESCE(dv.costo_unitario, p.costo_produccion)), 0) as costo_cortesias
       FROM detalle_ventas dv JOIN ventas v ON dv.venta_id = v.id JOIN productos p ON dv.producto_id = p.id
       WHERE ${dateFilter} AND v.tipo_transaccion = 'Cortesia'
     `);
@@ -186,7 +186,7 @@ export async function cierreSemanal(req, res) {
     // 6. Top productos de la semana
     const topProductos = await db.query(`
       SELECT p.nombre, p.categoria, SUM(dv.cantidad) as unidades_vendidas,
-             SUM(dv.subtotal) as ingreso_total, SUM(dv.cantidad * p.costo_produccion) as costo_total
+             SUM(dv.subtotal) as ingreso_total, SUM(dv.cantidad * COALESCE(dv.costo_unitario, p.costo_produccion)) as costo_total
       FROM detalle_ventas dv JOIN ventas v ON dv.venta_id = v.id JOIN productos p ON dv.producto_id = p.id
       WHERE ${dateFilter} AND v.tipo_transaccion = 'Venta'
       GROUP BY p.id, p.nombre, p.categoria ORDER BY unidades_vendidas DESC
@@ -239,7 +239,7 @@ export async function historialVentas(req, res) {
       paramIndex++;
     }
 
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')} AND v.tipo_transaccion != 'Anulada'` : `WHERE v.tipo_transaccion != 'Anulada'`;
     const limitClause = `LIMIT ${parseInt(limit) || 50}`;
 
     const ventas = await db.query(`

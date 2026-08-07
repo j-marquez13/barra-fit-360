@@ -16,12 +16,12 @@ export async function estadoCaja(req, res) {
     const currentSession = session[0];
     const fechaApertura = currentSession.fecha_apertura;
 
-    // Obtener desglose de Ventas por Moneda y Método de Pago
+    // Obtener desglose de Ventas por Moneda y Método de Pago (sin ventas anuladas)
     const ventasBreakdown = await db.query(`
-      SELECT moneda, metodo_pago, SUM(monto_original) as total_original, SUM(monto_base) as total_base
-      FROM pagos_ventas 
-      WHERE fecha >= $1 
-      GROUP BY moneda, metodo_pago
+      SELECT pv.moneda, pv.metodo_pago, SUM(pv.monto_original) as total_original, SUM(pv.monto_base) as total_base
+      FROM pagos_ventas pv JOIN ventas v ON pv.venta_id = v.id
+      WHERE pv.fecha >= $1 AND v.tipo_transaccion != 'Anulada'
+      GROUP BY pv.moneda, pv.metodo_pago
     `, [fechaApertura]);
 
     // Obtener desglose de Abonos por Moneda y Método de Pago
@@ -110,7 +110,7 @@ export async function abrirCaja(req, res) {
 
     const fondo = parseFloat(fondo_inicial_cop) || 0;
     const fondoUsd = parseFloat(fondo_inicial_usd) || 0;
-    const turnoValido = (turno === 'Tarde') ? 'Tarde' : 'Mañana';
+    const turnoValido = (turno === 'Tarde') ? 'Tarde' : (turno === 'Completo' ? 'Completo' : 'Mañana');
     const cajero = nombre_cajero || 'Cajero';
 
     // Verificar si ya hay una caja abierta
@@ -162,31 +162,59 @@ export async function cerrarCaja(req, res) {
     const fechaApertura = currentSession.fecha_apertura;
     const isPg = !!(process.env.DATABASE_URL || process.env.PGHOST);
 
-    // 1. Calcular total de ventas desde la fecha de apertura (excluyendo el vuelto)
-    const salesQuery = isPg 
-      ? `SELECT COALESCE(SUM(total), 0) as total FROM ventas WHERE fecha >= $1`
-      : `SELECT COALESCE(SUM(total), 0) as total FROM ventas WHERE fecha >= $1`;
-    const salesData = await db.query(salesQuery, [fechaApertura]);
-    const totalVentas = parseFloat(salesData[0]?.total || 0);
+    // Tasas del día usadas para convertir a COP (las envía el frontend)
+    const tasas = req.body.tasas || {};
+    const tasaUsd = parseFloat(tasas.USD) || 4000.00;
+    const tasaVes = parseFloat(tasas.VES) || 100.00;
 
-    // Obtener total de pagos a crédito (no entran a la caja física)
-    const creditQuery = isPg
-      ? `SELECT COALESCE(SUM(monto_base), 0) as total FROM pagos_ventas WHERE fecha >= $1 AND metodo_pago = 'Crédito'`
-      : `SELECT COALESCE(SUM(monto_base), 0) as total FROM pagos_ventas WHERE fecha >= $1 AND metodo_pago = 'Crédito'`;
-    const creditData = await db.query(creditQuery, [fechaApertura]);
-    const totalCredito = parseFloat(creditData[0]?.total || 0);
+    // 1. Ingresos en efectivo de ventas por moneda (excluye crédito y ventas anuladas)
+    const ventasQuery = `
+      SELECT pv.moneda, SUM(pv.monto_original) as total
+      FROM pagos_ventas pv JOIN ventas v ON pv.venta_id = v.id
+      WHERE pv.fecha >= $1 AND pv.metodo_pago != 'Crédito' AND v.tipo_transaccion != 'Anulada'
+      GROUP BY pv.moneda
+    `;
+    const ventasData = await db.query(ventasQuery, [fechaApertura]);
 
-    const ingresosRealesCaja = totalVentas - totalCredito;
+    // 1.1 Cobranza de deudas (abonos) por moneda
+    const abonosQuery = `
+      SELECT pa.moneda, SUM(pa.monto_original) as total
+      FROM pagos_abonos pa JOIN abonos_credito a ON pa.abono_id = a.id
+      WHERE pa.fecha >= $1
+      GROUP BY pa.moneda
+    `;
+    const abonosData = await db.query(abonosQuery, [fechaApertura]);
 
-    // 2. Calcular total de gastos operacionales desde apertura
-    const expensesQuery = isPg
-      ? `SELECT SUM(monto_cop) as total FROM gastos WHERE fecha >= $1`
-      : `SELECT SUM(monto_cop) as total FROM gastos WHERE fecha >= $1`;
+    // 2. Calcular total de gastos operacionales desde apertura (en COP)
+    const expensesQuery = `SELECT SUM(monto_cop) as total FROM gastos WHERE fecha >= $1`;
     const expensesData = await db.query(expensesQuery, [fechaApertura]);
     const totalGastos = parseFloat(expensesData[0]?.total || 0);
 
-    // 3. Diferencia de Caja = Monto Físico Declarado - (Fondo Inicial + VentasReales - Gastos)
-    const saldoTeorico = parseFloat(currentSession.fondo_inicial_cop) + ingresosRealesCaja - totalGastos;
+    // 3. Total esperado por moneda = fondo inicial + ingresos (ventas + abonos) - gastos
+    const saldosMoneda = {
+      COP: parseFloat(currentSession.fondo_inicial_cop) || 0,
+      USD: parseFloat(currentSession.fondo_inicial_usd) || 0,
+      VES: 0
+    };
+    const ventasMoneda = {};
+    const abonosMoneda = {};
+    ventasData.forEach(r => {
+      const m = r.moneda.toUpperCase();
+      ventasMoneda[m] = (ventasMoneda[m] || 0) + parseFloat(r.total || 0);
+      saldosMoneda[m] = (saldosMoneda[m] || 0) + parseFloat(r.total || 0);
+    });
+    abonosData.forEach(r => {
+      const m = r.moneda.toUpperCase();
+      abonosMoneda[m] = (abonosMoneda[m] || 0) + parseFloat(r.total || 0);
+      saldosMoneda[m] = (saldosMoneda[m] || 0) + parseFloat(r.total || 0);
+    });
+
+    const totalVentasCop = (ventasMoneda.COP || 0) + (ventasMoneda.USD || 0) * tasaUsd + (ventasMoneda.VES || 0) * tasaVes;
+    const totalAbonosCop = (abonosMoneda.COP || 0) + (abonosMoneda.USD || 0) * tasaUsd + (abonosMoneda.VES || 0) * tasaVes;
+    const saldoTeorico = (saldosMoneda.COP || 0) + (saldosMoneda.USD || 0) * tasaUsd + (saldosMoneda.VES || 0) * tasaVes - totalGastos;
+    const totalIngresosCop = totalVentasCop + totalAbonosCop;
+
+    // 4. Diferencia de Caja = Monto Físico Declarado (COP) - Saldo Teórico
     const declarado = parseFloat(monto_declarado_cop) || 0;
     const diferencia = declarado - saldoTeorico;
 
@@ -215,7 +243,9 @@ export async function cerrarCaja(req, res) {
       mensaje: 'Caja cerrada correctamente',
       resumen: {
         fondo_inicial: currentSession.fondo_inicial_cop,
-        total_ventas: totalVentas,
+        total_ventas: totalIngresosCop,
+        total_ventas_detalle_cop: totalVentasCop,
+        total_abonos_cop: totalAbonosCop,
         total_gastos: totalGastos,
         saldo_teorico: saldoTeorico,
         monto_declarado: declarado,

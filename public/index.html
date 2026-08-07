@@ -358,6 +358,9 @@
             <button class="mod-tab" data-inv-tab="productos" id="tab-productos-admin">
               <i data-lucide="tag"></i> Productos
             </button>
+            <button class="mod-tab" data-inv-tab="recetas-base" id="tab-recetas-base">
+              <i data-lucide="layers"></i> Recetas Base
+            </button>
             <button class="mod-tab" data-inv-tab="orden" id="tab-orden">
               <i data-lucide="shopping-cart"></i> Orden Compra
             </button>
@@ -521,6 +524,73 @@
             </div>
             <div style="margin-top:20px; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; text-align:right; font-size:1.5em; font-weight:bold; color:var(--text-bright);">
               Total de la Orden: <span id="val-total-orden" style="color:var(--success)">$0</span>
+            </div>
+          </div>
+
+          <!-- Sub-vista: Recetas Base -->
+          <div class="inv-panel" id="inv-recetas-base">
+            <div class="panel-header">
+              <h3><i data-lucide="layers" style="width:18px;height:18px;"></i> Recetas Base (Plantillas)</h3>
+              <div style="display:flex; gap:10px;">
+                <button class="action-btn" onclick="window.loadRecetasBasePanel()">
+                  <i data-lucide="refresh-cw"></i> Actualizar
+                </button>
+                <button class="action-btn" id="btn-add-receta-base">
+                  <i data-lucide="plus"></i> Nueva Receta Base
+                </button>
+              </div>
+            </div>
+
+            <p style="margin-bottom:16px; color:var(--color-muted); font-size:0.85rem;">
+              Las <strong>Recetas Base</strong> son plantillas (ej: "Masa Base", "Batido de Vainilla Estándar")
+              que se asignan a uno o varios productos. Al editar una plantilla, todos los productos que la usan
+              se actualizan automáticamente (incluyendo su costo de producción).
+            </p>
+
+            <!-- KPIs de Recetas Base -->
+            <div class="kpi-grid" style="margin-bottom: 20px;" id="recetas-base-kpi-grid">
+              <div class="kpi-card" style="background: rgba(0,242,254,0.05); border: 1px solid rgba(0,242,254,0.2);">
+                <div class="kpi-icon"><i data-lucide="layers"></i></div>
+                <div class="kpi-data">
+                  <span class="kpi-label">Total Plantillas</span>
+                  <span class="kpi-value" id="kpi-total-recetas-base" style="color:var(--cyan-neon)">0</span>
+                  <span class="kpi-sub">Recetas base creadas</span>
+                </div>
+              </div>
+              <div class="kpi-card" style="background: rgba(0,230,118,0.05); border: 1px solid rgba(0,230,118,0.2);">
+                <div class="kpi-icon"><i data-lucide="tag"></i></div>
+                <div class="kpi-data">
+                  <span class="kpi-label">Productos Vinculados</span>
+                  <span class="kpi-value" id="kpi-productos-vinculados" style="color:var(--success)">0</span>
+                  <span class="kpi-sub">Usan alguna plantilla</span>
+                </div>
+              </div>
+              <div class="kpi-card" style="background: rgba(255,179,0,0.05); border: 1px solid rgba(255,179,0,0.2);">
+                <div class="kpi-icon"><i data-lucide="dollar-sign"></i></div>
+                <div class="kpi-data">
+                  <span class="kpi-label">Costo Promedio</span>
+                  <span class="kpi-value" id="kpi-costo-promedio" style="color:var(--warning)">$0</span>
+                  <span class="kpi-sub">Promedio de costos de las plantillas</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="data-table-wrapper">
+              <table class="data-table" id="table-recetas-base">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Nombre</th>
+                    <th>Ingredientes</th>
+                    <th>Costo Plantilla</th>
+                    <th>Productos</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-recetas-base">
+                  <tr><td colspan="6" class="loading-cell">Cargando recetas base...</td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
 

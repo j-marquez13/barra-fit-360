@@ -17,15 +17,23 @@
     <p>Selecciona tu archivo <b>database_backup.sqlite</b> ya editado para reemplazar la base de datos actual en el servidor.</p>
     <input type="file" id="fileInput" accept=".sqlite,.db">
     <br>
+    <input type="password" id="adminPass" placeholder="Contraseña de administrador" style="margin:20px 0; padding:10px; width:80%; border-radius:6px; border:1px solid #444; background:#1a1a1a; color:white;">
+    <br>
     <button onclick="uploadDb()">Subir y Restaurar</button>
     <p id="status" style="margin-top:20px; font-weight:bold;"></p>
   </div>
   <script>
     async function uploadDb() {
       const fileInput = document.getElementById('fileInput');
+      const passInput = document.getElementById('adminPass');
       const statusEl = document.getElementById('status');
       if (!fileInput.files.length) {
         statusEl.innerText = 'Por favor selecciona un archivo primero.';
+        statusEl.style.color = '#ff4444';
+        return;
+      }
+      if (!passInput.value) {
+        statusEl.innerText = 'Ingresa la contraseña de administrador.';
         statusEl.style.color = '#ff4444';
         return;
       }
@@ -35,7 +43,10 @@
       try {
         const response = await fetch('/api/restore-db', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/octet-stream' },
+          headers: {
+            'Content-Type': 'application/octet-stream',
+            'x-admin-password': passInput.value
+          },
           body: file
         });
         const text = await response.text();

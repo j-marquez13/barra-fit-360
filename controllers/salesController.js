@@ -76,6 +76,8 @@ export async function processSale(req, res) {
         cantidad,
         precio_unitario: precioUnitario,
         subtotal,
+        costo_unitario: (item.costo_produccion_calculado !== undefined) ? parseFloat(item.costo_produccion_calculado) : parseFloat(prod.costo_produccion),
+        receta_base_ids: (item.receta_base_ids && item.receta_base_ids.length > 0) ? JSON.stringify(item.receta_base_ids) : null,
         extras: item.extras || []
       };
     });
@@ -212,8 +214,8 @@ export async function processSale(req, res) {
 
       // B. Insertar detalle de productos vendidos (Activa el trigger de inventario)
       const insertDetalleSql = isPg
-        ? 'INSERT INTO detalle_ventas (venta_id, producto_id, cantidad, precio_unitario, subtotal) VALUES ($1, $2, $3, $4, $5) RETURNING id'
-        : 'INSERT INTO detalle_ventas (venta_id, producto_id, cantidad, precio_unitario, subtotal) VALUES ($1, $2, $3, $4, $5)';
+        ? 'INSERT INTO detalle_ventas (venta_id, producto_id, cantidad, precio_unitario, subtotal, costo_unitario, receta_base_ids) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id'
+        : 'INSERT INTO detalle_ventas (venta_id, producto_id, cantidad, precio_unitario, subtotal, costo_unitario, receta_base_ids) VALUES ($1, $2, $3, $4, $5, $6, $7)';
       
       const insertExtraSql = 'INSERT INTO detalle_ventas_extras (detalle_venta_id, insumo_id, cantidad, precio_adicional) VALUES ($1, $2, $3, $4)';
 
@@ -223,13 +225,38 @@ export async function processSale(req, res) {
           det.producto_id,
           det.cantidad,
           det.precio_unitario,
-          det.subtotal
+          det.subtotal,
+          det.costo_unitario,
+          det.receta_base_ids
         ]);
         const detalleId = resDetalle[0].id;
 
+        // Descontar stock de las recetas base seleccionadas en esta venta (se agregan al
+        // descuento que ya hace el trigger para los insumos propios / base fija del producto)
+        if (det.receta_base_ids) {
+          const baseIds = Array.isArray(det.receta_base_ids) ? det.receta_base_ids : JSON.parse(det.receta_base_ids);
+          const ph = baseIds.map((_, i) => `$${i + 1}`).join(', ');
+          const listaInsumos = await tx.query(
+            `SELECT rbi.insumo_id, SUM(rbi.cantidad) as cant
+             FROM recetas_base_insumos rbi
+             WHERE rbi.receta_base_id IN (${ph})
+             GROUP BY rbi.insumo_id`,
+            baseIds
+          );
+          for (const li of listaInsumos) {
+            await tx.execute(
+              'UPDATE insumos SET stock_actual = stock_actual - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+              [li.cant * det.cantidad, li.insumo_id]
+            );
+          }
+        }
+
         // Insertar insumos extras asociados a este detalle (Activa el trigger trg_descontar_extras_venta)
+        // Los ingredientes de origen 'receta' ya fueron descontados por el trigger de la receta del producto,
+        // así que se registran en la factura pero NO se vuelven a descontar.
         if (det.extras && det.extras.length > 0) {
           for (const extra of det.extras) {
+            if (extra.origen === 'receta') continue;
             await tx.execute(insertExtraSql, [
               detalleId,
               extra.insumo_id,
@@ -384,8 +411,8 @@ export async function anularVenta(req, res) {
         }
       }
 
-      // e. Eliminar los pagos de la venta (para no duplicar en reportes)
-      await tx.execute('DELETE FROM pagos_ventas WHERE venta_id = $1', [id]);
+      // e. NO se eliminan los pagos_ventas: se conservan para trazabilidad.
+      //    Los reportes y el arqueo de caja excluyen las ventas anuladas.
 
       // f. Marcar la venta como anulada (no se borra para dejar registro)
       await tx.execute(

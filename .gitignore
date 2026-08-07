@@ -5,3 +5,5 @@ database.sqlite-journal
 backup_pg.js
 backup_railway.sql
 .DS_Store
+.auth-secret
+*.log

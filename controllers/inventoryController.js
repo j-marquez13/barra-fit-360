@@ -327,12 +327,19 @@ export async function getOrdenCompra(req, res) {
 export async function getProductos(req, res) {
   try {
     const productos = await db.query(`
-      SELECT p.id, p.nombre, p.categoria, p.costo_produccion, p.precio_venta, p.activo, p.es_batido,
+      SELECT p.id, p.nombre, p.categoria, p.costo_produccion, p.precio_venta, p.activo, p.es_batido, p.receta_base_id,
         COALESCE(
-          (SELECT MIN(FLOOR(i.stock_actual / r.cantidad))
-           FROM recetas r
-           JOIN insumos i ON r.insumo_id = i.id
-           WHERE r.producto_id = p.id), 0
+          (SELECT MIN(FLOOR(i.stock_actual / req.cantidad))
+           FROM (
+             SELECT insumo_id, SUM(cantidad) as cantidad
+             FROM (
+               SELECT insumo_id, cantidad FROM recetas WHERE producto_id = p.id
+               UNION ALL
+               SELECT rbi.insumo_id, rbi.cantidad FROM recetas_base_insumos rbi WHERE rbi.receta_base_id = p.receta_base_id
+             ) combined
+             GROUP BY insumo_id
+           ) req
+           JOIN insumos i ON req.insumo_id = i.id), 0
         ) as stock_disponible
       FROM productos p
       WHERE p.activo = TRUE
@@ -351,7 +358,7 @@ export async function getProductos(req, res) {
 
 // POST /api/productos — Crear un nuevo producto
 export async function createProducto(req, res) {
-  const { nombre, categoria, costo_produccion, precio_venta, receta, es_batido } = req.body;
+  const { nombre, categoria, costo_produccion, precio_venta, receta, es_batido, receta_base_id } = req.body;
 
   if (!nombre || !precio_venta) {
     return res.status(400).json({ error: 'El nombre y el precio de venta son obligatorios.' });
@@ -362,15 +369,16 @@ export async function createProducto(req, res) {
 
     const result = await db.transaction(async (tx) => {
       const insertSql = isPg
-        ? 'INSERT INTO productos (nombre, categoria, costo_produccion, precio_venta, es_batido) VALUES ($1, $2, $3, $4, $5) RETURNING id'
-        : 'INSERT INTO productos (nombre, categoria, costo_produccion, precio_venta, es_batido) VALUES ($1, $2, $3, $4, $5)';
+        ? 'INSERT INTO productos (nombre, categoria, costo_produccion, precio_venta, es_batido, receta_base_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id'
+        : 'INSERT INTO productos (nombre, categoria, costo_produccion, precio_venta, es_batido, receta_base_id) VALUES ($1, $2, $3, $4, $5, $6)';
 
       const res = await tx.execute(insertSql, [
         nombre,
         categoria || 'General',
         parseFloat(costo_produccion) || 0,
         parseFloat(precio_venta),
-        !!es_batido
+        !!es_batido,
+        receta_base_id || null
       ]);
       const prodId = res[0].id;
 
@@ -396,6 +404,8 @@ export async function createProducto(req, res) {
       return prodId;
     });
 
+    if (receta_base_id) await recalcularCostosPorBase(db, receta_base_id);
+
     const producto = await db.query('SELECT * FROM productos WHERE id = $1', [result]);
     return res.status(201).json({ mensaje: 'Producto creado.', producto: producto[0] });
   } catch (error) {
@@ -407,7 +417,7 @@ export async function createProducto(req, res) {
 // PUT /api/productos/:id — Actualizar un producto
 export async function updateProducto(req, res) {
   const { id } = req.params;
-  const { nombre, categoria, costo_produccion, precio_venta, activo, receta, es_batido } = req.body;
+  const { nombre, categoria, costo_produccion, precio_venta, activo, receta, es_batido, receta_base_id } = req.body;
 
   try {
     const existing = await db.query('SELECT id FROM productos WHERE id = $1', [id]);
@@ -418,12 +428,10 @@ export async function updateProducto(req, res) {
     await db.transaction(async (tx) => {
       const activoVal = activo !== undefined ? !!activo : true;
       const esBatidoVal = !!es_batido;
-      console.log('UPDATE producto params:', { nombre, categoria, costo_produccion, precio_venta, activoVal, esBatidoVal, id });
-      console.log('RECETA recibida:', JSON.stringify(receta));
       await tx.execute(`
         UPDATE productos 
-        SET nombre = $1, categoria = $2, costo_produccion = $3, precio_venta = $4, activo = $5, es_batido = $6, updated_at = CURRENT_TIMESTAMP
-        WHERE id = $7
+        SET nombre = $1, categoria = $2, costo_produccion = $3, precio_venta = $4, activo = $5, es_batido = $6, receta_base_id = $7, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $8
       `, [
         nombre,
         categoria || 'General',
@@ -431,6 +439,7 @@ export async function updateProducto(req, res) {
         parseFloat(precio_venta) || 0,
         activoVal,
         esBatidoVal,
+        receta_base_id || null,
         id
       ]);
 
@@ -461,6 +470,8 @@ export async function updateProducto(req, res) {
       }
     });
 
+    if (receta_base_id) await recalcularCostosPorBase(db, receta_base_id);
+
     // Verificar que la receta se guardó
     const recetaGuardada = await db.query('SELECT * FROM recetas WHERE producto_id = $1', [id]);
     console.log('RECETA VERIFICACION: recetas guardadas para producto', id, ':', JSON.stringify(recetaGuardada));
@@ -479,10 +490,17 @@ export async function getProductoReceta(req, res) {
   const { id } = req.params;
   try {
     const receta = await db.query(`
-      SELECT r.insumo_id, r.cantidad, i.nombre, i.unidad_medida, i.costo_unitario
-      FROM recetas r
-      JOIN insumos i ON r.insumo_id = i.id
-      WHERE r.producto_id = $1
+      WITH target AS (SELECT $1 AS pid)
+      SELECT req.insumo_id, req.cantidad, i.nombre, i.unidad_medida, i.costo_unitario, req.is_base
+      FROM (
+        SELECT insumo_id, cantidad, 0 as is_base FROM recetas WHERE producto_id = (SELECT pid FROM target)
+        UNION ALL
+        SELECT rbi.insumo_id, rbi.cantidad, 1 as is_base 
+        FROM productos p
+        JOIN recetas_base_insumos rbi ON p.receta_base_id = rbi.receta_base_id
+        WHERE p.id = (SELECT pid FROM target)
+      ) req
+      JOIN insumos i ON req.insumo_id = i.id
     `, [id]);
     return res.json(receta);
   } catch (error) {
@@ -495,7 +513,7 @@ export async function deleteProducto(req, res) {
   try {
     const { id } = req.params;
     const result = await db.execute('UPDATE productos SET activo = FALSE WHERE id = $1', [id]);
-    if (result.changes === 0) return res.status(404).json({ error: 'Producto no encontrado' });
+    if (result[0].changes === 0) return res.status(404).json({ error: 'Producto no encontrado' });
     return res.json({ mensaje: 'Producto eliminado correctamente' });
   } catch (error) {
     console.error('Error al eliminar producto:', error);
@@ -507,10 +525,161 @@ export async function deleteInsumo(req, res) {
   try {
     const { id } = req.params;
     const result = await db.execute('DELETE FROM insumos WHERE id = $1', [id]);
-    if (result.changes === 0) return res.status(404).json({ error: 'Insumo no encontrado' });
+    if (result[0].changes === 0) return res.status(404).json({ error: 'Insumo no encontrado' });
     return res.json({ mensaje: 'Insumo eliminado correctamente' });
   } catch (error) {
     console.error('Error al eliminar insumo:', error);
     return res.status(500).json({ error: 'No se pudo eliminar el insumo. Verifica que no esté en uso.' });
+  }
+}
+
+// ============================================
+// RECETAS BASE (Plantillas)
+// ============================================
+
+export async function getRecetasBase(req, res) {
+  try {
+    const recetasBase = await db.query('SELECT * FROM recetas_base ORDER BY nombre ASC');
+    for (const rb of recetasBase) {
+      rb.insumos = await db.query(`
+        SELECT rbi.insumo_id, rbi.cantidad, i.nombre, i.unidad_medida, i.costo_unitario
+        FROM recetas_base_insumos rbi
+        JOIN insumos i ON rbi.insumo_id = i.id
+        WHERE rbi.receta_base_id = $1
+      `, [rb.id]);
+      const manual = parseFloat(rb.costo_total);
+      if (isNaN(manual) || manual < 0) {
+        rb.costo_total = rb.insumos.reduce((s, ing) => s + (parseFloat(ing.cantidad) || 0) * (parseFloat(ing.costo_unitario) || 0), 0);
+      }
+    }
+    return res.json(recetasBase);
+  } catch (error) {
+    return res.status(500).json({ error: 'Error al consultar recetas base.' });
+  }
+}
+
+export async function createRecetaBase(req, res) {
+  const { nombre, insumos, costo_total } = req.body;
+  if (!nombre) return res.status(400).json({ error: 'El nombre es obligatorio.' });
+  try {
+    const costoTotal = normalizeCostoTotal(costo_total, insumos);
+    const result = await db.transaction(async (tx) => {
+      const isPg = !!(process.env.DATABASE_URL || process.env.PGHOST);
+      const sql = isPg ? 'INSERT INTO recetas_base (nombre, costo_total) VALUES ($1, $2) RETURNING id' : 'INSERT INTO recetas_base (nombre, costo_total) VALUES ($1, $2)';
+      const res = await tx.execute(sql, [nombre, costoTotal]);
+      const rbId = res[0].id;
+      if (insumos && Array.isArray(insumos)) {
+        for (const item of insumos) {
+          await tx.execute('INSERT INTO recetas_base_insumos (receta_base_id, insumo_id, cantidad) VALUES ($1, $2, $3)', [rbId, item.insumo_id, parseFloat(item.cantidad) || 0]);
+          await applyInsumoCostoDesdePlantilla(tx, item);
+        }
+      }
+      return rbId;
+    });
+    return res.status(201).json({ mensaje: 'Receta base creada.', id: result });
+  } catch (error) {
+    console.error('Error al crear receta base:', error);
+    return res.status(500).json({ error: 'Error al crear receta base.' });
+  }
+}
+
+export async function updateRecetaBase(req, res) {
+  const { id } = req.params;
+  const { nombre, insumos, costo_total } = req.body;
+  try {
+    const costoTotal = normalizeCostoTotal(costo_total, insumos);
+    await db.transaction(async (tx) => {
+      await tx.execute('UPDATE recetas_base SET nombre = $1, costo_total = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3', [nombre, costoTotal, id]);
+      if (insumos && Array.isArray(insumos)) {
+        await tx.execute('DELETE FROM recetas_base_insumos WHERE receta_base_id = $1', [id]);
+        for (const item of insumos) {
+          await tx.execute('INSERT INTO recetas_base_insumos (receta_base_id, insumo_id, cantidad) VALUES ($1, $2, $3)', [id, item.insumo_id, parseFloat(item.cantidad) || 0]);
+          await applyInsumoCostoDesdePlantilla(tx, item);
+        }
+      }
+      // Recalcular el costo de producción de todos los productos que usan esta plantilla
+      await recalcularCostosPorBase(tx, id);
+    });
+    return res.json({ mensaje: 'Receta base actualizada. Costos de productos vinculados recalculados.' });
+  } catch (error) {
+    console.error('Error al actualizar receta base:', error);
+    return res.status(500).json({ error: 'Error al actualizar receta base.' });
+  }
+}
+
+/**
+ * Determina el costo TOTAL editable de una receta base.
+ * Usa el costo_total enviado, o si no viene, lo calcula desde los insumos.
+ */
+function normalizeCostoTotal(costo_total, insumos) {
+  const manual = parseFloat(costo_total);
+  if (!isNaN(manual) && manual >= 0) return manual;
+  return (insumos || []).reduce((s, it) => s + (parseFloat(it.cantidad) || 0) * (parseFloat(it.costo) || 0), 0);
+}
+
+/**
+ * Actualiza el costo unitario de un insumo desde la plantilla (si se envió un costo).
+ */
+async function applyInsumoCostoDesdePlantilla(tx, item) {
+  if (item.costo != null && !isNaN(parseFloat(item.costo))) {
+    await tx.execute(
+      'UPDATE insumos SET costo_unitario = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [parseFloat(item.costo), item.insumo_id]
+    );
+  }
+}
+
+/**
+ * Recalcula y guarda el costo de producción de todos los productos
+ * que usan una receta base. El costo del producto = el COSTO TOTAL editable
+ * de la receta base (la receta propia del producto NO se suma aquí).
+ */
+async function recalcularCostosPorBase(tx, recetaBaseId) {
+  const base = await tx.query('SELECT costo_total FROM recetas_base WHERE id = $1', [recetaBaseId]);
+  let costoBase = parseFloat(base[0]?.costo_total);
+  if (isNaN(costoBase) || costoBase < 0) {
+    const sum = await tx.query(`
+      SELECT COALESCE(SUM(rbi.cantidad * i.costo_unitario), 0) as total
+      FROM recetas_base_insumos rbi JOIN insumos i ON rbi.insumo_id = i.id
+      WHERE rbi.receta_base_id = $1
+    `, [recetaBaseId]);
+    costoBase = parseFloat(sum[0]?.total) || 0;
+  }
+  const productos = await tx.query('SELECT id FROM productos WHERE receta_base_id = $1', [recetaBaseId]);
+  for (const prod of productos) {
+    await tx.execute(
+      'UPDATE productos SET costo_produccion = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [costoBase, prod.id]
+    );
+  }
+}
+
+export async function deleteRecetaBase(req, res) {
+  const { id } = req.params;
+  try {
+    await db.transaction(async (tx) => {
+      // Desvincular productos que usan la plantilla (evita referencias huérfanas en SQLite)
+      await tx.execute('UPDATE productos SET receta_base_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE receta_base_id = $1', [id]);
+      await tx.execute('DELETE FROM recetas_base WHERE id = $1', [id]);
+    });
+    return res.json({ mensaje: 'Receta base eliminada.' });
+  } catch (error) {
+    console.error('Error al eliminar receta base:', error);
+    return res.status(500).json({ error: 'Error al eliminar receta base.' });
+  }
+}
+
+/**
+ * Marca/desmarca una receta base para que aparezca en las opciones del batido.
+ */
+export async function toggleRecetaBaseBatido(req, res) {
+  const { id } = req.params;
+  const { activa_batido } = req.body;
+  try {
+    await db.execute('UPDATE recetas_base SET activa_batido = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [!!activa_batido, id]);
+    return res.json({ mensaje: 'Receta base actualizada.', activa_batido: !!activa_batido });
+  } catch (error) {
+    console.error('Error al actualizar receta base:', error);
+    return res.status(500).json({ error: 'Error al actualizar receta base.' });
   }
 }

@@ -120,22 +120,48 @@ async function createTables() {
       precio_venta REAL NOT NULL DEFAULT 0.0,
       activo BOOLEAN DEFAULT 1,
       es_batido BOOLEAN DEFAULT 0,
+      receta_base_id INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (receta_base_id) REFERENCES recetas_base(id) ON DELETE SET NULL
+    )
+  `);
+
+  // Recetas Base (Plantillas)
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS recetas_base (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nombre TEXT NOT NULL UNIQUE,
+      costo_total REAL DEFAULT 0.0,
+      activa_batido BOOLEAN DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS recetas_base_insumos (
+      receta_base_id INTEGER NOT NULL,
+      insumo_id INTEGER NOT NULL,
+      cantidad REAL NOT NULL CHECK (cantidad > 0.0),
+      PRIMARY KEY (receta_base_id, insumo_id),
+      FOREIGN KEY (receta_base_id) REFERENCES recetas_base(id) ON DELETE CASCADE,
+      FOREIGN KEY (insumo_id) REFERENCES insumos(id) ON DELETE CASCADE
+    )
+  `);
+
   // Migrations for new columns (ignoring errors if they already exist)
   
-  if (isPg) {
+  if (usePostgres) {
     try { await db.execute('ALTER TABLE insumos ALTER COLUMN costo_unitario TYPE DOUBLE PRECISION'); console.log('Migracion: costo_unitario -> DOUBLE PRECISION'); } catch(e) {}
     try { await db.execute('ALTER TABLE productos ALTER COLUMN costo_produccion TYPE DOUBLE PRECISION'); } catch(e) {}
     try { await db.execute('ALTER TABLE productos ALTER COLUMN precio_venta TYPE DOUBLE PRECISION'); } catch(e) {}
   }
-  try { await db.execute('ALTER TABLE productos ADD COLUMN es_batido BOOLEAN DEFAULT 0'); } catch (e) {}
   try { await db.execute('ALTER TABLE insumos ADD COLUMN es_para_batidos BOOLEAN DEFAULT 0'); } catch (e) {}
   try { await db.execute('ALTER TABLE insumos ADD COLUMN es_base_liquida BOOLEAN DEFAULT 0'); } catch (e) {}
   try { await db.execute('ALTER TABLE insumos ADD COLUMN es_sabor_batido BOOLEAN DEFAULT 0'); } catch (e) {}
+  try { await db.execute('ALTER TABLE recetas_base ADD COLUMN costo_total REAL DEFAULT 0.0'); } catch (e) {}
+  try { await db.execute('ALTER TABLE recetas_base ADD COLUMN activa_batido BOOLEAN DEFAULT 0'); } catch (e) {}
 
   // Recetas (Relación Producto - Insumo)
   await db.execute(`
@@ -194,10 +220,15 @@ async function createTables() {
       cantidad REAL NOT NULL CHECK (cantidad > 0.0),
       precio_unitario REAL NOT NULL,
       subtotal REAL NOT NULL,
+      costo_unitario REAL,
+      receta_base_ids TEXT,
       FOREIGN KEY (venta_id) REFERENCES ventas(id) ON DELETE CASCADE,
       FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE RESTRICT
     )
   `);
+
+  try { await db.execute('ALTER TABLE detalle_ventas ADD COLUMN costo_unitario REAL'); } catch (e) {}
+  try { await db.execute('ALTER TABLE detalle_ventas ADD COLUMN receta_base_ids TEXT'); } catch (e) {}
 
   // Pagos de Ventas (Multimoneda)
   await db.execute(`
@@ -437,15 +468,26 @@ async function createTriggers() {
       BEGIN
         UPDATE insumos
         SET stock_actual = stock_actual - (
-          SELECT r.cantidad * NEW.cantidad
-          FROM recetas r
-          WHERE r.producto_id = NEW.producto_id AND r.insumo_id = insumos.id
+          COALESCE((
+            SELECT r.cantidad * NEW.cantidad
+            FROM recetas r
+            WHERE r.producto_id = NEW.producto_id AND r.insumo_id = insumos.id
+          ), 0)
+          +
+          COALESCE((
+            SELECT rbi.cantidad * NEW.cantidad
+            FROM productos p
+            JOIN recetas_base_insumos rbi ON p.receta_base_id = rbi.receta_base_id
+            WHERE p.id = NEW.producto_id AND rbi.insumo_id = insumos.id
+          ), 0)
         ),
         updated_at = CURRENT_TIMESTAMP
         WHERE id IN (
-          SELECT insumo_id 
-          FROM recetas 
-          WHERE producto_id = NEW.producto_id
+          SELECT insumo_id FROM recetas WHERE producto_id = NEW.producto_id
+          UNION
+          SELECT rbi.insumo_id FROM productos p
+          JOIN recetas_base_insumos rbi ON p.receta_base_id = rbi.receta_base_id
+          WHERE p.id = NEW.producto_id
         );
       END
     `);

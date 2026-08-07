@@ -52,6 +52,7 @@ async function run() {
       );
 
       -- Add missing columns to sesiones_caja
+      ALTER TABLE sesiones_caja DROP COLUMN IF EXISTS usuario;
       ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS turno TEXT NOT NULL DEFAULT 'Mañana';
       ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS nombre_cajero TEXT;
       ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS fondo_inicial_usd REAL NOT NULL DEFAULT 0.0;

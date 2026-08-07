@@ -10,6 +10,32 @@ function localDateStr() {
   return local.toISOString().slice(0, 10);
 }
 
+// ==========================================
+// AUTH — Inyecta el token en cada petición /api
+// y vuelve a la pantalla de turno si la sesión expiró.
+// ==========================================
+(function () {
+  const _fetch = window.fetch;
+  window.fetch = async function (input, init) {
+    const url = (typeof input === 'string') ? input : input.url;
+    const opts = init || {};
+    const headers = new Headers(opts.headers || {});
+    try {
+      const auth = JSON.parse(sessionStorage.getItem('bf360_auth') || 'null');
+      if (auth && auth.token) headers.set('x-auth-token', auth.token);
+    } catch (e) {}
+    const res = await _fetch.call(window, input, { ...opts, headers });
+
+    if (res.status === 401 && typeof url === 'string' && url.startsWith('/api/') && !url.includes('/api/auth/login')) {
+      sessionStorage.removeItem('bf360_auth');
+      if (typeof showTurnoScreen === 'function') {
+        try { showTurnoScreen(); } catch (e) {}
+      }
+    }
+    return res;
+  };
+})();
+
 // 1. ESTADO DE LA APLICACIÓN
 const STATE = {
   // Catálogo (Fallback en caso de que el backend esté offline)
@@ -36,6 +62,7 @@ const STATE = {
   currentView: 'pos',
   insumos: [],
   clientes: [],
+  recetasBase: [],
   selectedClientId: null
 };
 
@@ -387,6 +414,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (target === 'orden') {
         window.loadOrdenCompra();
       }
+      if (target === 'recetas-base') {
+        window.loadRecetasBasePanel();
+      }
     });
   });
 
@@ -428,6 +458,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   document.getElementById('btn-add-merma')?.addEventListener('click', showAddMermaModal);
   document.getElementById('btn-add-producto')?.addEventListener('click', showAddProductoModal);
+  document.getElementById('btn-add-receta-base')?.addEventListener('click', () => showRecetaBaseModal());
   document.getElementById('btn-add-cliente')?.addEventListener('click', showAddClienteModal);
   document.getElementById('btn-close-detail')?.addEventListener('click', () => {
     document.getElementById('client-detail-panel').style.display = 'none';
@@ -707,8 +738,8 @@ async function quickPay(method, currency) {
     await loadProductsFromAPI();
     
     // Mostrar ticket
-    document.getElementById('receipt-id').textContent = `#${String(resData.ventaId).padStart(5, '0')}`;
-    document.getElementById('receipt-date').textContent = new Date().toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 });
+    document.getElementById('receipt-id').textContent = `#${String(resData.venta_id).padStart(5, '0')}`;
+    document.getElementById('receipt-date').textContent = new Date().toLocaleString('es-ES');
     
     let itemsHtml = '';
     payload.items.forEach(item => {
@@ -738,144 +769,110 @@ async function quickPay(method, currency) {
 }
 
 // 5. CONTROLADORES DEL CARRITO
-function addToCart(productId) {
+
+async function addToCart(productId) {
   const prod = STATE.products.find(p => p.id === productId);
   const stock = prod ? (prod.stock !== undefined ? prod.stock : (prod.stock_disponible || 0)) : 0;
   if (!prod || (!prod.es_batido && stock <= 0)) return;
 
   if (prod.es_batido) {
     if (typeof openGenericModal === 'function') {
-      const batidoInsumos = STATE.insumos.filter(ins => ins.es_para_batidos);
-      const checkboxesHtml = `
-        <table class="inventory-table" style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-          <thead>
-            <tr>
-              <th style="padding: 8px; border-bottom: 1px solid var(--border-color); text-align: center;">Sel.</th>
-              <th style="padding: 8px; border-bottom: 1px solid var(--border-color); text-align: left;">Ingrediente</th>
-              <th style="padding: 8px; border-bottom: 1px solid var(--border-color); text-align: left;">Tipo</th>
-              <th style="padding: 8px; border-bottom: 1px solid var(--border-color); text-align: right;">Costo</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${batidoInsumos.map(ins => {
-              const esBase = ins.es_base_liquida ? 1 : 0;
-              const cantSola = parseFloat(ins.cantidad_sola) || 0;
-              const cantComb = parseFloat(ins.cantidad_combinada) || 0;
-              const esSabor = ins.es_sabor_batido ? 1 : 0;
-              const costoUnit = parseFloat(ins.costo_unitario) || 0;
-              let tipoStr = `<span class="badge" style="background:var(--card-bg-light); color:var(--color-text); font-size:0.7rem; padding:2px 6px;">Extra</span>`;
-              if (esBase) tipoStr = `<span class="badge" style="background:var(--cyan-neon); color:black; font-size:0.7rem; padding:2px 6px;">Líquido</span>`;
-              else if (esSabor) tipoStr = `<span class="badge" style="background:#ff4d4d; color:white; font-size:0.7rem; padding:2px 6px;">Fruta/Sabor</span>`;
-              
-              return `
-                <tr style="border-bottom: 1px solid var(--border-color);">
-                  <td style="padding: 8px; text-align: center;">
-                    <input type="checkbox" class="batido-extra-cb" 
-                      data-id="${ins.id}" data-nombre="${ins.nombre}"
-                      data-es-base="${esBase}"
-                      data-es-sabor="${ins.es_sabor_batido ? 1 : 0}"
-                      data-cantidad-sola="${cantSola}"
-                      data-cantidad-combinada="${cantComb}"
-                      data-costo-unitario="${costoUnit}"
-                      style="width:18px;height:18px; cursor:pointer;"
-                      onchange="window._recalcBatidoCosto && window._recalcBatidoCosto()">
-                  </td>
-                  <td style="padding: 8px;">
-                    <label style="cursor:pointer; display:block; width:100%; height:100%;" onclick="this.previousElementSibling ? this.previousElementSibling.click() : this.parentElement.previousElementSibling.querySelector('input').click()">
-                      <strong>${ins.nombre}</strong>
-                    </label>
-                  </td>
-                  <td style="padding: 8px;">
-                    ${tipoStr}
-                  </td>
-                  <td style="padding: 8px; text-align: right; font-size: 0.85rem; color: var(--color-muted);">
-                    $${costoUnit.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
-                  </td>
-                </tr>
-              `;
-            }).join('')}
-          </tbody>
-        </table>
-      `;
-      
-      openGenericModal(`Opciones para ${prod.nombre}`, `
-        <div class="form-group" style="margin-bottom: 15px;">
-          <label style="font-weight: 600; color: var(--color-muted); font-size: 0.85rem; margin-bottom: 10px; display: block;">Selecciona lo que lleva el vaso:</label>
-          <div style="max-height: 250px; overflow-y: auto; background: var(--bg-app); border: 1px solid var(--border-glass); border-radius: 6px;">
-            ${batidoInsumos.length > 0 ? checkboxesHtml : '<p style="color:var(--color-muted); font-size:0.9rem; padding: 15px;">No hay ingredientes para batidos. Ve a Inventario y edita tus insumos marcando "Disponible como opción para Batidos".</p>'}
-          </div>
-        </div>
-        <div id="batido-costo-resumen" style="margin-top: 10px; padding: 12px 15px; background: linear-gradient(135deg, rgba(0,210,255,0.08), rgba(88,86,214,0.08)); border: 1px solid var(--border-glass); border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
-          <span style="font-weight: 600; font-size: 0.9rem; color: var(--color-muted);">💰 Costo de producción estimado:</span>
-          <span id="batido-costo-total" style="font-weight: 700; font-size: 1.1rem; color: var(--cyan-neon);">$0</span>
-        </div>
-      `, () => {
-        const extras = [];
-        const checkedCbs = document.querySelectorAll('.batido-extra-cb:checked');
-        const basesSeleccionadas = [...checkedCbs].filter(cb => cb.dataset.esBase === '1');
-        const saboresSeleccionados = [...checkedCbs].filter(cb => cb.dataset.esSabor === '1');
-        const combinacionLiquidos = basesSeleccionadas.length > 1;
-        const combinacionSabores = saboresSeleccionados.length > 1;
-
-        let costoProduccionBatido = 0;
-
-        checkedCbs.forEach(cb => {
-          const esBase = cb.dataset.esBase === '1';
-          const esSabor = cb.dataset.esSabor === '1';
-          let cantidad = 1; // default para insumos normales
-          
-          if (esBase || esSabor) {
-            const isCombinado = (esBase && combinacionLiquidos) || (esSabor && combinacionSabores);
-            cantidad = isCombinado
-              ? parseFloat(cb.dataset.cantidadCombinada) || 1
-              : parseFloat(cb.dataset.cantidadSola) || 1;
-          }
-
-          const costoUnitario = parseFloat(cb.dataset.costoUnitario) || 0;
-          costoProduccionBatido += costoUnitario * cantidad;
-
-          extras.push({
-            insumo_id: parseInt(cb.dataset.id),
-            nombre: cb.dataset.nombre,
-            cantidad: cantidad, 
-            precio_adicional: 0
+// 1) Opciones: ingredientes de la RECETA BASE y propios del producto (todos descuentan stock)
+      let ingredientes = [];
+      let baseItems = [];
+      let costoReceta = parseFloat(prod.costo_produccion) || 0;
+      let baseSel = null;
+      try {
+        const recetaRes = await fetch(`/api/productos/${productId}/receta`);
+        if (recetaRes.ok) {
+          const recetaData = await recetaRes.json();
+          (recetaData || []).forEach(r => {
+            const ins = STATE.insumos.find(i => i.id === r.insumo_id);
+            const nombre = (ins && ins.nombre) || r.nombre || 'Ingrediente';
+            const cantidad = parseFloat(r.cantidad) || 0;
+            const item = { nombre, unidad: ins ? ins.unidad_medida : '', cantidad };
+            if (parseInt(r.is_base) === 1) baseItems.push(item);
+            else ingredientes.push(item);
           });
-        });
+        }
+      } catch(e) { console.warn('No se pudo cargar la receta del producto:', e); }
 
-        STATE.cart.push({ 
-          producto_id: productId, 
-          cantidad: 1, 
-          extras: extras,
-          costo_produccion_calculado: costoProduccionBatido
-        });
-        
-        renderCart();
-        closeGenericModal();
-        // Limpiar referencia global
-        window._recalcBatidoCosto = null;
-      });
+      const rb = (STATE.recetasBase || []).find(x => x.id === prod.receta_base_id);
+      const nombreBase = rb ? rb.nombre : 'Receta base';
 
-      // Función para recalcular el costo en tiempo real al marcar/desmarcar
-      window._recalcBatidoCosto = function() {
-        const allCbs = document.querySelectorAll('.batido-extra-cb:checked');
-        const bases = [...allCbs].filter(cb => cb.dataset.esBase === '1');
-        const sabores = [...allCbs].filter(cb => cb.dataset.esSabor === '1');
-        const combLiq = bases.length > 1;
-        const combSab = sabores.length > 1;
-        let totalCosto = 0;
-        allCbs.forEach(cb => {
-          const esBase = cb.dataset.esBase === '1';
-          const esSabor = cb.dataset.esSabor === '1';
-          let cant = 1;
-          if (esBase || esSabor) {
-            const isComb = (esBase && combLiq) || (esSabor && combSab);
-            cant = isComb ? (parseFloat(cb.dataset.cantidadCombinada) || 1) : (parseFloat(cb.dataset.cantidadSola) || 1);
+      const lista = (arr) => arr.length > 0
+        ? `<ul style="list-style:none;margin:0;padding:0;">` + arr.map(r =>
+            `<li style="padding:7px 0; border-bottom:1px solid var(--border-color); display:flex; justify-content:space-between; font-size:0.85rem;">
+              <span><strong>${r.nombre}</strong> <small style="color:var(--color-muted);">(${r.unidad || ''})</small> × ${r.cantidad}</span>
+            </li>`).join('') + `</ul>`
+        : '<p style="color:var(--color-muted); font-size:0.9rem;">Sin ingredientes.</p>';
+
+const basesActivas = (STATE.recetasBase || []).filter(r => r.activa_batido);
+
+      const baseHtml = prod.receta_base_id
+        ? `<div style="margin-bottom:10px; padding:10px 12px; background:rgba(0,242,254,0.06); border:1px solid rgba(0,242,254,0.25); border-radius:8px;">
+            <span style="font-weight:600; font-size:0.85rem; color:var(--color-muted); display:block; margin-bottom:4px;">🧪 Receta base: <strong>${nombreBase}</strong> (descuenta stock)</span>
+            ${lista(baseItems)}
+          </div>`
+        : '';
+
+      const propiosHtml = ingredientes.length > 0
+        ? `<div style="margin-bottom:10px; padding:10px 12px; background:rgba(255,255,255,0.03); border:1px solid var(--border-color); border-radius:8px;">
+            <span style="font-weight:600; font-size:0.85rem; color:var(--color-muted); display:block; margin-bottom:4px;">🍓 Ingredientes propios del producto</span>
+            ${lista(ingredientes)}
+          </div>`
+        : '';
+
+      const opcionesHtml = (!prod.receta_base_id && basesActivas.length > 0)
+        ? `<div style="margin-bottom:10px; padding:10px 12px; background:rgba(88,86,214,0.08); border:1px solid var(--border-glass); border-radius:8px;">
+            <span style="font-weight:600; font-size:0.85rem; color:var(--color-muted); display:block; margin-bottom:4px;">🧩 Elige las recetas base para este batido (descuentan stock):</span>
+            <ul style="list-style:none;margin:0;padding:0;">
+              ${basesActivas.map(b =>
+                `<li style="padding:6px 0;">
+                  <label style="cursor:pointer; display:flex; align-items:center; gap:8px; font-size:0.85rem;">
+                    <input type="checkbox" class="rb-opcion-cb" data-id="${b.id}" checked style="width:16px;height:16px;">
+                    <span><strong>${b.nombre}</strong> <small style="color:var(--color-muted);">(${(b.insumos || []).map(i => i.nombre).join(', ') || 'sin insumos'})</small></span>
+                  </label>
+                </li>`).join('')}
+            </ul>
+          </div>`
+        : '';
+
+      openGenericModal(`Opciones para ${prod.nombre}`, `
+        ${baseHtml}
+        ${propiosHtml}
+        ${opcionesHtml}
+        <div style="margin-top:12px; padding:12px 15px; background:linear-gradient(135deg, rgba(0,210,255,0.08), rgba(88,86,214,0.08)); border:1px solid var(--border-glass); border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-weight:600; font-size:0.9rem; color:var(--color-muted);">💰 Costo de producción:</span>
+          <span id="bati-costo-el" style="font-weight:700; font-size:1.1rem; color:var(--cyan-neon);">$${costoReceta.toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:2})}</span>
+        </div>`,
+        () => {
+let costoFinal = costoReceta;
+          if (!prod.receta_base_id && basesActivas.length > 0) {
+            costoFinal = 0;
+            baseSel = [];
+            document.querySelectorAll('.rb-opcion-cb:checked').forEach(cb => {
+              const b = basesActivas.find(x => x.id === parseInt(cb.dataset.id));
+              if (b) { costoFinal += recetaBaseCosto(b); baseSel.push(b.id); }
+            });
           }
-          totalCosto += (parseFloat(cb.dataset.costoUnitario) || 0) * cant;
-        });
-        const el = document.getElementById('batido-costo-total');
-        if (el) el.textContent = '$' + totalCosto.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-      };
+          STATE.cart.push({ producto_id: productId, cantidad: 1, costo_produccion_calculado: costoFinal, receta_base_ids: baseSel });
+          renderCart();
+          closeGenericModal();
+        }
+      );
+      if (!prod.receta_base_id && basesActivas.length > 0) {
+        document.querySelectorAll('.rb-opcion-cb').forEach(cb => {
+          cb.addEventListener('change', () => {
+            let total = 0;
+            document.querySelectorAll('.rb-opcion-cb:checked').forEach(x => {
+              const b = basesActivas.find(rr => rr.id === parseInt(x.dataset.id));
+              if (b) total += recetaBaseCosto(b);
+            });
+            document.getElementById('bati-costo-el').textContent = '$' + total.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+          });
+});
+      }
       return;
     }
   }
@@ -893,7 +890,7 @@ function addToCart(productId) {
   renderCart();
 }
 
-window.changeQty = function(index, delta) {
+﻿window.changeQty = function(index, delta) {
   const item = STATE.cart[index];
   if (!item) return;
   const prod = STATE.products.find(p => p.id === item.producto_id);
@@ -938,7 +935,7 @@ function openPaymentModal() {
     document.getElementById('modal-payment-inputs').style.display = 'block';
   }
   
-  // Botón "Pasar Todo a Crédito"
+  // Bot├│n "Pasar Todo a Cr├®dito"
   const btnTodoCredito = document.getElementById('btn-cobrar-todo-credito');
   if (btnTodoCredito) {
     btnTodoCredito.onclick = () => {
@@ -965,7 +962,7 @@ function calculateCartTotal() {
 
 function recalculatePayments() {
   const chkCortesia = document.getElementById('chk-cortesia');
-  if (chkCortesia && chkCortesia.checked) return; // Si es cortesía, omitir cálculo
+  if (chkCortesia && chkCortesia.checked) return; // Si es cortes├¡a, omitir c├ílculo
 
   const totalVentaCop = calculateCartTotal();
   let totalPagadoCop = 0;
@@ -1002,14 +999,14 @@ function recalculatePayments() {
     DOM.paymentStatusBox.className = 'payment-status-box status-insufficient';
     DOM.statusBoxIcon.setAttribute('data-lucide', 'info');
     DOM.statusBoxTitle.textContent = 'Esperando Pago...';
-    DOM.statusBoxDesc.textContent = 'Ingresa los montos por los métodos elegidos.';
+    DOM.statusBoxDesc.textContent = 'Ingresa los montos por los m├®todos elegidos.';
     DOM.statusBoxValue.textContent = `$${totalVentaCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
     DOM.btnConfirmPayment.disabled = true;
   } else if (diff < -10.0) {
     DOM.paymentStatusBox.className = 'payment-status-box status-insufficient';
     DOM.statusBoxIcon.setAttribute('data-lucide', 'alert-triangle');
     DOM.statusBoxTitle.textContent = 'Monto Insuficiente';
-    DOM.statusBoxDesc.textContent = 'Aún falta saldo para cubrir la venta.';
+    DOM.statusBoxDesc.textContent = 'A├║n falta saldo para cubrir la venta.';
     DOM.statusBoxValue.textContent = `Faltan: $${Math.abs(diff).toLocaleString(undefined, {maximumFractionDigits: 0})} COP`;
     DOM.btnConfirmPayment.disabled = true;
   } else {
@@ -1028,6 +1025,7 @@ function recalculatePayments() {
   }
   lucide.createIcons();
 }
+
 
 // 7. ENVÍO DE PAGO
 async function submitPayment() {
@@ -1307,7 +1305,8 @@ async function loadInventarioData() {
         categoria: p.categoria || 'General',
         stock: p.stock_disponible || 0,
         stock_disponible: p.stock_disponible || 0,
-        es_batido: p.es_batido ? 1 : 0
+        es_batido: p.es_batido ? 1 : 0,
+        receta_base_id: p.receta_base_id || null
     }));
     
     const valActual = document.getElementById('val-actual');
@@ -1515,11 +1514,284 @@ function renderProductosTable(productos) {
   }).join('');
 }
 
+window.viewProductRecipe = function(productName) {
+  showToast('La vista de recetas ya no está disponible en el panel.', 'warning');
+}
+
+// ============================================
+// RECETAS BASE (Plantillas)
+// ============================================
+
+async function ensureRecetasBase() {
+  if (STATE.recetasBase && STATE.recetasBase.length > 0) return STATE.recetasBase;
+  const res = await fetch('/api/recetas-base').then(r => { if (!r.ok) throw new Error(); return r.json(); });
+  STATE.recetasBase = res || [];
+  return STATE.recetasBase;
+}
+
+function recetaBaseCosto(recetaBase) {
+  // Usa el COSTO TOTAL que el usuario ingresó/edió en la receta base.
+  const manual = parseFloat(recetaBase.costo_total);
+  if (!isNaN(manual)) return manual;
+  // Solo si no hay costo ingresado, lo calcula desde los ingredientes.
+  return (recetaBase.insumos || []).reduce((sum, it) =>
+    sum + (parseFloat(it.cantidad) || 0) * (parseFloat(it.costo_unitario) || 0), 0);
+}
+
+window.loadRecetasBasePanel = async function() {
+  const tbody = document.getElementById('tbody-recetas-base');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="6" class="loading-cell">Cargando recetas base...</td></tr>';
+
+  try {
+    const [recetasBase, productosRes] = await Promise.all([
+      fetch('/api/recetas-base').then(r => { if (!r.ok) throw new Error(); return r.json(); }),
+      fetch('/api/productos').then(r => { if (!r.ok) throw new Error(); return r.json(); })
+    ]);
+    STATE.recetasBase = recetasBase || [];
+
+    const productos = (productosRes.productos || []);
+    // Mapa: receta_base_id -> [productos]
+    const porBase = {};
+    productos.forEach(p => {
+      if (p.receta_base_id) {
+        (porBase[p.receta_base_id] = porBase[p.receta_base_id] || []).push(p.nombre);
+      }
+    });
+
+    // KPIs
+    const elTotal = document.getElementById('kpi-total-recetas-base');
+    const elVinc = document.getElementById('kpi-productos-vinculados');
+    const elCosto = document.getElementById('kpi-costo-promedio');
+    if (elTotal) elTotal.textContent = STATE.recetasBase.length;
+    if (elVinc) elVinc.textContent = Object.values(porBase).reduce((s, arr) => s + arr.length, 0);
+    if (elCosto && STATE.recetasBase.length > 0) {
+      const prom = STATE.recetasBase.reduce((s, rb) => s + recetaBaseCosto(rb), 0) / STATE.recetasBase.length;
+      elCosto.textContent = `$${prom.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+    } else if (elCosto) {
+      elCosto.textContent = '$0';
+    }
+
+    if (!STATE.recetasBase || STATE.recetasBase.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="loading-cell">No hay recetas base creadas. Crea una con "Nueva Receta Base".</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = STATE.recetasBase.map(rb => {
+      const nIng = (rb.insumos || []).length;
+      const costo = recetaBaseCosto(rb);
+      const productosNombres = porBase[rb.id] || [];
+      const listaProductos = productosNombres.length > 0
+        ? productosNombres.slice(0, 3).join(', ') + (productosNombres.length > 3 ? ` (+${productosNombres.length - 3})` : '')
+        : '<span style="color:var(--color-muted);">Sin asignar</span>';
+return `
+        <tr>
+          <td>${rb.id}</td>
+          <td><strong>${rb.nombre}</strong></td>
+          <td>${nIng} ingrediente${nIng !== 1 ? 's' : ''}</td>
+          <td>$${costo.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+          <td>${listaProductos}</td>
+          <td>
+            <div class="table-actions">
+              <button class="table-btn btn-edit" onclick="showRecetaBaseModal(${rb.id})">Editar</button>
+              <button class="table-btn ${rb.activa_batido ? 'btn-restock' : 'btn-edit'}" onclick="toggleRecetaBaseBatido(${rb.id}, ${rb.activa_batido ? 0 : 1})" style="${rb.activa_batido ? 'background:var(--success); color:#000;' : ''}">${rb.activa_batido ? '🧃 En batido' : '🧃 Mostrar en batido'}</button>
+              <button class="table-btn btn-danger" onclick="eliminarRecetaBase(${rb.id}, '${rb.nombre.replace(/'/g, "\\'")}')" style="background:var(--danger); color:white; border:none;">Eliminar</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  } catch (err) {
+    console.error('Error cargando recetas base:', err);
+    tbody.innerHTML = '<tr><td colspan="6" class="loading-cell">Error al cargar recetas base.</td></tr>';
+  }
+};
+
+window.eliminarRecetaBase = async function(id, nombre) {
+  if (!confirm(`¿Eliminar la receta base "${nombre}"?\n\nLos productos que la usan quedarán sin receta base (conservan sus ingredientes propios).`)) return;
+  try {
+    const res = await fetch(`/api/recetas-base/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const d = await res.json();
+      throw new Error(d.error || 'Error al eliminar');
+    }
+    STATE.recetasBase = STATE.recetasBase.filter(rb => rb.id !== id);
+    window.loadRecetasBasePanel();
+    showToast(`Receta base "${nombre}" eliminada.`, 'success');
+  } catch (err) {
+    showToast(err.message, 'danger');
+  }
+};
+
+window.toggleRecetaBaseBatido = async function(id, activa) {
+  try {
+    const res = await fetch(`/api/recetas-base/${id}/incluir-batido`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ activa_batido: !!activa })
+    });
+    if (!res.ok) {
+      const d = await res.json();
+      throw new Error(d.error || 'Error al actualizar');
+    }
+    const rb = STATE.recetasBase.find(x => x.id === id);
+    if (rb) rb.activa_batido = !!activa;
+    window.loadRecetasBasePanel();
+    showToast(activa ? 'Receta base incluida en los batidos.' : 'Receta base retirada de los batidos.', 'success');
+  } catch (err) {
+    showToast(err.message, 'danger');
+  }
+};
+
+window.showRecetaBaseModal = async function(id) {
+  try {
+    await ensureRecetasBase();
+  } catch (e) {
+    showToast('Error cargando recetas base', 'danger');
+    return;
+  }
+
+  let editando = null;
+  if (id) {
+    editando = (STATE.recetasBase || []).find(rb => rb.id === id) || null;
+  }
+
+  const insumosOptions = `<option value="" disabled selected>-- Seleccione un insumo --</option>` + STATE.insumos.map(i => `<option value="${i.id}">${i.nombre} (${i.unidad_medida})</option>`).join('');
+
+  openGenericModal(
+    editando
+      ? `<i data-lucide="edit"></i> Editar Receta Base`
+      : `<i data-lucide="layers"></i> Nueva Receta Base`,
+    `
+    <div class="form-group">
+      <label>Nombre de la Receta Base</label>
+      <input type="text" id="rb-nombre" value="${editando ? (editando.nombre || '') : ''}" placeholder="Ej: Masa Base, Batido de Vainilla Estándar">
+    </div>
+    <div class="receta-section" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-color);">
+      <h4>Ingredientes de la Plantilla</h4>
+      <div id="rb-items" style="margin-bottom: 10px;"></div>
+      <button type="button" class="action-btn secondary" id="btn-rb-add-row" style="font-size: 12px; padding: 5px 10px;">
+        <i data-lucide="plus"></i> Añadir Insumo
+      </button>
+      <small style="color:var(--text-muted); font-size:12px; display:block; margin-top:8px;">
+        Estos insumos se descuentan en TODOS los productos que usen esta plantilla.
+      </small>
+    </div>
+<div class="form-group" style="margin-top: 12px;">
+      <label>Costo de la Plantilla (total editable)</label>
+      <input type="number" step="any" id="rb-costo-total" value="${editando && editando.costo_total ? editando.costo_total : ''}" min="0" placeholder="0" style="width:100%; padding:10px; border-radius:6px; border:1px solid var(--border-color); background:var(--bg-app); color:var(--color-text);">
+      <div id="rb-costo-preview" style="font-size: 0.9rem; color: var(--color-muted); margin-top:6px;">Costo calculado: $0</div>
+    </div>
+    `,
+    async () => {
+      const nombre = document.getElementById('rb-nombre').value.trim();
+      if (!nombre) { showToast('El nombre es obligatorio.', 'warning'); return; }
+      const insumos = [];
+      document.querySelectorAll('#rb-items .receta-row').forEach(row => {
+        const ins_id = row.querySelector('.receta-insumo').value;
+        const cant = parseFloat(row.querySelector('.receta-cantidad').value) || 0;
+        if (ins_id && cant > 0) {
+          const costoInput = row.querySelector('.receta-costo');
+          let costo = costoInput ? parseFloat(costoInput.value) : NaN;
+          if (isNaN(costo)) {
+            const insObj = STATE.insumos.find(i => i.id == ins_id);
+            costo = insObj ? parseFloat(insObj.costo_unitario) : 0;
+          }
+          insumos.push({ insumo_id: parseInt(ins_id), cantidad: cant, costo });
+        }
+      });
+      if (insumos.length === 0) { showToast('Agrega al menos un ingrediente.', 'warning'); return; }
+
+try {
+        const method = editando ? 'PUT' : 'POST';
+        const url = editando ? `/api/recetas-base/${editando.id}` : '/api/recetas-base';
+        const totalInputVal = document.getElementById('rb-costo-total').value;
+        const costo_total = parseFloat(totalInputVal);
+        const res = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nombre, insumos, costo_total: isNaN(costo_total) ? 0 : costo_total })
+        });
+        if (!res.ok) {
+          const d = await res.json();
+          throw new Error(d.error || 'Error al guardar');
+        }
+        closeGenericModal();
+        STATE.recetasBase = [];
+        await ensureRecetasBase();
+        window.loadRecetasBasePanel();
+        showToast(editando ? 'Receta base actualizada.' : 'Receta base creada.', 'success');
+      } catch (err) {
+        showToast(err.message, 'danger');
+      }
+    }
+  );
+
+const items = document.getElementById('rb-items');
+  const addRowBtn = document.getElementById('btn-rb-add-row');
+  const costoPreview = document.getElementById('rb-costo-preview');
+  const totalInput = document.getElementById('rb-costo-total');
+  let rbManualTotal = !!totalInput && totalInput.value.trim() !== '';
+
+  const crearFila = (insumo_id, cantidad, costo) => {
+    const row = document.createElement('div');
+    row.style.display = 'flex';
+    row.style.gap = '10px';
+    row.style.marginBottom = '10px';
+    row.className = 'receta-row';
+    row.innerHTML = `
+      <select class="receta-insumo" style="flex: 2; min-width: 0;">${insumosOptions.replace('selected', '')}</select>
+      <input type="number" step="any" class="receta-cantidad" value="${cantidad || ''}" placeholder="Cant." style="flex: 1; min-width: 0;" min="0.1" step="0.1">
+      <input type="number" step="any" class="receta-costo" value="${costo != null ? costo : ''}" placeholder="Costo" style="flex: 1; min-width: 0;" min="0" step="0.01">
+      <button type="button" class="action-btn" onclick="this.parentElement.remove(); recalcRbCosto();" style="background:var(--danger); border:none; padding:5px 10px;"><i data-lucide="trash-2"></i></button>
+    `;
+    const sel = row.querySelector('.receta-insumo');
+    sel.value = insumo_id || '';
+    items.appendChild(row);
+    lucide.createIcons();
+  };
+
+  window.recalcRbCosto = function() {
+    let total = 0;
+    document.querySelectorAll('#rb-items .receta-row').forEach(row => {
+      const ins_id = row.querySelector('.receta-insumo').value;
+      const cant = parseFloat(row.querySelector('.receta-cantidad').value) || 0;
+      const costoInput = row.querySelector('.receta-costo');
+      let costo = costoInput ? parseFloat(costoInput.value) : NaN;
+      if (isNaN(costo)) {
+        const insObj = STATE.insumos.find(i => i.id == ins_id);
+        costo = insObj ? parseFloat(insObj.costo_unitario) : 0;
+      }
+      total += cant * (costo || 0);
+    });
+costoPreview.textContent = `Costo calculado: $${total.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+    if (totalInput && !rbManualTotal) totalInput.value = total;
+  };
+  if (totalInput) totalInput.addEventListener('input', () => { rbManualTotal = true; });
+
+  if (editando && editando.insumos) {
+    editando.insumos.forEach(ing => crearFila(ing.insumo_id, ing.cantidad, ing.costo_unitario));
+  }
+
+  addRowBtn.addEventListener('click', () => {
+    crearFila(null, null);
+    recalcRbCosto();
+  });
+
+  items.addEventListener('input', (e) => {
+    if (e.target.classList.contains('receta-cantidad') || e.target.classList.contains('receta-insumo') || e.target.classList.contains('receta-costo')) recalcRbCosto();
+  });
+
+  recalcRbCosto();
+};
+
 // Funciones para Modal de Productos y Recetas
-window.showAddProductoModal = function() {
+window.showAddProductoModal = async function() {
+  try { await ensureRecetasBase(); } catch (e) {}
   DOM.genericModalTitle.innerHTML = '<i data-lucide="tag"></i> Nuevo Producto (con Receta)';
   
   let insumosOptions = STATE.insumos.map(i => `<option value="${i.id}">${i.nombre} (${i.unidad_medida})</option>`).join('');
+  let recetasBaseOptions = `<option value="">-- Sin receta base --</option>` + STATE.recetasBase.map(rb => `<option value="${rb.id}">${rb.nombre}</option>`).join('');
   
   DOM.genericModalBody.innerHTML = `
     <div class="form-group">
@@ -1531,6 +1803,11 @@ window.showAddProductoModal = function() {
       <select id="prod-categoria">
         ${STATE.categories.filter(c => c.id !== 'todos').map(c => `<option value="${c.id}">${c.nombre}</option>`).join('')}
       </select>
+    </div>
+    <div class="form-group">
+      <label>Receta Base (Plantilla)</label>
+      <select id="prod-receta-base">${recetasBaseOptions}</select>
+      <small style="color:var(--text-muted); font-size:12px;">Al asignar una plantilla, su costo y sus insumos se suman automáticamente.</small>
     </div>
     <div class="form-group">
       <label>Precio de Venta (COP)</label>
@@ -1582,6 +1859,7 @@ window.showAddProductoModal = function() {
     const categoria = document.getElementById('prod-categoria').value;
     const precio_venta = document.getElementById('prod-precio').value;
     const es_batido = document.getElementById('prod-es-batido').checked;
+    const receta_base_id = parseInt(document.getElementById('prod-receta-base').value) || null;
     
     const rows = document.querySelectorAll('.receta-row');
     const receta = [];
@@ -1599,6 +1877,12 @@ window.showAddProductoModal = function() {
       }
     });
 
+// El costo: si hay receta base, toma su COSTO TOTAL editable; si no, suma la receta propia
+    if (receta_base_id) {
+      const rbBase = STATE.recetasBase.find(r => r.id === receta_base_id);
+      if (rbBase) costo_produccion_calc = parseFloat(rbBase.costo_total) || 0;
+    }
+
     let costo_manual = parseFloat(document.getElementById('prod-costo').value) || 0;
     let costo_produccion = costo_manual > 0 ? costo_manual : costo_produccion_calc;
 
@@ -1606,7 +1890,7 @@ window.showAddProductoModal = function() {
       const res = await fetch('/api/productos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nombre, categoria, precio_venta, costo_produccion, receta, es_batido })
+        body: JSON.stringify({ nombre, categoria, precio_venta, costo_produccion, receta, es_batido, receta_base_id })
       });
       if (!res.ok) {
         const d = await res.json();
@@ -1627,9 +1911,12 @@ window.showEditProductoModal = async function(prod_id) {
   const prod = STATE.products.find(p => p.id === prod_id);
   if (!prod) return;
 
+  try { await ensureRecetasBase(); } catch (e) {}
+
   DOM.genericModalTitle.innerHTML = `<i data-lucide="edit"></i> Editar Producto: ${prod.nombre}`;
   
   let insumosOptions = `<option value="" disabled selected>-- Seleccione un insumo --</option>` + STATE.insumos.map(i => `<option value="${i.id}">${i.nombre} (${i.unidad_medida})</option>`).join('');
+  let recetasBaseOptions = `<option value="">-- Sin receta base --</option>` + STATE.recetasBase.map(rb => `<option value="${rb.id}">${rb.nombre}</option>`).join('');
   
   DOM.genericModalBody.innerHTML = `
     <div class="form-group">
@@ -1641,6 +1928,11 @@ window.showEditProductoModal = async function(prod_id) {
       <select id="edit-prod-categoria">
         ${STATE.categories.filter(c => c.id !== 'todos').map(c => `<option value="${c.id}" ${c.nombre === prod.categoria ? 'selected' : ''}>${c.nombre}</option>`).join('')}
       </select>
+    </div>
+    <div class="form-group">
+      <label>Receta Base (Plantilla)</label>
+      <select id="edit-prod-receta-base">${recetasBaseOptions}</select>
+      <small style="color:var(--text-muted); font-size:12px;">Los ingredientes de la plantilla se muestran abajo (no editables aquí).</small>
     </div>
     <div class="form-group">
       <label>Precio de Venta (COP)</label>
@@ -1672,6 +1964,9 @@ window.showEditProductoModal = async function(prod_id) {
   
   DOM.genericModal.classList.add('open');
 
+  const selectBase = document.getElementById('edit-prod-receta-base');
+  if (selectBase) selectBase.value = prod.receta_base_id || '';
+
   const recetaItems = document.getElementById('edit-receta-items');
   const addRowBtn = document.getElementById('btn-edit-add-receta-row');
 
@@ -1681,11 +1976,41 @@ window.showEditProductoModal = async function(prod_id) {
     const recetaActual = await recetaRes.json();
     recetaItems.innerHTML = '';
     
-    if (recetaActual.length === 0) {
+    const baseItems = (recetaActual || []).filter(item => parseInt(item.is_base) === 1);
+    const specificItems = (recetaActual || []).filter(item => parseInt(item.is_base) !== 1);
+
+    // Bloque de ingredientes de la receta base (solo lectura)
+    if (baseItems.length > 0) {
+      const baseBlock = document.createElement('div');
+      baseBlock.style.marginBottom = '12px';
+      baseBlock.style.padding = '10px 12px';
+      baseBlock.style.background = 'rgba(0,242,254,0.05)';
+      baseBlock.style.border = '1px solid rgba(0,242,254,0.2)';
+      baseBlock.style.borderRadius = '8px';
+      baseBlock.innerHTML = `
+        <div style="font-weight:700; font-size:0.85rem; color:var(--accent-cyan); margin-bottom:6px;">
+          🧬 Ingredientes de la Receta Base (no editables aquí)
+        </div>
+        ${baseItems.map(item => `
+          <div style="display:flex; justify-content:space-between; font-size:0.8rem; padding:2px 0;">
+            <span>${item.nombre} <span style="color:var(--color-muted);">(${item.unidad_medida})</span></span>
+            <span>${parseFloat(item.cantidad).toLocaleString(undefined,{maximumFractionDigits:6})} × $${(parseFloat(item.costo_unitario)||0).toLocaleString(undefined,{maximumFractionDigits:6})}</span>
+          </div>`).join('')}
+      `;
+      recetaItems.appendChild(baseBlock);
+    }
+
+    if (specificItems.length === 0 && baseItems.length > 0) {
+      const p = document.createElement('p');
+      p.className = 'text-muted';
+      p.style.fontSize = '12px';
+      p.innerHTML = 'Sin ingredientes adicionales. Puedes añadir extras específicos de este producto.';
+      recetaItems.appendChild(p);
+    } else if (specificItems.length === 0 && baseItems.length === 0) {
       recetaItems.innerHTML = '<p class="text-muted" style="font-size:12px;">Sin receta configurada. (Stock no vinculado a inventario)</p>';
     }
 
-    recetaActual.forEach(item => {
+    specificItems.forEach(item => {
       const row = document.createElement('div');
       row.style.display = 'flex';
       row.style.gap = '10px';
@@ -1728,6 +2053,7 @@ window.showEditProductoModal = async function(prod_id) {
     const categoria = document.getElementById('edit-prod-categoria').value;
     const precio_venta = document.getElementById('edit-prod-precio').value;
     const es_batido = document.getElementById('edit-prod-es-batido').checked;
+    const receta_base_id = parseInt(document.getElementById('edit-prod-receta-base').value) || null;
     
     const rows = document.querySelectorAll('#edit-receta-items .receta-row');
     const receta = [];
@@ -1745,11 +2071,17 @@ window.showEditProductoModal = async function(prod_id) {
       }
     });
 
+// El costo: si hay receta base, toma su COSTO TOTAL editable; si no, suma la receta propia
+    if (receta_base_id) {
+      const rbBase = STATE.recetasBase.find(r => r.id === receta_base_id);
+      if (rbBase) costo_produccion_calc = parseFloat(rbBase.costo_total) || 0;
+    }
+
     let costo_manual = parseFloat(document.getElementById('edit-prod-costo').value) || 0;
     let costo_produccion = costo_manual > 0 ? costo_manual : costo_produccion_calc;
 
     try {
-      const bodyData = { nombre, categoria, precio_venta, costo_produccion, receta, es_batido, activo: true };
+      const bodyData = { nombre, categoria, precio_venta, costo_produccion, receta, es_batido, activo: true, receta_base_id };
       const res = await fetch(`/api/productos/${prod_id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -2764,7 +3096,8 @@ async function loadProductsFromAPI() {
         categoria: p.categoria || 'General',
         stock: p.stock_disponible || 0,
         stock_disponible: p.stock_disponible || 0,
-        es_batido: p.es_batido ? 1 : 0
+        es_batido: p.es_batido ? 1 : 0,
+        receta_base_id: p.receta_base_id || null
       }));
 
       // Actualizar categorías dinámicamente
@@ -3203,7 +3536,8 @@ async function cerrarTurnoActual() {
           declarado_zelle: decZelle,
           declarado_binance: decBinance,
           declarado_efectivo_pesos: decPesos,
-          declarado_bancolombia: decBanco
+          declarado_bancolombia: decBanco,
+          tasas: { USD: rateUsd, VES: rateVes }
         }) // Backend no guarda Efectivo USD separado ahora mismo, lo suma en monto_declarado_cop
       });
       const d = await res.json();
@@ -3641,6 +3975,7 @@ async function handleQuickLogin(sesion) {
       usuario_id: usuarioId,
       nombre: dataLogin.usuario.nombre,
       permisos: permisos,
+      token: dataLogin.token || null,
       sesion_id: sesion.id
     }));
     
@@ -3812,6 +4147,17 @@ async function iniciarTurno() {
     }
 
     // ── ABRIR SESIÓN DE CAJA ──────────────────────────
+    // Guardar el token de autenticación ANTES de llamar a /api/caja/abrir
+    // porque ese endpoint ahora está protegido.
+    const permisosLogin = dataLogin.usuario.permisos || ['pos', 'caja'];
+    sessionStorage.setItem('bf360_auth', JSON.stringify({
+      usuario_id: usuarioId,
+      nombre: nombreCajero,
+      permisos: permisosLogin,
+      token: dataLogin.token || null,
+      sesion_id: null
+    }));
+
     const fondo = parseFloat(fondoInput.value) || 0;
     const fondoUsdInput = document.getElementById('turno-fondo-usd');
     const fondoUsd = fondoUsdInput ? (parseFloat(fondoUsdInput.value) || 0) : 0;
@@ -3832,14 +4178,12 @@ async function iniciarTurno() {
 
     TURNO_STATE.sesionActiva = dataCaja.sesion;
     
-    // Guardar autenticación del dispositivo en sessionStorage
-    const permisos = dataLogin.usuario.permisos || ['pos', 'caja'];
-    sessionStorage.setItem('bf360_auth', JSON.stringify({
-      usuario_id: usuarioId,
-      nombre: nombreCajero,
-      permisos: permisos,
-      sesion_id: dataCaja.sesion.id
-    }));
+    // Guardar la sesión activa en la autenticación del dispositivo
+    const authGuardado = JSON.parse(sessionStorage.getItem('bf360_auth') || 'null');
+    if (authGuardado) {
+      authGuardado.sesion_id = dataCaja.sesion.id;
+      sessionStorage.setItem('bf360_auth', JSON.stringify(authGuardado));
+    }
     
     hideTurnoScreen(dataCaja.sesion, nombreCajero);
     showToast(`✅ Bienvenido/a ${nombreCajero}! Turno ${turnoSeleccionado} iniciado.`, 'success');

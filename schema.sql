@@ -33,7 +33,24 @@ CREATE TABLE mermas (
     CONSTRAINT fk_mermas_insumo FOREIGN KEY (insumo_id) REFERENCES insumos(id) ON DELETE CASCADE
 );
 
--- 3. Catálogo de Productos
+-- 3. Tabla de Recetas Base (Plantillas Reutilizables)
+CREATE TABLE recetas_base (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(150) NOT NULL UNIQUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE recetas_base_insumos (
+    receta_base_id INT NOT NULL,
+    insumo_id INT NOT NULL,
+    cantidad NUMERIC(12, 4) NOT NULL CHECK (cantidad > 0.0000),
+    PRIMARY KEY (receta_base_id, insumo_id),
+    CONSTRAINT fk_recetas_base FOREIGN KEY (receta_base_id) REFERENCES recetas_base(id) ON DELETE CASCADE,
+    CONSTRAINT fk_recetas_base_insumo FOREIGN KEY (insumo_id) REFERENCES insumos(id) ON DELETE CASCADE
+);
+
+-- 4. Catálogo de Productos
 CREATE TABLE productos (
     id SERIAL PRIMARY KEY,
     nombre VARCHAR(150) NOT NULL UNIQUE,
@@ -42,15 +59,18 @@ CREATE TABLE productos (
     precio_venta DOUBLE PRECISION NOT NULL DEFAULT 0.00 CHECK (precio_venta >= 0.00),
     activo BOOLEAN DEFAULT TRUE,
     es_batido BOOLEAN DEFAULT FALSE,
+    receta_base_id INT, -- Referencia a una Receta Base opcional
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_productos_receta_base FOREIGN KEY (receta_base_id) REFERENCES recetas_base(id) ON DELETE SET NULL
 );
 
 -- Índices para optimizar el catálogo de ventas
 CREATE INDEX idx_productos_nombre ON productos(nombre);
+CREATE INDEX idx_productos_receta_base ON productos(receta_base_id);
 
--- 4. Tabla de Recetas / Consumo de Insumos (Relación Muchos a Muchos)
--- Conecta qué insumos y en qué cantidad consume un producto cuando se vende.
+-- 5. Tabla de Recetas Específicas / Consumo Adicional (Relación Muchos a Muchos)
+-- Conecta qué insumos específicos (aparte de la base) y en qué cantidad consume un producto cuando se vende.
 CREATE TABLE recetas (
     producto_id INT NOT NULL,
     insumo_id INT NOT NULL,
@@ -162,7 +182,10 @@ CREATE TABLE gastos (
     moneda VARCHAR(10) NOT NULL,    -- 'COP', 'USD', 'VES'
     tasa_cambio NUMERIC(12, 4) NOT NULL DEFAULT 1.0000 CHECK (tasa_cambio > 0.0000),
     monto_cop NUMERIC(12, 2) NOT NULL CHECK (monto_cop > 0.00),
-    fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    sesion_caja_id INTEGER,
+    metodo_pago VARCHAR(50) NOT NULL DEFAULT 'Efectivo COP',
+    CONSTRAINT fk_gastos_sesion FOREIGN KEY (sesion_caja_id) REFERENCES sesiones_caja(id) ON DELETE SET NULL
 );
 
 CREATE INDEX idx_gastos_fecha ON gastos(fecha);
@@ -170,13 +193,23 @@ CREATE INDEX idx_gastos_fecha ON gastos(fecha);
 -- 11. Arqueo y Sesiones de Caja (Turnos)
 CREATE TABLE sesiones_caja (
     id SERIAL PRIMARY KEY,
-    usuario VARCHAR(100) NOT NULL,
+    usuario_id INTEGER NOT NULL,
     fecha_apertura TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     fecha_cierre TIMESTAMP,
     fondo_inicial_cop NUMERIC(12, 2) NOT NULL DEFAULT 0.00 CHECK (fondo_inicial_cop >= 0.00),
-    total_ventas NUMERIC(12, 2) DEFAULT 0.00,
-    total_gastos NUMERIC(12, 2) DEFAULT 0.00,
-    diferencia_caja NUMERIC(12, 2)
+    fondo_inicial_usd NUMERIC(12, 2) NOT NULL DEFAULT 0.00 CHECK (fondo_inicial_usd >= 0.00),
+    total_ventas_cop NUMERIC(12, 2) DEFAULT 0.00,
+    total_gastos_cop NUMERIC(12, 2) DEFAULT 0.00,
+    diferencia_caja NUMERIC(12, 2),
+    estado TEXT NOT NULL DEFAULT 'Abierta',
+    turno TEXT NOT NULL DEFAULT 'Mañana',
+    nombre_cajero TEXT,
+    declarado_efectivo_bs REAL DEFAULT 0.0,
+    declarado_zelle REAL DEFAULT 0.0,
+    declarado_binance REAL DEFAULT 0.0,
+    declarado_efectivo_pesos REAL DEFAULT 0.0,
+    declarado_bancolombia REAL DEFAULT 0.0,
+    CONSTRAINT fk_sesiones_caja_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
 );
 
 CREATE INDEX idx_sesiones_caja_apertura ON sesiones_caja(fecha_apertura);
@@ -208,15 +241,29 @@ RETURNS TRIGGER AS $$
 BEGIN
     UPDATE insumos
     SET stock_actual = stock_actual - (
-        SELECT r.cantidad * NEW.cantidad
-        FROM recetas r
-        WHERE r.producto_id = NEW.producto_id AND r.insumo_id = insumos.id
+        -- Insumos de receta individual
+        COALESCE((
+            SELECT r.cantidad * NEW.cantidad
+            FROM recetas r
+            WHERE r.producto_id = NEW.producto_id AND r.insumo_id = insumos.id
+        ), 0)
+        +
+        -- Insumos de receta base
+        COALESCE((
+            SELECT rbi.cantidad * NEW.cantidad
+            FROM productos p
+            JOIN recetas_base_insumos rbi ON p.receta_base_id = rbi.receta_base_id
+            WHERE p.id = NEW.producto_id AND rbi.insumo_id = insumos.id
+        ), 0)
     ),
     updated_at = CURRENT_TIMESTAMP
     WHERE id IN (
-        SELECT insumo_id 
-        FROM recetas 
-        WHERE producto_id = NEW.producto_id
+        -- Todos los insumos involucrados (individuales + base)
+        SELECT insumo_id FROM recetas WHERE producto_id = NEW.producto_id
+        UNION
+        SELECT rbi.insumo_id FROM productos p
+        JOIN recetas_base_insumos rbi ON p.receta_base_id = rbi.receta_base_id
+        WHERE p.id = NEW.producto_id
     );
     RETURN NEW;
 END;

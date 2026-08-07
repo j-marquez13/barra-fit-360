@@ -6,13 +6,14 @@ import fs from 'fs';
 import path from 'path';
 import { processSale, anularVenta } from './controllers/salesController.js';
 import { createClient, getClients, getClientDetails, processAbono, registrarDeuda, deleteAbono, updateClient } from './controllers/creditController.js';
-import { getInsumos, createInsumo, updateInsumo, restockInsumo, getMermas, createMerma, getProductos, createProducto, updateProducto, deleteProducto, deleteInsumo, getValorizacionInventario, getOrdenCompra, getProductoReceta } from './controllers/inventoryController.js';
+import { getInsumos, createInsumo, updateInsumo, restockInsumo, getMermas, createMerma, getProductos, createProducto, updateProducto, deleteProducto, deleteInsumo, getValorizacionInventario, getOrdenCompra, getProductoReceta, getRecetasBase, createRecetaBase, updateRecetaBase, deleteRecetaBase, toggleRecetaBaseBatido } from './controllers/inventoryController.js';
 import { cierreDiario, cierreSemanal, historialVentas } from './controllers/reportsController.js';
 import { listarGastos, registrarGasto } from './controllers/expensesController.js';
 import { estadoCaja, abrirCaja, cerrarCaja } from './controllers/cashierController.js';
 import { getSaldos, transferirFondos } from './controllers/treasuryController.js';
 import { initializeDatabase } from './initDb.js';
 import * as db from './db.js';
+import { signToken, verifyToken, requireAuth, requireAdmin } from './auth.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -22,6 +23,24 @@ app.use(express.json());
 
 // Servir archivos estáticos del frontend
 app.use(express.static('public'));
+
+// ============================================
+// AUTH MIDDLEWARE — Protege todas las rutas /api
+// excepto las públicas (login, salud, listar usuarios y estado de caja).
+// ============================================
+const PUBLIC_ROUTES = [
+  /^\/api\/health/,
+  /^\/api\/auth\/login/,
+  /^\/api\/usuarios$/,
+  /^\/api\/caja\/estado/
+];
+
+app.use('/api', (req, res, next) => {
+  const fullPath = (req.baseUrl + req.path).split('?')[0];
+  const isPublic = PUBLIC_ROUTES.some(re => re.test(fullPath));
+  if (isPublic) return next();
+  return requireAuth(req, res, next);
+});
 
 // Ruta principal para verificar salud del servidor
 app.get('/api/health', (req, res) => {
@@ -64,7 +83,7 @@ app.get('/api/fix-timezone', async (req, res) => {
 });
 
 // Endpoint para descargar la base de datos (Backup)
-app.get('/api/backup-db', (req, res) => {
+app.get('/api/backup-db', requireAdmin, (req, res) => {
   const dbFile = process.env.DB_PATH || 'database.sqlite';
   const dbPath = path.resolve(dbFile);
   
@@ -86,6 +105,12 @@ app.post('/api/productos', createProducto);
 app.put('/api/productos/:id', updateProducto);
 app.get('/api/productos/:id/receta', getProductoReceta);
 app.delete('/api/productos/:id', deleteProducto);
+
+app.get('/api/recetas-base', getRecetasBase);
+app.post('/api/recetas-base', createRecetaBase);
+app.put('/api/recetas-base/:id', updateRecetaBase);
+app.delete('/api/recetas-base/:id', deleteRecetaBase);
+app.post('/api/recetas-base/:id/incluir-batido', toggleRecetaBaseBatido);
 app.get('/api/insumos', getInsumos);
 app.post('/api/insumos', createInsumo);
 app.put('/api/insumos/:id', updateInsumo);
@@ -151,7 +176,7 @@ app.get('/api/usuarios', async (req, res) => {
 });
 
 // Crear nuevo usuario con contraseña hasheada y permisos
-app.post('/api/usuarios', async (req, res) => {
+app.post('/api/usuarios', requireAdmin, async (req, res) => {
   try {
     const { nombre, turno, password, permisos } = req.body;
     if (!nombre || !turno) return res.status(400).json({ error: 'Nombre y turno son requeridos' });
@@ -171,7 +196,7 @@ app.post('/api/usuarios', async (req, res) => {
 });
 
 // Editar usuario existente (nombre, turno, permisos, y opcionalmente password)
-app.put('/api/usuarios/:id', async (req, res) => {
+app.put('/api/usuarios/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { nombre, turno, permisos, password } = req.body;
@@ -200,7 +225,7 @@ app.put('/api/usuarios/:id', async (req, res) => {
 });
 
 // Cambiar contraseña de usuario
-app.put('/api/usuarios/:id/password', async (req, res) => {
+app.put('/api/usuarios/:id/password', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { password_actual, password_nueva } = req.body;
@@ -253,6 +278,7 @@ app.post('/api/auth/login', async (req, res) => {
     // Autenticación exitosa — devolver datos sin el hash
     res.json({
       ok: true,
+      token: signToken(user),
       usuario: { id: user.id, nombre: user.nombre, rol: user.rol, turno: user.turno, permisos: permisosArray }
     });
   } catch (err) {
@@ -267,7 +293,7 @@ app.post('/api/auth/login', async (req, res) => {
 app.get('/api/tesoreria/saldos', getSaldos);
 
 // Ruta para descargar la base de datos (Backup manual)
-app.get('/api/backup', async (req, res) => {
+app.get('/api/backup', requireAdmin, async (req, res) => {
   const isPg = !!(process.env.DATABASE_URL || process.env.PGHOST);
   if (isPg) {
     return res.status(400).send('La base de datos actual es PostgreSQL, no SQLite. El respaldo debe hacerse desde Railway.');
@@ -290,7 +316,32 @@ app.get('/api/backup', async (req, res) => {
 });
 
 // Ruta para subir/restaurar la base de datos
+// Permite autenticarse con token de administrador (desde la app) o
+// con la contraseña de administrador (desde restaurar.html).
 app.post('/api/restore-db', express.raw({ type: '*/*', limit: '100mb' }), async (req, res) => {
+  // Verificar autenticación: token admin O contraseña admin
+  const headerToken = req.headers['x-auth-token']
+    || (req.headers.authorization && req.headers.authorization.replace(/^Bearer\s+/i, ''));
+  const user = verifyToken(headerToken);
+  let isAdmin = !!user && (user.rol === 'Administrador'
+    || (Array.isArray(user.permisos) ? user.permisos.includes('all') : (() => { try { return JSON.parse(user.permisos).includes('all'); } catch { return false; } })()));
+
+  if (!isAdmin) {
+    const pwd = req.headers['x-admin-password'];
+    if (pwd) {
+      const admins = await db.query("SELECT id, password_hash FROM usuarios WHERE rol = 'Administrador'");
+      for (const a of admins) {
+        if (a.password_hash && await bcrypt.compare(pwd, a.password_hash)) {
+          isAdmin = true;
+          break;
+        }
+      }
+    }
+  }
+  if (!isAdmin) {
+    return res.status(401).send('No autorizado. Se requiere autenticación de administrador.');
+  }
+
   const isPg = !!(process.env.DATABASE_URL || process.env.PGHOST);
   if (isPg) return res.status(400).send('No se puede restaurar SQLite sobre PostgreSQL.');
   
@@ -314,7 +365,7 @@ app.post('/api/tesoreria/transferir', transferirFondos);
 // ============================================
 // RUTA DE RESET DEL SISTEMA (PONER STOCK EN 0, BORRAR VENTAS, CRÉDITOS, ETC.)
 // ============================================
-app.post('/api/reset-sistema', async (req, res) => {
+app.post('/api/reset-sistema', requireAdmin, async (req, res) => {
   const { confirmacion } = req.body;
   if (confirmacion !== 'RESET TOTAL') {
     return res.status(400).json({ error: 'Debe enviar confirmacion: "RESET TOTAL" para proceder.' });

@@ -117,7 +117,7 @@ export async function getClientDetails(req, res) {
     // Obtener compras asociadas
     const ventas = await db.query(`
       SELECT DISTINCT v.id, v.fecha, v.total, v.notas,
-             (SELECT COALESCE(SUM(monto_base), 0) FROM pagos_ventas WHERE venta_id = v.id AND metodo_pago = 'Crédito') as monto_credito
+             (SELECT COALESCE(SUM(monto_base), 0) FROM pagos_ventas pv JOIN ventas vv ON pv.venta_id = vv.id WHERE pv.venta_id = v.id AND pv.metodo_pago = 'Crédito' AND vv.tipo_transaccion != 'Anulada') as monto_credito
       FROM ventas v
       WHERE v.cliente_id = $1
       ORDER BY v.fecha DESC
