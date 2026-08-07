@@ -37,6 +37,8 @@ CREATE TABLE mermas (
 CREATE TABLE recetas_base (
     id SERIAL PRIMARY KEY,
     nombre VARCHAR(150) NOT NULL UNIQUE,
+    costo_total DOUBLE PRECISION DEFAULT 0.0,
+    activa_batido BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -119,6 +121,8 @@ CREATE TABLE detalle_ventas (
     cantidad NUMERIC(12, 4) NOT NULL CHECK (cantidad > 0.0000),
     precio_unitario NUMERIC(12, 2) NOT NULL CHECK (precio_unitario >= 0.00),
     subtotal NUMERIC(12, 2) NOT NULL CHECK (subtotal >= 0.00),
+    costo_unitario DOUBLE PRECISION,
+    receta_base_ids TEXT,
     CONSTRAINT fk_detalle_ventas_venta FOREIGN KEY (venta_id) REFERENCES ventas(id) ON DELETE CASCADE,
     CONSTRAINT fk_detalle_ventas_producto FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE RESTRICT
 );

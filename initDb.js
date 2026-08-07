@@ -18,7 +18,12 @@ export async function initializeDatabase() {
     try {
       await db.execute('ALTER TABLE clientes ADD COLUMN IF NOT EXISTS permite_saldo_favor BOOLEAN DEFAULT FALSE;');
       await db.execute('ALTER TABLE clientes DROP CONSTRAINT IF EXISTS clientes_saldo_deudor_check;');
-      console.log('   ✅ Migración PostgreSQL para saldo a favor ejecutada.');
+      await db.execute('ALTER TABLE recetas_base ADD COLUMN IF NOT EXISTS costo_total DOUBLE PRECISION DEFAULT 0.0;');
+      await db.execute('ALTER TABLE recetas_base ADD COLUMN IF NOT EXISTS activa_batido BOOLEAN DEFAULT FALSE;');
+      await db.execute('ALTER TABLE detalle_ventas ADD COLUMN IF NOT EXISTS costo_unitario DOUBLE PRECISION;');
+      await db.execute('ALTER TABLE detalle_ventas ADD COLUMN IF NOT EXISTS receta_base_ids TEXT;');
+      await db.execute('ALTER TABLE productos ADD COLUMN IF NOT EXISTS receta_base_id INT;');
+      console.log('   ✅ Migración PostgreSQL ejecutada.');
     } catch(e) {
       console.log('   ⚠️ Migración PostgreSQL ignorada o error:', e.message);
     }
