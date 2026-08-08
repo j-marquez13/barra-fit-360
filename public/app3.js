@@ -544,6 +544,7 @@ async function loadInitialData() {
     STATE.recetasBase = rbRes;
     STATE.insumos = insRes;
     STATE.clientes = cliRes || [];
+    STATE._productsLoaded = true;
     renderProducts();
   } catch(e) {
     console.warn('No se pudieron cargar los datos iniciales:', e);
@@ -3205,10 +3206,13 @@ async function checkApiHealth() {
       DOM.sidebarApiStatus.className = 'sidebar-status online';
       DOM.sidebarApiStatus.innerHTML = '<i data-lucide="wifi"></i><span>Servidor Online</span>';
 
-      // Cargar productos del servidor al conectar por primera vez
+// Cargar productos del servidor al conectar (solo si ya hay sesión activa)
       if (!STATE._productsLoaded) {
-        STATE._productsLoaded = true;
-        await loadProductsFromAPI();
+        const auth = JSON.parse(sessionStorage.getItem('bf360_auth') || 'null');
+        if (auth && auth.token) {
+          STATE._productsLoaded = true;
+          await loadProductsFromAPI();
+        }
       }
     }
   } catch (err) {
