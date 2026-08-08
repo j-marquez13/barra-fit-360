@@ -236,11 +236,16 @@ export async function processSale(req, res) {
         if (det.receta_base_ids) {
           const baseIds = Array.isArray(det.receta_base_ids) ? det.receta_base_ids : JSON.parse(det.receta_base_ids);
           const ph = baseIds.map((_, i) => `$${i + 1}`).join(', ');
+          // fruta/sabor se suma por cada plantilla; el resto se desduplica
           const listaInsumos = await tx.query(
-            `SELECT rbi.insumo_id, SUM(rbi.cantidad) as cant
+            `SELECT rbi.insumo_id,
+                    CASE WHEN i.es_sabor_batido THEN SUM(rbi.cantidad)
+                         ELSE MAX(rbi.cantidad)
+                    END as cant
              FROM recetas_base_insumos rbi
+             JOIN insumos i ON rbi.insumo_id = i.id
              WHERE rbi.receta_base_id IN (${ph})
-             GROUP BY rbi.insumo_id`,
+             GROUP BY rbi.insumo_id, i.es_sabor_batido`,
             baseIds
           );
           for (const li of listaInsumos) {
