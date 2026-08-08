@@ -155,9 +155,6 @@ checkApiHealth();
   setInterval(updateTime, 1000);
   setInterval(checkApiHealth, 15000);
 
-  // Cargar todos los datos necesarios para el POS
-  loadInitialData();
-
   // ⭐ Inicializar sistema de turnos
   initTurnoSystem();
 
@@ -4273,10 +4270,12 @@ function hideTurnoScreen(sesion, nombreOverride) {
   });
 
   // Animar salida de la pantalla de turno
-  turnoScreen.classList.add('hiding');
+turnoScreen.classList.add('hiding');
   setTimeout(() => {
     turnoScreen.style.display = 'none';
   }, 400);
+  // Cargar datos del POS inmediatamente después del login
+  loadInitialData();
   // También cargar datos de caja por si se navega allí
   loadCajaData();
 }
