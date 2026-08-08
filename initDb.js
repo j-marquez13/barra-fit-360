@@ -14,8 +14,26 @@ const usePostgres = process.env.DATABASE_URL || process.env.PGHOST;
 
 export async function initializeDatabase() {
   if (usePostgres) {
-    console.log('⚡ Usando PostgreSQL — se asume que el esquema ya fue aplicado.');
+    console.log('⚡ Usando PostgreSQL — verificando y aplicando esquema...');
     try {
+      // Asegurar que las tablas nuevas existan (CREATE IF NOT EXISTS no lanza error)
+      await db.execute(`CREATE TABLE IF NOT EXISTS recetas_base (
+        id SERIAL PRIMARY KEY,
+        nombre VARCHAR(150) NOT NULL UNIQUE,
+        costo_total DOUBLE PRECISION DEFAULT 0.0,
+        activa_batido BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )`);
+      await db.execute(`CREATE TABLE IF NOT EXISTS recetas_base_insumos (
+        receta_base_id INT NOT NULL,
+        insumo_id INT NOT NULL,
+        cantidad NUMERIC(12,4) NOT NULL CHECK (cantidad > 0.0000),
+        PRIMARY KEY (receta_base_id, insumo_id),
+        CONSTRAINT fk_recetas_base FOREIGN KEY (receta_base_id) REFERENCES recetas_base(id) ON DELETE CASCADE,
+        CONSTRAINT fk_recetas_base_insumo FOREIGN KEY (insumo_id) REFERENCES insumos(id) ON DELETE CASCADE
+      )`);
+      // Columnas adicionales en tablas existentes
       await db.execute('ALTER TABLE clientes ADD COLUMN IF NOT EXISTS permite_saldo_favor BOOLEAN DEFAULT FALSE;');
       await db.execute('ALTER TABLE clientes DROP CONSTRAINT IF EXISTS clientes_saldo_deudor_check;');
       await db.execute('ALTER TABLE recetas_base ADD COLUMN IF NOT EXISTS costo_total DOUBLE PRECISION DEFAULT 0.0;');
@@ -23,7 +41,7 @@ export async function initializeDatabase() {
       await db.execute('ALTER TABLE detalle_ventas ADD COLUMN IF NOT EXISTS costo_unitario DOUBLE PRECISION;');
       await db.execute('ALTER TABLE detalle_ventas ADD COLUMN IF NOT EXISTS receta_base_ids TEXT;');
       await db.execute('ALTER TABLE productos ADD COLUMN IF NOT EXISTS receta_base_id INT;');
-      console.log('   ✅ Migración PostgreSQL ejecutada.');
+      console.log('   ✅ Esquema PostgreSQL verificado y migrado.');
     } catch(e) {
       console.log('   ⚠️ Migración PostgreSQL ignorada o error:', e.message);
     }
