@@ -16,7 +16,7 @@ export async function initializeDatabase() {
   if (usePostgres) {
     console.log('⚡ Usando PostgreSQL — verificando y aplicando esquema...');
     try {
-      // Asegurar que las tablas nuevas existan (CREATE IF NOT EXISTS no lanza error)
+      // Asegurar que las tablas nuevas existan
       await db.execute(`CREATE TABLE IF NOT EXISTS recetas_base (
         id SERIAL PRIMARY KEY,
         nombre VARCHAR(150) NOT NULL UNIQUE,
@@ -33,7 +33,7 @@ export async function initializeDatabase() {
         CONSTRAINT fk_recetas_base FOREIGN KEY (receta_base_id) REFERENCES recetas_base(id) ON DELETE CASCADE,
         CONSTRAINT fk_recetas_base_insumo FOREIGN KEY (insumo_id) REFERENCES insumos(id) ON DELETE CASCADE
       )`);
-      // Columnas adicionales en tablas existentes
+      // Migración completa de columnas (todas las tablas)
       await db.execute('ALTER TABLE clientes ADD COLUMN IF NOT EXISTS permite_saldo_favor BOOLEAN DEFAULT FALSE;');
       await db.execute('ALTER TABLE clientes DROP CONSTRAINT IF EXISTS clientes_saldo_deudor_check;');
       await db.execute('ALTER TABLE recetas_base ADD COLUMN IF NOT EXISTS costo_total DOUBLE PRECISION DEFAULT 0.0;');
@@ -41,6 +41,22 @@ export async function initializeDatabase() {
       await db.execute('ALTER TABLE detalle_ventas ADD COLUMN IF NOT EXISTS costo_unitario DOUBLE PRECISION;');
       await db.execute('ALTER TABLE detalle_ventas ADD COLUMN IF NOT EXISTS receta_base_ids TEXT;');
       await db.execute('ALTER TABLE productos ADD COLUMN IF NOT EXISTS receta_base_id INT;');
+      await db.execute("ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS turno TEXT NOT NULL DEFAULT 'Manana';");
+      await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS nombre_cajero TEXT;');
+      await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS fondo_inicial_usd DOUBLE PRECISION NOT NULL DEFAULT 0.0;');
+      await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_efectivo_bs DOUBLE PRECISION DEFAULT 0.0;');
+      await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_zelle DOUBLE PRECISION DEFAULT 0.0;');
+      await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_binance DOUBLE PRECISION DEFAULT 0.0;');
+      await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_efectivo_pesos DOUBLE PRECISION DEFAULT 0.0;');
+      await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_bancolombia DOUBLE PRECISION DEFAULT 0.0;');
+      await db.execute('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS password_hash TEXT;');
+      await db.execute("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS permisos TEXT NOT NULL DEFAULT '[\"pos\",\"caja\"]';");
+      await db.execute("UPDATE usuarios SET permisos = '[\"all\"]' WHERE rol = 'Administrador';");
+      await db.execute('ALTER TABLE insumos ADD COLUMN IF NOT EXISTS stock_fijo DOUBLE PRECISION NOT NULL DEFAULT 0.0;');
+      await db.execute('ALTER TABLE insumos ADD COLUMN IF NOT EXISTS es_base_liquida BOOLEAN DEFAULT FALSE;');
+      await db.execute('ALTER TABLE insumos ADD COLUMN IF NOT EXISTS cantidad_sola DOUBLE PRECISION NOT NULL DEFAULT 0.0;');
+      await db.execute('ALTER TABLE insumos ADD COLUMN IF NOT EXISTS es_sabor_batido BOOLEAN DEFAULT FALSE;');
+      await db.execute('ALTER TABLE insumos ADD COLUMN IF NOT EXISTS cantidad_combinada DOUBLE PRECISION NOT NULL DEFAULT 0.0;');
       console.log('   ✅ Esquema PostgreSQL verificado y migrado.');
     } catch(e) {
       console.log('   ⚠️ Migración PostgreSQL ignorada o error:', e.message);
