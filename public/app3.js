@@ -155,8 +155,8 @@ checkApiHealth();
   setInterval(updateTime, 1000);
   setInterval(checkApiHealth, 15000);
 
-  // Cargar productos para el catálogo POS
-  loadInitialProducts();
+  // Cargar todos los datos necesarios para el POS
+  loadInitialData();
 
   // ⭐ Inicializar sistema de turnos
   initTurnoSystem();
@@ -525,11 +525,13 @@ function switchView(viewName) {
 // 4. FUNCIONES DE RENDERIZADO POS
 // ============================================
 
-async function loadInitialProducts() {
+async function loadInitialData() {
   try {
-    const [prodRes, rbRes] = await Promise.all([
+    const [prodRes, rbRes, insRes, cliRes] = await Promise.all([
       fetch('/api/productos').then(r => r.ok ? r.json() : Promise.reject()),
-      fetch('/api/recetas-base').then(r => r.ok ? r.json() : Promise.resolve([]))
+      fetch('/api/recetas-base').then(r => r.ok ? r.json() : Promise.resolve([])),
+      fetch('/api/insumos').then(r => r.ok ? r.json() : Promise.resolve([])),
+      fetch('/api/clientes').then(r => r.ok ? r.json() : Promise.resolve([]))
     ]);
     STATE.products = (prodRes.productos || []).map(p => ({
       id: p.id,
@@ -543,6 +545,8 @@ async function loadInitialProducts() {
       receta_base_id: p.receta_base_id || null
     }));
     STATE.recetasBase = rbRes;
+    STATE.insumos = insRes;
+    STATE.clientes = cliRes || [];
     renderProducts();
   } catch(e) {
     console.warn('No se pudieron cargar los datos iniciales:', e);
