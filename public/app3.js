@@ -150,10 +150,13 @@ document.addEventListener('DOMContentLoaded', () => {
   if (DOM.rateUsd) DOM.rateUsd.value = STATE.tasas.USD;
   if (DOM.rateVes) DOM.rateVes.value = STATE.tasas.VES;
   
-  checkApiHealth();
+checkApiHealth();
   updateTime();
   setInterval(updateTime, 1000);
   setInterval(checkApiHealth, 15000);
+
+  // Cargar productos para el catálogo POS
+  loadInitialProducts();
 
   // ⭐ Inicializar sistema de turnos
   initTurnoSystem();
@@ -521,6 +524,30 @@ function switchView(viewName) {
 // ============================================
 // 4. FUNCIONES DE RENDERIZADO POS
 // ============================================
+
+async function loadInitialProducts() {
+  try {
+    const [prodRes, rbRes] = await Promise.all([
+      fetch('/api/productos').then(r => r.ok ? r.json() : Promise.reject()),
+      fetch('/api/recetas-base').then(r => r.ok ? r.json() : Promise.resolve([]))
+    ]);
+    STATE.products = (prodRes.productos || []).map(p => ({
+      id: p.id,
+      nombre: p.nombre,
+      precio_venta: parseFloat(p.precio_venta),
+      costo_produccion: parseFloat(p.costo_produccion),
+      categoria: p.categoria || 'General',
+      stock: p.stock_disponible || 0,
+      stock_disponible: p.stock_disponible || 0,
+      es_batido: p.es_batido ? 1 : 0,
+      receta_base_id: p.receta_base_id || null
+    }));
+    STATE.recetasBase = rbRes;
+    renderProducts();
+  } catch(e) {
+    console.warn('No se pudieron cargar los datos iniciales:', e);
+  }
+}
 
 function renderCategories() {
   DOM.categoriesContainer.innerHTML = '';
