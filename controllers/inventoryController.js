@@ -148,6 +148,15 @@ export async function restockInsumo(req, res) {
           'INSERT INTO gastos (sesion_caja_id, categoria, descripcion, monto, moneda, tasa_cambio, monto_cop, metodo_pago) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
           [sesion_caja_id, 'REPOSICION', `Reposición de ${cantidad} ${existing[0].nombre}`, montoOriginal, moneda, tasa, montoCop, metodo_pago]
         );
+
+        // 3. Descontar de cuenta bancaria si el método de pago existe en tesorería
+        const cuentaExiste = await tx.query('SELECT id FROM cuentas_bancarias WHERE nombre = $1', [metodo_pago]);
+        if (cuentaExiste.length > 0) {
+          await tx.execute(
+            'UPDATE cuentas_bancarias SET saldo = saldo - $1 WHERE nombre = $2',
+            [montoCop, metodo_pago]
+          );
+        }
       }
     });
 
@@ -327,14 +336,14 @@ export async function getOrdenCompra(req, res) {
 export async function getProductos(req, res) {
   try {
     const productos = await db.query(`
-      SELECT p.id, p.nombre, p.categoria, p.costo_produccion, p.precio_venta, p.activo, p.es_batido, p.receta_base_id,
+      SELECT p.id, p.nombre, p.categoria, p.costo_produccion, p.precio_venta, p.activo, p.es_batido, p.es_combinado, p.receta_base_id,
         COALESCE(
           (SELECT MIN(FLOOR(i.stock_actual / req.cantidad))
            FROM (
              SELECT insumo_id, SUM(cantidad) as cantidad
              FROM (
                SELECT insumo_id, cantidad FROM recetas WHERE producto_id = p.id
-               UNION ALL
+               UNION
                SELECT rbi.insumo_id, rbi.cantidad FROM recetas_base_insumos rbi WHERE rbi.receta_base_id = p.receta_base_id
              ) combined
              GROUP BY insumo_id
@@ -358,7 +367,7 @@ export async function getProductos(req, res) {
 
 // POST /api/productos — Crear un nuevo producto
 export async function createProducto(req, res) {
-  const { nombre, categoria, costo_produccion, precio_venta, receta, es_batido, receta_base_id } = req.body;
+  const { nombre, categoria, costo_produccion, precio_venta, receta, es_batido, es_combinado, receta_base_id } = req.body;
 
   if (!nombre || !precio_venta) {
     return res.status(400).json({ error: 'El nombre y el precio de venta son obligatorios.' });
@@ -369,8 +378,8 @@ export async function createProducto(req, res) {
 
     const result = await db.transaction(async (tx) => {
       const insertSql = isPg
-        ? 'INSERT INTO productos (nombre, categoria, costo_produccion, precio_venta, es_batido, receta_base_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id'
-        : 'INSERT INTO productos (nombre, categoria, costo_produccion, precio_venta, es_batido, receta_base_id) VALUES ($1, $2, $3, $4, $5, $6)';
+        ? 'INSERT INTO productos (nombre, categoria, costo_produccion, precio_venta, es_batido, es_combinado, receta_base_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id'
+        : 'INSERT INTO productos (nombre, categoria, costo_produccion, precio_venta, es_batido, es_combinado, receta_base_id) VALUES ($1, $2, $3, $4, $5, $6, $7)';
 
       const res = await tx.execute(insertSql, [
         nombre,
@@ -378,6 +387,7 @@ export async function createProducto(req, res) {
         parseFloat(costo_produccion) || 0,
         parseFloat(precio_venta),
         !!es_batido,
+        !!es_combinado,
         receta_base_id || null
       ]);
       const prodId = res[0].id;
@@ -401,10 +411,11 @@ export async function createProducto(req, res) {
         }
       }
 
+      // Recalcular costos de productos que usan esta receta base, dentro de la transacción
+      if (receta_base_id) await recalcularCostosPorBase(tx, receta_base_id);
+
       return prodId;
     });
-
-    if (receta_base_id) await recalcularCostosPorBase(db, receta_base_id);
 
     const producto = await db.query('SELECT * FROM productos WHERE id = $1', [result]);
     return res.status(201).json({ mensaje: 'Producto creado.', producto: producto[0] });
@@ -417,7 +428,7 @@ export async function createProducto(req, res) {
 // PUT /api/productos/:id — Actualizar un producto
 export async function updateProducto(req, res) {
   const { id } = req.params;
-  const { nombre, categoria, costo_produccion, precio_venta, activo, receta, es_batido, receta_base_id } = req.body;
+  const { nombre, categoria, costo_produccion, precio_venta, activo, receta, es_batido, es_combinado, receta_base_id } = req.body;
 
   try {
     const existing = await db.query('SELECT id FROM productos WHERE id = $1', [id]);
@@ -430,8 +441,8 @@ export async function updateProducto(req, res) {
       const esBatidoVal = !!es_batido;
       await tx.execute(`
         UPDATE productos 
-        SET nombre = $1, categoria = $2, costo_produccion = $3, precio_venta = $4, activo = $5, es_batido = $6, receta_base_id = $7, updated_at = CURRENT_TIMESTAMP
-        WHERE id = $8
+        SET nombre = $1, categoria = $2, costo_produccion = $3, precio_venta = $4, activo = $5, es_batido = $6, es_combinado = $7, receta_base_id = $8, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $9
       `, [
         nombre,
         categoria || 'General',
@@ -439,6 +450,7 @@ export async function updateProducto(req, res) {
         parseFloat(precio_venta) || 0,
         activoVal,
         esBatidoVal,
+        !!es_combinado,
         receta_base_id || null,
         id
       ]);
@@ -468,9 +480,10 @@ export async function updateProducto(req, res) {
       } else {
         console.log('RECETA: No se envió receta o no es array. receta=', receta);
       }
-    });
 
-    if (receta_base_id) await recalcularCostosPorBase(db, receta_base_id);
+      // Recalcular costos dentro de la transacción
+      if (receta_base_id) await recalcularCostosPorBase(tx, receta_base_id);
+    });
 
     // Verificar que la receta se guardó
     const recetaGuardada = await db.query('SELECT * FROM recetas WHERE producto_id = $1', [id]);
@@ -512,8 +525,9 @@ export async function getProductoReceta(req, res) {
 export async function deleteProducto(req, res) {
   try {
     const { id } = req.params;
-    const result = await db.execute('UPDATE productos SET activo = FALSE WHERE id = $1', [id]);
-    if (result[0].changes === 0) return res.status(404).json({ error: 'Producto no encontrado' });
+    const existing = await db.query('SELECT id FROM productos WHERE id = $1', [id]);
+    if (existing.length === 0) return res.status(404).json({ error: 'Producto no encontrado' });
+    await db.execute('UPDATE productos SET activo = FALSE WHERE id = $1', [id]);
     return res.json({ mensaje: 'Producto eliminado correctamente' });
   } catch (error) {
     console.error('Error al eliminar producto:', error);
@@ -524,8 +538,9 @@ export async function deleteProducto(req, res) {
 export async function deleteInsumo(req, res) {
   try {
     const { id } = req.params;
-    const result = await db.execute('DELETE FROM insumos WHERE id = $1', [id]);
-    if (result[0].changes === 0) return res.status(404).json({ error: 'Insumo no encontrado' });
+    const existing = await db.query('SELECT id FROM insumos WHERE id = $1', [id]);
+    if (existing.length === 0) return res.status(404).json({ error: 'Insumo no encontrado' });
+    await db.execute('DELETE FROM insumos WHERE id = $1', [id]);
     return res.json({ mensaje: 'Insumo eliminado correctamente' });
   } catch (error) {
     console.error('Error al eliminar insumo:', error);
@@ -599,6 +614,7 @@ export async function updateRecetaBase(req, res) {
       }
       // Recalcular el costo de producción de todos los productos que usan esta plantilla
       await recalcularCostosPorBase(tx, id);
+      return id;
     });
     return res.json({ mensaje: 'Receta base actualizada. Costos de productos vinculados recalculados.' });
   } catch (error) {

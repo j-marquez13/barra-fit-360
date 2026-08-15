@@ -30,11 +30,24 @@ export async function transferirFondos(req, res) {
 
     const monto_destino = monto_origen * tasa_cambio;
 
-    await db.execute(
-      `INSERT INTO movimientos_tesoreria (cuenta_origen, cuenta_destino, monto_origen, monto_destino, tasa_cambio, motivo) 
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [cuenta_origen, cuenta_destino, monto_origen, monto_destino, tasa_cambio, motivo]
-    );
+    await db.transaction(async (tx) => {
+      // Descontar de cuenta origen
+      await tx.execute(
+        'UPDATE cuentas_bancarias SET saldo = saldo - $1 WHERE nombre = $2',
+        [monto_origen, cuenta_origen]
+      );
+      // Sumar a cuenta destino
+      await tx.execute(
+        'UPDATE cuentas_bancarias SET saldo = saldo + $1 WHERE nombre = $2',
+        [monto_destino, cuenta_destino]
+      );
+      // Registrar el movimiento
+      await tx.execute(
+        `INSERT INTO movimientos_tesoreria (cuenta_origen, cuenta_destino, monto_origen, monto_destino, tasa_cambio, motivo) 
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [cuenta_origen, cuenta_destino, monto_origen, monto_destino, tasa_cambio, motivo]
+      );
+    });
 
     res.status(201).json({ mensaje: 'Transferencia realizada con éxito.' });
   } catch (err) {

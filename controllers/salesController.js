@@ -78,6 +78,7 @@ export async function processSale(req, res) {
         subtotal,
         costo_unitario: (item.costo_produccion_calculado !== undefined) ? parseFloat(item.costo_produccion_calculado) : parseFloat(prod.costo_produccion),
         receta_base_ids: (item.receta_base_ids && item.receta_base_ids.length > 0) ? JSON.stringify(item.receta_base_ids) : null,
+        insumos_manuales: (item.insumos_manuales && item.insumos_manuales.length > 0) ? item.insumos_manuales : null,
         extras: item.extras || []
       };
     });
@@ -214,12 +215,13 @@ export async function processSale(req, res) {
 
       // B. Insertar detalle de productos vendidos (Activa el trigger de inventario)
       const insertDetalleSql = isPg
-        ? 'INSERT INTO detalle_ventas (venta_id, producto_id, cantidad, precio_unitario, subtotal, costo_unitario, receta_base_ids) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id'
-        : 'INSERT INTO detalle_ventas (venta_id, producto_id, cantidad, precio_unitario, subtotal, costo_unitario, receta_base_ids) VALUES ($1, $2, $3, $4, $5, $6, $7)';
+        ? 'INSERT INTO detalle_ventas (venta_id, producto_id, cantidad, precio_unitario, subtotal, costo_unitario, receta_base_ids, insumos_manuales) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id'
+        : 'INSERT INTO detalle_ventas (venta_id, producto_id, cantidad, precio_unitario, subtotal, costo_unitario, receta_base_ids, insumos_manuales) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)';
       
       const insertExtraSql = 'INSERT INTO detalle_ventas_extras (detalle_venta_id, insumo_id, cantidad, precio_adicional) VALUES ($1, $2, $3, $4)';
 
       for (const det of detallesVenta) {
+        const insumosManualesJson = det.insumos_manuales ? JSON.stringify(det.insumos_manuales) : null;
         const resDetalle = await tx.execute(insertDetalleSql, [
           ventaId,
           det.producto_id,
@@ -227,34 +229,100 @@ export async function processSale(req, res) {
           det.precio_unitario,
           det.subtotal,
           det.costo_unitario,
-          det.receta_base_ids
+          det.receta_base_ids,
+          insumosManualesJson
         ]);
         const detalleId = resDetalle[0].id;
 
-        // Descontar stock de las recetas base seleccionadas en esta venta (se agregan al
-        // descuento que ya hace el trigger para los insumos propios / base fija del producto)
+        // Descontar stock de las recetas base seleccionadas (con lógica sola vs combinada)
         if (det.receta_base_ids) {
           const baseIds = Array.isArray(det.receta_base_ids) ? det.receta_base_ids : JSON.parse(det.receta_base_ids);
-          const ph = baseIds.map((_, i) => `$${i + 1}`).join(', ');
-          // MAX por insumo: si el mismo insumo aparece en varias plantillas, se descuenta una sola vez.
-          const listaInsumos = await tx.query(
-            `SELECT rbi.insumo_id, MAX(rbi.cantidad) as cant
-             FROM recetas_base_insumos rbi
-             WHERE rbi.receta_base_id IN (${ph})
-             GROUP BY rbi.insumo_id`,
-            baseIds
-          );
-          for (const li of listaInsumos) {
+          const numBases = baseIds.length; // 1 = sola, 2+ = combinada
+
+          if (numBases >= 2) {
+            // --- COMBINADO: recolectar todos los insumos, deduplicar comunes ---
+            // Map<insumo_id, { cantidad, es_sabor }> para comunes (solo 1 vez)
+            const comunesMap = new Map(); // insumos NO sabor → solo 1 entrada
+            const sabores = []; // insumos sabor → todos se descuentan
+
+            for (const baseId of baseIds) {
+              const insumosBase = await tx.query(
+                `SELECT rbi.insumo_id, i.cantidad_sola, i.cantidad_combinada, i.es_sabor_batido
+                 FROM recetas_base_insumos rbi
+                 JOIN insumos i ON rbi.insumo_id = i.id
+                 WHERE rbi.receta_base_id = $1`,
+                [baseId]
+              );
+
+              for (const ins of insumosBase) {
+                const esSabor = ins.es_sabor_batido ? true : false;
+                const cantidadADescontar = (parseFloat(ins.cantidad_combinada) > 0)
+                  ? parseFloat(ins.cantidad_combinada)
+                  : (parseFloat(ins.cantidad_sola) > 0 ? parseFloat(ins.cantidad_sola) : 1);
+
+                if (esSabor) {
+                  // Frutas/sabores: cada receta base descuenta su fruta
+                  sabores.push({ insumo_id: ins.insumo_id, cantidad: cantidadADescontar });
+                } else {
+                  // Comunes (vaso, pitillo, leche): solo guardar 1 vez (la primera aparición)
+                  if (!comunesMap.has(ins.insumo_id)) {
+                    comunesMap.set(ins.insumo_id, cantidadADescontar);
+                  }
+                }
+              }
+            }
+
+            // Descontar insumos comunes (1 sola vez)
+            for (const [insumoId, cantidad] of comunesMap) {
+              await tx.execute(
+                'UPDATE insumos SET stock_actual = stock_actual - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+                [cantidad * det.cantidad, insumoId]
+              );
+            }
+
+            // Descontar sabores/frutas (cada uno por separado)
+            for (const sab of sabores) {
+              await tx.execute(
+                'UPDATE insumos SET stock_actual = stock_actual - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+                [sab.cantidad * det.cantidad, sab.insumo_id]
+              );
+            }
+          } else {
+            // --- SOLA (1 base): descontar todo normalmente ---
+            for (const baseId of baseIds) {
+              const insumosBase = await tx.query(
+                `SELECT rbi.insumo_id, i.cantidad_sola, i.cantidad_combinada
+                 FROM recetas_base_insumos rbi
+                 JOIN insumos i ON rbi.insumo_id = i.id
+                 WHERE rbi.receta_base_id = $1`,
+                [baseId]
+              );
+
+              for (const ins of insumosBase) {
+                const cantidadADescontar = (parseFloat(ins.cantidad_sola) > 0)
+                  ? parseFloat(ins.cantidad_sola) : 1;
+
+                await tx.execute(
+                  'UPDATE insumos SET stock_actual = stock_actual - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+                  [cantidadADescontar * det.cantidad, ins.insumo_id]
+                );
+              }
+            }
+          }
+        }
+
+        // Descontar insumos manuales (batido combinado: 1 porción por cada insumo seleccionado)
+        if (det.insumos_manuales && det.insumos_manuales.length > 0) {
+          for (const ins of det.insumos_manuales) {
+            const cantidadADescontar = (parseFloat(ins.cantidad) || 1) * det.cantidad;
             await tx.execute(
               'UPDATE insumos SET stock_actual = stock_actual - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-              [li.cant * det.cantidad, li.insumo_id]
+              [cantidadADescontar, ins.insumo_id]
             );
           }
         }
 
         // Insertar insumos extras asociados a este detalle (Activa el trigger trg_descontar_extras_venta)
-        // Los ingredientes de origen 'receta' ya fueron descontados por el trigger de la receta del producto,
-        // así que se registran en la factura pero NO se vuelven a descontar.
         if (det.extras && det.extras.length > 0) {
           for (const extra of det.extras) {
             if (extra.origen === 'receta') continue;
@@ -366,9 +434,10 @@ export async function anularVenta(req, res) {
         throw new Error('Esta venta ya fue anulada previamente.');
       }
 
-      // b. Devolver inventario (Detalles principales)
-      const detalles = await tx.query('SELECT producto_id, cantidad FROM detalle_ventas WHERE venta_id = $1', [id]);
+      // b. Devolver inventario (Detalles principales + recetas base + insumos manuales)
+      const detalles = await tx.query('SELECT producto_id, cantidad, receta_base_ids, insumos_manuales FROM detalle_ventas WHERE venta_id = $1', [id]);
       for (const det of detalles) {
+        // Devolver insumos de la receta individual
         const recetas = await tx.query('SELECT insumo_id, cantidad FROM recetas WHERE producto_id = $1', [det.producto_id]);
         for (const rec of recetas) {
           const cantidadADevolver = parseFloat(rec.cantidad) * parseFloat(det.cantidad);
@@ -376,6 +445,102 @@ export async function anularVenta(req, res) {
             'UPDATE insumos SET stock_actual = stock_actual + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
             [cantidadADevolver, rec.insumo_id]
           );
+        }
+
+        // Devolver insumos de recetas base (misma lógica sola/combinada que en la venta)
+        if (det.receta_base_ids) {
+          let baseIds;
+          try {
+            baseIds = Array.isArray(det.receta_base_ids) ? det.receta_base_ids : JSON.parse(det.receta_base_ids);
+          } catch(e) {
+            continue;
+          }
+          const numBases = baseIds.length;
+
+          if (numBases >= 2) {
+            // --- COMBINADO: deduplicar comunes al devolver ---
+            const comunesMap = new Map();
+            const sabores = [];
+
+            for (const baseId of baseIds) {
+              const insumosBase = await tx.query(
+                `SELECT rbi.insumo_id, i.cantidad_sola, i.cantidad_combinada, i.es_sabor_batido
+                 FROM recetas_base_insumos rbi
+                 JOIN insumos i ON rbi.insumo_id = i.id
+                 WHERE rbi.receta_base_id = $1`,
+                [baseId]
+              );
+
+              for (const ins of insumosBase) {
+                const esSabor = ins.es_sabor_batido ? true : false;
+                const cantidadADevolver = (parseFloat(ins.cantidad_combinada) > 0)
+                  ? parseFloat(ins.cantidad_combinada)
+                  : (parseFloat(ins.cantidad_sola) > 0 ? parseFloat(ins.cantidad_sola) : 1);
+
+                if (esSabor) {
+                  sabores.push({ insumo_id: ins.insumo_id, cantidad: cantidadADevolver });
+                } else {
+                  if (!comunesMap.has(ins.insumo_id)) {
+                    comunesMap.set(ins.insumo_id, cantidadADevolver);
+                  }
+                }
+              }
+            }
+
+            // Devolver insumos comunes (1 sola vez)
+            for (const [insumoId, cantidad] of comunesMap) {
+              await tx.execute(
+                'UPDATE insumos SET stock_actual = stock_actual + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+                [cantidad * parseFloat(det.cantidad), insumoId]
+              );
+            }
+
+            // Devolver sabores/frutas (cada uno)
+            for (const sab of sabores) {
+              await tx.execute(
+                'UPDATE insumos SET stock_actual = stock_actual + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+                [sab.cantidad * parseFloat(det.cantidad), sab.insumo_id]
+              );
+            }
+          } else {
+            // --- SOLA (1 base): devolver todo normalmente ---
+            for (const baseId of baseIds) {
+              const insumosBase = await tx.query(
+                `SELECT rbi.insumo_id, i.cantidad_sola, i.cantidad_combinada
+                 FROM recetas_base_insumos rbi
+                 JOIN insumos i ON rbi.insumo_id = i.id
+                 WHERE rbi.receta_base_id = $1`,
+                [baseId]
+              );
+
+              for (const ins of insumosBase) {
+                const cantidadADevolver = (parseFloat(ins.cantidad_sola) > 0)
+                  ? parseFloat(ins.cantidad_sola) : 1;
+
+                await tx.execute(
+                  'UPDATE insumos SET stock_actual = stock_actual + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+                  [cantidadADevolver * parseFloat(det.cantidad), ins.insumo_id]
+                );
+              }
+            }
+          }
+        }
+
+        // Devolver insumos manuales (batido combinado)
+        if (det.insumos_manuales) {
+          let manuales;
+          try {
+            manuales = Array.isArray(det.insumos_manuales) ? det.insumos_manuales : JSON.parse(det.insumos_manuales);
+          } catch(e) {
+            continue;
+          }
+          for (const ins of manuales) {
+            const cantidadADevolver = (parseFloat(ins.cantidad) || 1) * parseFloat(det.cantidad);
+            await tx.execute(
+              'UPDATE insumos SET stock_actual = stock_actual + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+              [cantidadADevolver, ins.insumo_id]
+            );
+          }
         }
       }
 
@@ -397,11 +562,17 @@ export async function anularVenta(req, res) {
       // d. Revertir pagos y tesorería, y crédito si aplica
       const pagos = await tx.query('SELECT * FROM pagos_ventas WHERE venta_id = $1', [id]);
       for (const pago of pagos) {
-        // Revertir de tesorería (cuenta bancaria)
-        await tx.execute(
-          'UPDATE cuentas_bancarias SET saldo = saldo - $1 WHERE nombre = $2',
-          [parseFloat(pago.monto_original), pago.metodo_pago]
-        );
+        // Solo revertir de tesorería si no es crédito y la cuenta existe
+        if (pago.metodo_pago !== 'Crédito') {
+          const cuentaExiste = await tx.query('SELECT id FROM cuentas_bancarias WHERE nombre = $1', [pago.metodo_pago]);
+          if (cuentaExiste.length > 0) {
+            // Usar monto_base (siempre en COP) para descontar de la cuenta bancaria
+            await tx.execute(
+              'UPDATE cuentas_bancarias SET saldo = saldo - $1 WHERE nombre = $2',
+              [parseFloat(pago.monto_base), pago.metodo_pago]
+            );
+          }
+        }
 
         // Si fue a crédito, descontar del saldo del cliente
         if (pago.metodo_pago === 'Crédito' && venta.cliente_id) {

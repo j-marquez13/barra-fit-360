@@ -57,6 +57,8 @@ export async function initializeDatabase() {
       await db.execute('ALTER TABLE insumos ADD COLUMN IF NOT EXISTS cantidad_sola DOUBLE PRECISION NOT NULL DEFAULT 0.0;');
       await db.execute('ALTER TABLE insumos ADD COLUMN IF NOT EXISTS es_sabor_batido BOOLEAN DEFAULT FALSE;');
       await db.execute('ALTER TABLE insumos ADD COLUMN IF NOT EXISTS cantidad_combinada DOUBLE PRECISION NOT NULL DEFAULT 0.0;');
+      await db.execute('ALTER TABLE productos ADD COLUMN IF NOT EXISTS es_combinado BOOLEAN DEFAULT FALSE;');
+      await db.execute('ALTER TABLE detalle_ventas ADD COLUMN IF NOT EXISTS insumos_manuales TEXT;');
       console.log('   ✅ Esquema PostgreSQL verificado y migrado.');
     } catch(e) {
       console.log('   ⚠️ Migración PostgreSQL ignorada o error:', e.message);
@@ -453,6 +455,16 @@ async function runMigrations() {
   } catch(e) {}
   try { 
     await db.execute("ALTER TABLE sesiones_caja ADD COLUMN declarado_bancolombia REAL DEFAULT 0.0"); 
+  } catch(e) {}
+
+  // Migraciones para Batido Combinado
+  try {
+    await db.execute("ALTER TABLE productos ADD COLUMN es_combinado BOOLEAN DEFAULT 0");
+    console.log('   🔄 Migración: columna es_combinado agregada a productos.');
+  } catch(e) {}
+  try {
+    await db.execute("ALTER TABLE detalle_ventas ADD COLUMN insumos_manuales TEXT");
+    console.log('   🔄 Migración: columna insumos_manuales agregada a detalle_ventas.');
   } catch(e) {}
 }
 

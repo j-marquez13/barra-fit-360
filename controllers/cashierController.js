@@ -1,5 +1,5 @@
 import * as db from '../db.js';
-import { localNow } from '../db.js';
+import { localNow, isPostgres } from '../db.js';
 
 /**
  * Controlador de Arqueo y Sesiones de Caja (Turnos)
@@ -231,7 +231,7 @@ export async function cerrarCaja(req, res) {
       ? `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_efectivo_bs = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9 WHERE id = $10 RETURNING *`
       : `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_efectivo_bs = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9 WHERE id = $10`;
       
-    const result = await db.execute(sqlUpdate, [now, totalVentasCop, totalGastos, diferencia, decBs, decZelle, decBinance, decPesos, decBancolombia, currentSession.id]);
+    const result = await db.execute(sqlUpdate, [now, totalIngresosCop, totalGastos, diferencia, decBs, decZelle, decBinance, decPesos, decBancolombia, currentSession.id]);
     
     let sessionRes = result;
     if (!isPg) {

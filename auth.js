@@ -9,11 +9,17 @@ import path from 'path';
  */
 
 function getSecret() {
+  // 1. Prioridad: variable de entorno AUTH_SECRET (Railway, producción)
   if (process.env.AUTH_SECRET) return process.env.AUTH_SECRET;
+
+  // 2. Fallback: archivo local .auth-secret (desarrollo)
   const file = process.env.AUTH_SECRET_FILE || path.resolve(process.cwd(), '.auth-secret');
   if (fs.existsSync(file)) return fs.readFileSync(file, 'utf8').trim();
+
+  // 3. Generar nuevo secreto (solo desarrollo; en producción configurar AUTH_SECRET)
   const secret = crypto.randomBytes(32).toString('hex');
   fs.writeFileSync(file, secret);
+  console.warn('⚠️  Nuevo secreto JWT generado. Configura la variable AUTH_SECRET en producción para evitar que los tokens se invaliden en cada deploy.');
   return secret;
 }
 

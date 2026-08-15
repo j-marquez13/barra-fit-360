@@ -539,6 +539,7 @@ async function loadInitialData() {
       stock: p.stock_disponible || 0,
       stock_disponible: p.stock_disponible || 0,
       es_batido: p.es_batido ? 1 : 0,
+      es_combinado: p.es_combinado ? true : false,
       receta_base_id: p.receta_base_id || null
     }));
     STATE.recetasBase = rbRes;
@@ -852,7 +853,33 @@ const basesActivas = (STATE.recetasBase || []).filter(r => r.activa_batido);
           </div>`
         : '';
 
-      const opcionesHtml = (!prod.receta_base_id && basesActivas.length > 0)
+      // Determinar qué mostrar: recetas base o insumos manuales
+      const insumosBatido = (STATE.insumos || []).filter(i => i.es_para_batidos);
+      const tieneRecetasBase = basesActivas.length > 0;
+      const tieneInsumosBatido = insumosBatido.length > 0;
+
+      // Caso A: Hay recetas base activas → mostrar checkboxes de recetas base
+      // Caso B: No hay recetas base pero sí insumos para batido → mostrar checkboxes de insumos (Combinado)
+      // Usar el flag explícito es_combinado del producto
+      const esCombinado = prod.es_combinado ? true : false;
+
+      // Si es combinado, siempre mostrar insumos manuales
+      // Si no, mostrar recetas base si hay activas
+      // Si no hay nada, mostrar insumos si hay disponibles
+      const opcionesHtml = esCombinado
+        ? `<div style="margin-bottom:10px; padding:10px 12px; background:rgba(34,197,94,0.06); border:1px solid rgba(34,197,94,0.25); border-radius:8px;">
+            <span style="font-weight:600; font-size:0.85rem; color:var(--color-muted); display:block; margin-bottom:4px;">🍓 Elige las frutas/insumos para este batido (1 porción c/u, descuenta stock):</span>
+            <ul style="list-style:none;margin:0;padding:0;">
+              ${insumosBatido.map(ins =>
+                `<li style="padding:6px 0;">
+                  <label style="cursor:pointer; display:flex; align-items:center; gap:8px; font-size:0.85rem;">
+                    <input type="checkbox" class="ins-manual-cb" data-id="${ins.id}" style="width:16px;height:16px;">
+                    <span><strong>${ins.nombre}</strong> <small style="color:var(--color-muted);">(${ins.unidad_medida}) — Stock: ${parseFloat(ins.stock_actual).toLocaleString(undefined,{maximumFractionDigits:2})}</small></span>
+                  </label>
+                </li>`).join('')}
+            </ul>
+          </div>`
+        : (!prod.receta_base_id && tieneRecetasBase)
         ? `<div style="margin-bottom:10px; padding:10px 12px; background:rgba(88,86,214,0.08); border:1px solid var(--border-glass); border-radius:8px;">
             <span style="font-weight:600; font-size:0.85rem; color:var(--color-muted); display:block; margin-bottom:4px;">🧩 Elige las recetas base para este batido (descuentan stock):</span>
             <ul style="list-style:none;margin:0;padding:0;">
@@ -865,43 +892,56 @@ const basesActivas = (STATE.recetasBase || []).filter(r => r.activa_batido);
                 </li>`).join('')}
             </ul>
           </div>`
+        : (!prod.receta_base_id && !tieneRecetasBase && tieneInsumosBatido)
+        ? `<div style="margin-bottom:10px; padding:10px 12px; background:rgba(34,197,94,0.06); border:1px solid rgba(34,197,94,0.25); border-radius:8px;">
+            <span style="font-weight:600; font-size:0.85rem; color:var(--color-muted); display:block; margin-bottom:4px;">🍓 Elige las frutas/insumos para este batido (1 porción c/u, descuenta stock):</span>
+            <ul style="list-style:none;margin:0;padding:0;">
+              ${insumosBatido.map(ins =>
+                `<li style="padding:6px 0;">
+                  <label style="cursor:pointer; display:flex; align-items:center; gap:8px; font-size:0.85rem;">
+                    <input type="checkbox" class="ins-manual-cb" data-id="${ins.id}" style="width:16px;height:16px;">
+                    <span><strong>${ins.nombre}</strong> <small style="color:var(--color-muted);">(${ins.unidad_medida}) — Stock: ${parseFloat(ins.stock_actual).toLocaleString(undefined,{maximumFractionDigits:2})}</small></span>
+                  </label>
+                </li>`).join('')}
+            </ul>
+          </div>`
         : '';
 
       openGenericModal(`Opciones para ${prod.nombre}`, `
         ${baseHtml}
         ${propiosHtml}
         ${opcionesHtml}
-        <div style="margin-top:12px; padding:12px 15px; background:linear-gradient(135deg, rgba(0,210,255,0.08), rgba(88,86,214,0.08)); border:1px solid var(--border-glass); border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
-          <span style="font-weight:600; font-size:0.9rem; color:var(--color-muted);">💰 Costo de producción:</span>
-          <span id="bati-costo-el" style="font-weight:700; font-size:1.1rem; color:var(--cyan-neon);">$${costoReceta.toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:2})}</span>
-        </div>`,
+        <div style="margin-top:12px; padding:12px 15px; background:linear-gradient(135deg, rgba(34,197,94,0.08), rgba(34,197,94,0.04)); border:1px solid rgba(34,197,94,0.25); border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-weight:600; font-size:0.9rem; color:var(--color-muted);">💰 Costo fijo del producto:</span>
+          <span id="bati-costo-el" style="font-weight:700; font-size:1.1rem; color:var(--success);">$${costoReceta.toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:2})}</span>
+        </div>
+        <p style="font-size:0.75rem; color:var(--color-muted); margin-top:6px; text-align:center;">Las selecciones solo descuentan stock — no modifican el precio ni el costo.</p>`,
         () => {
-let costoFinal = costoReceta;
-          if (!prod.receta_base_id && basesActivas.length > 0) {
-            costoFinal = 0;
-            baseSel = [];
-            document.querySelectorAll('.rb-opcion-cb:checked').forEach(cb => {
-              const b = basesActivas.find(x => x.id === parseInt(cb.dataset.id));
-              if (b) { costoFinal += recetaBaseCosto(b); baseSel.push(b.id); }
+          // Costo y precio siempre fijos (del producto)
+          let costoFinal = parseFloat(prod.costo_produccion) || 0;
+          baseSel = [];
+          let insumosManuales = [];
+
+          if (esCombinado) {
+            // Batido combinado: recolectar insumos manuales seleccionados
+            document.querySelectorAll('.ins-manual-cb:checked').forEach(cb => {
+              insumosManuales.push({ insumo_id: parseInt(cb.dataset.id), cantidad: 1 });
             });
+            STATE.cart.push({ producto_id: productId, cantidad: 1, costo_produccion_calculado: costoFinal, insumos_manuales: insumosManuales.length > 0 ? insumosManuales : null });
+          } else if (!prod.receta_base_id && tieneRecetasBase) {
+            // Batido normal con recetas base
+            document.querySelectorAll('.rb-opcion-cb:checked').forEach(cb => {
+              baseSel.push(parseInt(cb.dataset.id));
+            });
+            STATE.cart.push({ producto_id: productId, cantidad: 1, costo_produccion_calculado: costoFinal, receta_base_ids: baseSel.length > 0 ? baseSel : null });
+          } else {
+            // Batido con receta base fija o sin opciones
+            STATE.cart.push({ producto_id: productId, cantidad: 1, costo_produccion_calculado: costoFinal, receta_base_ids: null });
           }
-          STATE.cart.push({ producto_id: productId, cantidad: 1, costo_produccion_calculado: costoFinal, receta_base_ids: baseSel });
           renderCart();
           closeGenericModal();
         }
       );
-      if (!prod.receta_base_id && basesActivas.length > 0) {
-        document.querySelectorAll('.rb-opcion-cb').forEach(cb => {
-          cb.addEventListener('change', () => {
-            let total = 0;
-            document.querySelectorAll('.rb-opcion-cb:checked').forEach(x => {
-              const b = basesActivas.find(rr => rr.id === parseInt(x.dataset.id));
-              if (b) total += recetaBaseCosto(b);
-            });
-            document.getElementById('bati-costo-el').textContent = '$' + total.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-          });
-});
-      }
       return;
     }
   }
@@ -1335,6 +1375,7 @@ async function loadInventarioData() {
         stock: p.stock_disponible || 0,
         stock_disponible: p.stock_disponible || 0,
         es_batido: p.es_batido ? 1 : 0,
+        es_combinado: p.es_combinado ? true : false,
         receta_base_id: p.receta_base_id || null
     }));
     
@@ -1623,8 +1664,8 @@ return `
           <td>
             <div class="table-actions">
               <button class="table-btn btn-edit" onclick="showRecetaBaseModal(${rb.id})">Editar</button>
-              <button class="table-btn ${rb.activa_batido ? 'btn-restock' : 'btn-edit'}" onclick="toggleRecetaBaseBatido(${rb.id}, ${rb.activa_batido ? 0 : 1})" style="${rb.activa_batido ? 'background:var(--success); color:#000;' : ''}">${rb.activa_batido ? '🧃 En batido' : '🧃 Mostrar en batido'}</button>
-              <button class="table-btn btn-danger" onclick="eliminarRecetaBase(${rb.id}, '${rb.nombre.replace(/'/g, "\\'")}')" style="background:var(--danger); color:white; border:none;">Eliminar</button>
+               <button class="table-btn ${rb.activa_batido ? 'btn-batido-active' : 'btn-batido'}" onclick="toggleRecetaBaseBatido(${rb.id}, ${rb.activa_batido ? 0 : 1})">${rb.activa_batido ? '🧃 En batido' : '🧃 Mostrar en batido'}</button>
+               <button class="table-btn btn-danger" onclick="eliminarRecetaBase(${rb.id}, '${rb.nombre.replace(/'/g, "\\'")}')">Eliminar</button>
             </div>
           </td>
         </tr>
@@ -1853,6 +1894,13 @@ window.showAddProductoModal = async function() {
         <strong>Pedir Ingredientes al Vender (Opciones de Batido)</strong>
       </label>
     </div>
+    <div class="form-group" style="margin-top: 10px;">
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+        <input type="checkbox" id="prod-es-combinado" style="width:18px;height:18px;"> 
+        <strong>🍓 ¿Es Batido Combinado? (Selección manual de frutas al vender)</strong>
+      </label>
+      <small style="color:var(--text-muted); font-size:12px;">Márcalo si el cajero elegirá las frutas/insumos manualmente. Precio y costo fijos.</small>
+    </div>
     
     <div class="receta-section" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-color);">
       <h4>Ingredientes (Receta)</h4>
@@ -1919,7 +1967,7 @@ window.showAddProductoModal = async function() {
       const res = await fetch('/api/productos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nombre, categoria, precio_venta, costo_produccion, receta, es_batido, receta_base_id })
+        body: JSON.stringify({ nombre, categoria, precio_venta, costo_produccion, receta, es_batido, es_combinado: document.getElementById('prod-es-combinado').checked, receta_base_id })
       });
       if (!res.ok) {
         const d = await res.json();
@@ -1977,6 +2025,13 @@ window.showEditProductoModal = async function(prod_id) {
         <input type="checkbox" id="edit-prod-es-batido" style="width:18px;height:18px;" ${prod.es_batido ? 'checked' : ''}> 
         <strong>Pedir Ingredientes al Vender (Opciones de Batido)</strong>
       </label>
+    </div>
+    <div class="form-group" style="margin-top: 10px;">
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+        <input type="checkbox" id="edit-prod-es-combinado" style="width:18px;height:18px;" ${prod.es_combinado ? 'checked' : ''}> 
+        <strong>🍓 ¿Es Batido Combinado? (Selección manual de frutas al vender)</strong>
+      </label>
+      <small style="color:var(--text-muted); font-size:12px;">Márcalo si el cajero elegirá las frutas/insumos manualmente. Precio y costo fijos.</small>
     </div>
     
     <div class="receta-section" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-color);">
@@ -3126,6 +3181,7 @@ async function loadProductsFromAPI() {
         stock: p.stock_disponible || 0,
         stock_disponible: p.stock_disponible || 0,
         es_batido: p.es_batido ? 1 : 0,
+        es_combinado: p.es_combinado ? true : false,
         receta_base_id: p.receta_base_id || null
       }));
 

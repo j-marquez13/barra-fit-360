@@ -61,6 +61,7 @@ CREATE TABLE productos (
     precio_venta DOUBLE PRECISION NOT NULL DEFAULT 0.00 CHECK (precio_venta >= 0.00),
     activo BOOLEAN DEFAULT TRUE,
     es_batido BOOLEAN DEFAULT FALSE,
+    es_combinado BOOLEAN DEFAULT FALSE,
     receta_base_id INT, -- Referencia a una Receta Base opcional
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -123,6 +124,7 @@ CREATE TABLE detalle_ventas (
     subtotal NUMERIC(12, 2) NOT NULL CHECK (subtotal >= 0.00),
     costo_unitario DOUBLE PRECISION,
     receta_base_ids TEXT,
+    insumos_manuales TEXT,
     CONSTRAINT fk_detalle_ventas_venta FOREIGN KEY (venta_id) REFERENCES ventas(id) ON DELETE CASCADE,
     CONSTRAINT fk_detalle_ventas_producto FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE RESTRICT
 );
@@ -245,29 +247,17 @@ RETURNS TRIGGER AS $$
 BEGIN
     UPDATE insumos
     SET stock_actual = stock_actual - (
-        -- Insumos de receta individual
+        -- Insumos de receta individual (las recetas base se descuentan desde el código JS)
         COALESCE((
             SELECT r.cantidad * NEW.cantidad
             FROM recetas r
             WHERE r.producto_id = NEW.producto_id AND r.insumo_id = insumos.id
         ), 0)
-        +
-        -- Insumos de receta base
-        COALESCE((
-            SELECT rbi.cantidad * NEW.cantidad
-            FROM productos p
-            JOIN recetas_base_insumos rbi ON p.receta_base_id = rbi.receta_base_id
-            WHERE p.id = NEW.producto_id AND rbi.insumo_id = insumos.id
-        ), 0)
     ),
     updated_at = CURRENT_TIMESTAMP
     WHERE id IN (
-        -- Todos los insumos involucrados (individuales + base)
+        -- Solo insumos de la receta individual
         SELECT insumo_id FROM recetas WHERE producto_id = NEW.producto_id
-        UNION
-        SELECT rbi.insumo_id FROM productos p
-        JOIN recetas_base_insumos rbi ON p.receta_base_id = rbi.receta_base_id
-        WHERE p.id = NEW.producto_id
     );
     RETURN NEW;
 END;

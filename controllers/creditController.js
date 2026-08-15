@@ -289,7 +289,14 @@ export async function registrarDeuda(req, res) {
     }
 
     const nuevoSaldo = saldoActual + montoDeuda;
-    await db.execute('UPDATE clientes SET saldo_deudor = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [nuevoSaldo, id]);
+    await db.transaction(async (tx) => {
+      await tx.execute('UPDATE clientes SET saldo_deudor = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [nuevoSaldo, id]);
+      // Insertar registro de auditoría en abonos_credito con monto negativo para trazabilidad
+      await tx.execute(
+        'INSERT INTO abonos_credito (cliente_id, monto_total_cop, notas) VALUES ($1, $2, $3)',
+        [id, -montoDeuda, `[DEUDA MANUAL] ${notas || 'Sin notas'} - Registrada el ${new Date().toISOString()}`]
+      );
+    });
 
     return res.status(201).json({
       mensaje: 'Deuda registrada con éxito.',
