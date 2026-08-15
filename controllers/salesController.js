@@ -255,7 +255,7 @@ export async function processSale(req, res) {
               );
 
               for (const ins of insumosBase) {
-                const esSabor = ins.es_sabor_batido ? true : false;
+                const esSabor = (ins.es_sabor_batido === true || ins.es_sabor_batido === 1 || ins.es_sabor_batido === '1' || ins.es_sabor_batido === 'true') ? true : false;
                 const cantidadADescontar = (parseFloat(ins.cantidad_combinada) > 0)
                   ? parseFloat(ins.cantidad_combinada)
                   : (parseFloat(ins.cantidad_sola) > 0 ? parseFloat(ins.cantidad_sola) : 1);
@@ -271,6 +271,8 @@ export async function processSale(req, res) {
                 }
               }
             }
+
+
 
             // Descontar insumos comunes (1 sola vez)
             for (const [insumoId, cantidad] of comunesMap) {
