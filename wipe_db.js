@@ -12,27 +12,14 @@ try {
 const db = new sqlite3.Database('database.sqlite');
 
 db.serialize(() => {
-  db.all("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != 'usuarios'", (err, rows) => {
+  db.run("UPDATE insumos SET stock_actual = 0, updated_at = CURRENT_TIMESTAMP", (err) => {
     if (err) {
-      console.error(err);
-      return;
+      console.error("Error reseteando el stock:", err);
+    } else {
+      console.log('✅ El reseteo del sistema se completó con éxito.');
+      console.log('✅ TODO el stock actual ha sido puesto en 0.');
+      console.log('✅ Las ventas, productos y recetas se mantuvieron intactos.');
     }
-    
-    db.run("BEGIN TRANSACTION");
-    
-    rows.forEach(row => {
-      db.run(`DELETE FROM ${row.name}`, (err) => {
-        if (err) console.error(`Error deleting from ${row.name}:`, err);
-      });
-      db.run(`DELETE FROM sqlite_sequence WHERE name='${row.name}'`, (err) => {
-        // Not all tables are in sqlite_sequence, so ignore errors here
-      });
-    });
-    
-    db.run("COMMIT", () => {
-      console.log('✅ Base de datos vaciada con éxito. Tablas limpiadas:');
-      console.log(rows.map(r => r.name).join(', '));
-      db.close();
-    });
+    db.close();
   });
 });

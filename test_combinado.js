@@ -31,20 +31,22 @@ async function runTest() {
     await db.execute("INSERT INTO recetas_base (id, nombre, costo_total) VALUES (2, 'Receta Mango', 500)");
     await db.execute("INSERT INTO recetas_base_insumos (receta_base_id, insumo_id, cantidad) VALUES (2, 1, 1), (2, 2, 1), (2, 3, 200), (2, 5, 1)");
 
-    // 4. Crear Producto Batido
-    await db.execute("INSERT INTO productos (id, nombre, precio_venta, costo_produccion, es_batido) VALUES (1, 'Batido', 5000, 500, true)");
+    // 4. Crear Producto Batido (Costo base 200, pero como es normal con recetas base, el costo será dinámico)
+    await db.execute("INSERT INTO productos (id, nombre, precio_venta, costo_produccion, es_batido) VALUES (1, 'Batido Normal', 5000, 200, true)");
 
-    // 5. Simular Venta Combinada (Fresa + Mango)
+    // 5. Simular Venta de Batido Normal (Fresa + Mango)
+    // El Frontend (app3.js) ahora suma los costos de las recetas base: 500 + 500 = 1000
+    const costoCalculadoFrontend = 1000;
     const reqVenta = {
       body: {
         items: [
-          { producto_id: 1, cantidad: 1, costo_produccion_calculado: 500, receta_base_ids: [1, 2] }
+          { producto_id: 1, cantidad: 1, costo_produccion_calculado: costoCalculadoFrontend, receta_base_ids: [1, 2] }
         ],
         pagos: [
           { metodo_pago: 'Efectivo COP', moneda: 'COP', monto_original: 5000, referencia: null }
         ],
         tasas: { USD: 4000, VES: 100 },
-        notas: 'Prueba batido combinado'
+        notas: 'Prueba batido normal costo dinámico'
       }
     };
 
@@ -55,12 +57,16 @@ async function runTest() {
       json: (data) => { respData = data; }
     };
 
-    console.log("--- Procesando venta combinada...");
+    console.log("--- Procesando venta de Batido Normal con costo dinámico (Costo calculado: " + costoCalculadoFrontend + ")...");
     await processSale(reqVenta, resVenta);
     console.log("Status de Venta:", statusCode);
     const ventaId = respData.venta_id;
 
-    // 6. Verificar Stock Post-Venta
+    // 6. Verificar Costo guardado en detalle_ventas
+    const detalleVenta = await db.query("SELECT costo_unitario FROM detalle_ventas WHERE venta_id = $1", [ventaId]);
+    console.log(`Costo guardado en la base de datos: $${detalleVenta[0].costo_unitario} (Debe ser $1000)`);
+    
+    // 7. Verificar Stock Post-Venta
     const stockPostVenta = await db.query("SELECT id, nombre, stock_actual FROM insumos ORDER BY id");
     console.log("Stock Post-Venta (Debe ser: Vaso 99, Pitillo 99, Leche 9800, Fresa 99, Mango 99):");
     console.table(stockPostVenta);
