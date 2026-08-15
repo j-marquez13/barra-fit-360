@@ -881,12 +881,12 @@ const basesActivas = (STATE.recetasBase || []).filter(r => r.activa_batido);
           </div>`
         : (!prod.receta_base_id && tieneRecetasBase)
         ? `<div style="margin-bottom:10px; padding:10px 12px; background:rgba(88,86,214,0.08); border:1px solid var(--border-glass); border-radius:8px;">
-            <span style="font-weight:600; font-size:0.85rem; color:var(--color-muted); display:block; margin-bottom:4px;">🧩 Elige las recetas base para este batido (descuentan stock):</span>
+            <span style="font-weight:600; font-size:0.85rem; color:var(--color-muted); display:block; margin-bottom:4px;">🧩 Elige las recetas base para este batido (descuentan stock y suman costo):</span>
             <ul style="list-style:none;margin:0;padding:0;">
               ${basesActivas.map(b =>
                 `<li style="padding:6px 0;">
                   <label style="cursor:pointer; display:flex; align-items:center; gap:8px; font-size:0.85rem;">
-                    <input type="checkbox" class="rb-opcion-cb" data-id="${b.id}" checked style="width:16px;height:16px;">
+                    <input type="checkbox" class="rb-opcion-cb" data-id="${b.id}" data-costo="${parseFloat(b.costo_total) || 0}" checked style="width:16px;height:16px;" onchange="updateBatidoCost()">
                     <span><strong>${b.nombre}</strong> <small style="color:var(--color-muted);">(${(b.insumos || []).map(i => i.nombre).join(', ') || 'sin insumos'})</small></span>
                   </label>
                 </li>`).join('')}
@@ -907,17 +907,35 @@ const basesActivas = (STATE.recetasBase || []).filter(r => r.activa_batido);
           </div>`
         : '';
 
+      window.updateBatidoCost = () => {
+        let newCost = 0;
+        document.querySelectorAll('.rb-opcion-cb:checked').forEach(cb => {
+          newCost += parseFloat(cb.dataset.costo) || 0;
+        });
+        const el = document.getElementById('bati-costo-el');
+        if (el) el.textContent = '$' + newCost.toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:2});
+      };
+
+      const esNormalConRecetas = (!prod.receta_base_id && tieneRecetasBase && !esCombinado);
+      
+      // Calcular costo inicial para batidos normales
+      let initialCost = costoReceta;
+      if (esNormalConRecetas) {
+        initialCost = basesActivas.reduce((sum, b) => sum + (parseFloat(b.costo_total) || 0), 0);
+      }
+
       openGenericModal(`Opciones para ${prod.nombre}`, `
         ${baseHtml}
         ${propiosHtml}
         ${opcionesHtml}
         <div style="margin-top:12px; padding:12px 15px; background:linear-gradient(135deg, rgba(34,197,94,0.08), rgba(34,197,94,0.04)); border:1px solid rgba(34,197,94,0.25); border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
-          <span style="font-weight:600; font-size:0.9rem; color:var(--color-muted);">💰 Costo fijo del producto:</span>
-          <span id="bati-costo-el" style="font-weight:700; font-size:1.1rem; color:var(--success);">$${costoReceta.toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:2})}</span>
+          <span style="font-weight:600; font-size:0.9rem; color:var(--color-muted);">💰 ${esNormalConRecetas ? 'Costo calculado (Recetas Base):' : 'Costo fijo del producto:'}</span>
+          <span id="bati-costo-el" style="font-weight:700; font-size:1.1rem; color:var(--success);">$${initialCost.toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:2})}</span>
         </div>
-        <p style="font-size:0.75rem; color:var(--color-muted); margin-top:6px; text-align:center;">Las selecciones solo descuentan stock — no modifican el precio ni el costo.</p>`,
+        <p style="font-size:0.75rem; color:var(--color-muted); margin-top:6px; text-align:center;">
+          ${esNormalConRecetas ? 'El costo de producción se calcula sumando las recetas base seleccionadas.' : 'Las selecciones solo descuentan stock — no modifican el costo.'}
+        </p>`,
         () => {
-          // Costo y precio siempre fijos (del producto)
           let costoFinal = parseFloat(prod.costo_produccion) || 0;
           baseSel = [];
           let insumosManuales = [];
@@ -929,11 +947,13 @@ const basesActivas = (STATE.recetasBase || []).filter(r => r.activa_batido);
             });
             STATE.cart.push({ producto_id: productId, cantidad: 1, costo_produccion_calculado: costoFinal, insumos_manuales: insumosManuales.length > 0 ? insumosManuales : null });
           } else if (!prod.receta_base_id && tieneRecetasBase) {
-            // Batido normal con recetas base
+            // Batido normal con recetas base: Costo dinámico basado en las recetas
+            let costoDinamico = 0;
             document.querySelectorAll('.rb-opcion-cb:checked').forEach(cb => {
               baseSel.push(parseInt(cb.dataset.id));
+              costoDinamico += parseFloat(cb.dataset.costo) || 0;
             });
-            STATE.cart.push({ producto_id: productId, cantidad: 1, costo_produccion_calculado: costoFinal, receta_base_ids: baseSel.length > 0 ? baseSel : null });
+            STATE.cart.push({ producto_id: productId, cantidad: 1, costo_produccion_calculado: baseSel.length > 0 ? costoDinamico : costoFinal, receta_base_ids: baseSel.length > 0 ? baseSel : null });
           } else {
             // Batido con receta base fija o sin opciones
             STATE.cart.push({ producto_id: productId, cantidad: 1, costo_produccion_calculado: costoFinal, receta_base_ids: null });
@@ -942,6 +962,7 @@ const basesActivas = (STATE.recetasBase || []).filter(r => r.activa_batido);
           closeGenericModal();
         }
       );
+      return;
       return;
     }
   }
