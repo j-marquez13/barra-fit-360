@@ -2158,6 +2158,7 @@ window.showEditProductoModal = async function(prod_id) {
     const categoria = document.getElementById('edit-prod-categoria').value;
     const precio_venta = document.getElementById('edit-prod-precio').value;
     const es_batido = document.getElementById('edit-prod-es-batido').checked;
+    const es_combinado = document.getElementById('edit-prod-es-combinado').checked;
     const receta_base_id = parseInt(document.getElementById('edit-prod-receta-base').value) || null;
     
     const rows = document.querySelectorAll('#edit-receta-items .receta-row');
@@ -2186,7 +2187,7 @@ window.showEditProductoModal = async function(prod_id) {
     let costo_produccion = costo_manual > 0 ? costo_manual : costo_produccion_calc;
 
     try {
-      const bodyData = { nombre, categoria, precio_venta, costo_produccion, receta, es_batido, activo: true, receta_base_id };
+      const bodyData = { nombre, categoria, precio_venta, costo_produccion, receta, es_batido, es_combinado, activo: true, receta_base_id };
       const res = await fetch(`/api/productos/${prod_id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
