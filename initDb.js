@@ -59,6 +59,25 @@ export async function initializeDatabase() {
       await db.execute('ALTER TABLE insumos ADD COLUMN IF NOT EXISTS cantidad_combinada DOUBLE PRECISION NOT NULL DEFAULT 0.0;');
       await db.execute('ALTER TABLE productos ADD COLUMN IF NOT EXISTS es_combinado BOOLEAN DEFAULT FALSE;');
       await db.execute('ALTER TABLE detalle_ventas ADD COLUMN IF NOT EXISTS insumos_manuales TEXT;');
+
+      // El sistema permite stock negativo al facturar (emite advertencia y procesa la venta),
+      // por lo que hay que eliminar cualquier CHECK que impida stock_actual < 0.
+      // Esto evita el error 500 en POST /api/ventas cuando un insumo está en 0.
+      await db.execute(`
+        DO $$
+        DECLARE r record;
+        BEGIN
+          FOR r IN
+            SELECT conname FROM pg_constraint
+            WHERE conrelid = 'insumos'::regclass
+              AND contype = 'c'
+              AND pg_get_constraintdef(oid) ILIKE '%stock_actual%'
+          LOOP
+            EXECUTE 'ALTER TABLE insumos DROP CONSTRAINT ' || quote_ident(r.conname);
+          END LOOP;
+        END $$;
+      `);
+
       console.log('   ✅ Esquema PostgreSQL verificado y migrado.');
     } catch(e) {
       console.log('   ⚠️ Migración PostgreSQL ignorada o error:', e.message);

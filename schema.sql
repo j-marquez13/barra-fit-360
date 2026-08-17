@@ -8,7 +8,7 @@ CREATE TABLE insumos (
     id SERIAL PRIMARY KEY,
     nombre VARCHAR(150) NOT NULL UNIQUE,
     unidad_medida VARCHAR(20) NOT NULL, -- Ej: 'unidad', 'gr', 'ml', 'oz', 'scoop'
-    stock_actual NUMERIC(12, 4) NOT NULL DEFAULT 0.0000 CHECK (stock_actual >= 0.0000),
+    stock_actual NUMERIC(12, 4) NOT NULL DEFAULT 0.0000,
     stock_minimo NUMERIC(12, 4) NOT NULL DEFAULT 0.0000 CHECK (stock_minimo >= 0.0000),
     costo_unitario DOUBLE PRECISION NOT NULL DEFAULT 0.00 CHECK (costo_unitario >= 0.00),
     es_para_batidos BOOLEAN DEFAULT FALSE,
