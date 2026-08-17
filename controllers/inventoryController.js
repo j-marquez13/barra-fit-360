@@ -502,19 +502,30 @@ export async function updateProducto(req, res) {
 export async function getProductoReceta(req, res) {
   const { id } = req.params;
   try {
-    const receta = await db.query(`
-      WITH target AS (SELECT $1 AS pid)
-      SELECT req.insumo_id, req.cantidad, i.nombre, i.unidad_medida, i.costo_unitario, req.is_base
-      FROM (
-        SELECT insumo_id, cantidad, 0 as is_base FROM recetas WHERE producto_id = (SELECT pid FROM target)
-        UNION ALL
-        SELECT rbi.insumo_id, rbi.cantidad, 1 as is_base 
+    // Se separan en dos consultas con $1 usado UNA sola vez cada una,
+    // para que funcione tanto en PostgreSQL como en SQLite (donde $1 se
+    // convierte en "?" posicional y no se puede repetir sin repetir params).
+    const [propias, base] = await Promise.all([
+      db.query(`
+        SELECT r.insumo_id, r.cantidad, i.nombre, i.unidad_medida, i.costo_unitario, 0 AS is_base
+        FROM recetas r
+        JOIN insumos i ON r.insumo_id = i.id
+        WHERE r.producto_id = $1
+      `, [id]),
+      db.query(`
+        SELECT rbi.insumo_id, rbi.cantidad, i.nombre, i.unidad_medida, i.costo_unitario, 1 AS is_base
         FROM productos p
         JOIN recetas_base_insumos rbi ON p.receta_base_id = rbi.receta_base_id
-        WHERE p.id = (SELECT pid FROM target)
-      ) req
-      JOIN insumos i ON req.insumo_id = i.id
-    `, [id]);
+        JOIN insumos i ON rbi.insumo_id = i.id
+        WHERE p.id = $1
+      `, [id])
+    ]);
+
+    const receta = [
+      ...propias.map(r => ({ ...r, is_base: 0 })),
+      ...base.map(r => ({ ...r, is_base: 1 }))
+    ];
+
     return res.json(receta);
   } catch (error) {
     console.error('Error al obtener receta:', error);

@@ -2038,8 +2038,8 @@ window.showEditProductoModal = async function(prod_id) {
     </div>
     <div class="form-group" style="margin-top: 10px;">
       <label>Costo de Producción (Manual)</label>
-      <input type="number" step="any" id="edit-prod-costo" value="${prod.costo_produccion}">
-      <small style="color:var(--text-muted); font-size:12px;">Para calcular desde la receta, déjalo en 0.</small>
+      <input type="number" step="any" id="edit-prod-costo" value="" placeholder="${prod.costo_produccion}" data-original="${prod.costo_produccion}">
+      <small style="color:var(--text-muted); font-size:12px;">Déjalo vacío para calcular el costo desde la receta.</small>
     </div>
     <div class="form-group" style="margin-top: 10px;">
       <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
@@ -2183,8 +2183,20 @@ window.showEditProductoModal = async function(prod_id) {
       if (rbBase) costo_produccion_calc = parseFloat(rbBase.costo_total) || 0;
     }
 
-    let costo_manual = parseFloat(document.getElementById('edit-prod-costo').value) || 0;
-    let costo_produccion = costo_manual > 0 ? costo_manual : costo_produccion_calc;
+    const costoInput = document.getElementById('edit-prod-costo');
+    const costoManualStr = costoInput.value.trim();
+
+    // Si el usuario escribió un costo manual, se usa ese valor.
+    // Si lo dejó vacío, se recalcula desde la receta.
+    // Si no hay receta y el campo está vacío, se conserva el costo anterior.
+    let costo_produccion;
+    if (costoManualStr !== '') {
+      costo_produccion = parseFloat(costoManualStr) || 0;
+    } else if (costo_produccion_calc > 0) {
+      costo_produccion = costo_produccion_calc;
+    } else {
+      costo_produccion = parseFloat(costoInput.dataset.original) || 0;
+    }
 
     try {
       const bodyData = { nombre, categoria, precio_venta, costo_produccion, receta, es_batido, es_combinado, activo: true, receta_base_id };
