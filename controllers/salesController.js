@@ -293,16 +293,14 @@ export async function processSale(req, res) {
             // --- SOLA (1 base): descontar todo normalmente ---
             for (const baseId of baseIds) {
               const insumosBase = await tx.query(
-                `SELECT rbi.insumo_id, i.cantidad_sola, i.cantidad_combinada
+                `SELECT rbi.insumo_id, rbi.cantidad
                  FROM recetas_base_insumos rbi
-                 JOIN insumos i ON rbi.insumo_id = i.id
                  WHERE rbi.receta_base_id = $1`,
                 [baseId]
               );
 
               for (const ins of insumosBase) {
-                const cantidadADescontar = (parseFloat(ins.cantidad_sola) > 0)
-                  ? parseFloat(ins.cantidad_sola) : 1;
+                const cantidadADescontar = parseFloat(ins.cantidad) || 1;
 
                 await tx.execute(
                   'UPDATE insumos SET stock_actual = stock_actual - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
@@ -508,16 +506,14 @@ export async function anularVenta(req, res) {
             // --- SOLA (1 base): devolver todo normalmente ---
             for (const baseId of baseIds) {
               const insumosBase = await tx.query(
-                `SELECT rbi.insumo_id, i.cantidad_sola, i.cantidad_combinada
+                `SELECT rbi.insumo_id, rbi.cantidad
                  FROM recetas_base_insumos rbi
-                 JOIN insumos i ON rbi.insumo_id = i.id
                  WHERE rbi.receta_base_id = $1`,
                 [baseId]
               );
 
               for (const ins of insumosBase) {
-                const cantidadADevolver = (parseFloat(ins.cantidad_sola) > 0)
-                  ? parseFloat(ins.cantidad_sola) : 1;
+                const cantidadADevolver = parseFloat(ins.cantidad) || 1;
 
                 await tx.execute(
                   'UPDATE insumos SET stock_actual = stock_actual + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
