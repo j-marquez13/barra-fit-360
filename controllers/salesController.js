@@ -309,6 +309,32 @@ export async function processSale(req, res) {
               }
             }
           }
+        } else {
+          // --- RECETA BASE FIJA asignada al producto ---
+          // El frontend manda receta_base_ids = null para estos productos.
+          // Hay que descontar la plantilla fija (productos.receta_base_id).
+          const prodBase = await tx.query(
+            'SELECT receta_base_id FROM productos WHERE id = $1',
+            [det.producto_id]
+          );
+
+          if (prodBase[0]?.receta_base_id) {
+            const insumosBase = await tx.query(
+              `SELECT rbi.insumo_id, rbi.cantidad
+               FROM recetas_base_insumos rbi
+               WHERE rbi.receta_base_id = $1`,
+              [prodBase[0].receta_base_id]
+            );
+
+            for (const ins of insumosBase) {
+              const cantidadADescontar = parseFloat(ins.cantidad) || 1;
+
+              await tx.execute(
+                'UPDATE insumos SET stock_actual = stock_actual - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+                [cantidadADescontar * det.cantidad, ins.insumo_id]
+              );
+            }
+          }
         }
 
         // Descontar insumos manuales (batido combinado: 1 porción por cada insumo seleccionado)
@@ -520,6 +546,30 @@ export async function anularVenta(req, res) {
                   [cantidadADevolver * parseFloat(det.cantidad), ins.insumo_id]
                 );
               }
+            }
+          }
+        } else {
+          // --- RECETA BASE FIJA asignada al producto ---
+          const prodBase = await tx.query(
+            'SELECT receta_base_id FROM productos WHERE id = $1',
+            [det.producto_id]
+          );
+
+          if (prodBase[0]?.receta_base_id) {
+            const insumosBase = await tx.query(
+              `SELECT rbi.insumo_id, rbi.cantidad
+               FROM recetas_base_insumos rbi
+               WHERE rbi.receta_base_id = $1`,
+              [prodBase[0].receta_base_id]
+            );
+
+            for (const ins of insumosBase) {
+              const cantidadADevolver = parseFloat(ins.cantidad) || 1;
+
+              await tx.execute(
+                'UPDATE insumos SET stock_actual = stock_actual + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+                [cantidadADevolver * parseFloat(det.cantidad), ins.insumo_id]
+              );
             }
           }
         }

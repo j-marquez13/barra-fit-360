@@ -525,46 +525,30 @@ async function ensureDefaultUsers() {
   }
 }
 async function createTriggers() {
-  // Verificar si el trigger ya existe
-  const existing = await db.query(
-    "SELECT name FROM sqlite_master WHERE type='trigger' AND name='trg_descontar_inventario_venta'"
-  );
-  
-  if (existing.length === 0) {
-    await db.execute(`
-      CREATE TRIGGER trg_descontar_inventario_venta
-      AFTER INSERT ON detalle_ventas
-      FOR EACH ROW
-      BEGIN
-        UPDATE insumos
-        SET stock_actual = stock_actual - (
-          COALESCE((
-            SELECT r.cantidad * NEW.cantidad
-            FROM recetas r
-            WHERE r.producto_id = NEW.producto_id AND r.insumo_id = insumos.id
-          ), 0)
-          +
-          COALESCE((
-            SELECT rbi.cantidad * NEW.cantidad
-            FROM productos p
-            JOIN recetas_base_insumos rbi ON p.receta_base_id = rbi.receta_base_id
-            WHERE p.id = NEW.producto_id AND rbi.insumo_id = insumos.id
-          ), 0)
-        ),
-        updated_at = CURRENT_TIMESTAMP
-        WHERE id IN (
-          SELECT insumo_id FROM recetas WHERE producto_id = NEW.producto_id
-          UNION
-          SELECT rbi.insumo_id FROM productos p
-          JOIN recetas_base_insumos rbi ON p.receta_base_id = rbi.receta_base_id
-          WHERE p.id = NEW.producto_id
-        );
-      END
-    `);
-    console.log('   ✅ Trigger de inventario creado.');
-  } else {
-    console.log('   ✅ Trigger de inventario ya existe.');
-  }
+  // IMPORTANTE: Este trigger SOLO descuenta la receta individual (tabla `recetas`).
+  // Las recetas base (fijas o dinámicas) y los insumos manuales se descuentan desde
+  // salesController.js, de forma uniforme para SQLite y PostgreSQL.
+  await db.execute("DROP TRIGGER IF EXISTS trg_descontar_inventario_venta");
+  await db.execute(`
+    CREATE TRIGGER trg_descontar_inventario_venta
+    AFTER INSERT ON detalle_ventas
+    FOR EACH ROW
+    BEGIN
+      UPDATE insumos
+      SET stock_actual = stock_actual - (
+        COALESCE((
+          SELECT r.cantidad * NEW.cantidad
+          FROM recetas r
+          WHERE r.producto_id = NEW.producto_id AND r.insumo_id = insumos.id
+        ), 0)
+      ),
+      updated_at = CURRENT_TIMESTAMP
+      WHERE id IN (
+        SELECT insumo_id FROM recetas WHERE producto_id = NEW.producto_id
+      );
+    END
+  `);
+  console.log('   ✅ Trigger de inventario (solo receta individual) aplicado.');
 
   // Trigger para descontar inventario de Extras
   try {
