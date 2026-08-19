@@ -337,13 +337,21 @@ export async function processSale(req, res) {
           }
         }
 
-        // Descontar insumos manuales (batido combinado: 1 porción por cada insumo seleccionado)
+        // Descontar insumos manuales (batido combinado):
+        // usa cantidad_combinada si está definida; si no, cantidad_sola; si no, 1.
         if (det.insumos_manuales && det.insumos_manuales.length > 0) {
           for (const ins of det.insumos_manuales) {
-            const cantidadADescontar = (parseFloat(ins.cantidad) || 1) * det.cantidad;
+            const info = await tx.query(
+              'SELECT cantidad_combinada, cantidad_sola FROM insumos WHERE id = $1',
+              [ins.insumo_id]
+            );
+            const comb = parseFloat(info[0]?.cantidad_combinada) || 0;
+            const sola = parseFloat(info[0]?.cantidad_sola) || 0;
+            const cantidadADescontar = comb > 0 ? comb : (sola > 0 ? sola : 1);
+
             await tx.execute(
               'UPDATE insumos SET stock_actual = stock_actual - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-              [cantidadADescontar, ins.insumo_id]
+              [cantidadADescontar * det.cantidad, ins.insumo_id]
             );
           }
         }
@@ -574,7 +582,8 @@ export async function anularVenta(req, res) {
           }
         }
 
-        // Devolver insumos manuales (batido combinado)
+        // Devolver insumos manuales (batido combinado):
+        // usa cantidad_combinada si está definida; si no, cantidad_sola; si no, 1.
         if (det.insumos_manuales) {
           let manuales;
           try {
@@ -583,10 +592,17 @@ export async function anularVenta(req, res) {
             continue;
           }
           for (const ins of manuales) {
-            const cantidadADevolver = (parseFloat(ins.cantidad) || 1) * parseFloat(det.cantidad);
+            const info = await tx.query(
+              'SELECT cantidad_combinada, cantidad_sola FROM insumos WHERE id = $1',
+              [ins.insumo_id]
+            );
+            const comb = parseFloat(info[0]?.cantidad_combinada) || 0;
+            const sola = parseFloat(info[0]?.cantidad_sola) || 0;
+            const cantidadADevolver = comb > 0 ? comb : (sola > 0 ? sola : 1);
+
             await tx.execute(
               'UPDATE insumos SET stock_actual = stock_actual + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-              [cantidadADevolver, ins.insumo_id]
+              [cantidadADevolver * parseFloat(det.cantidad), ins.insumo_id]
             );
           }
         }
