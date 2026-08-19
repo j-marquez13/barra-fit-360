@@ -2383,6 +2383,11 @@ async function loadCierreDiario() {
     document.getElementById('kpi-gastos').textContent = `$${data.resumen.gastos_operacionales.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     document.getElementById('kpi-diferencial').textContent = `Dif. Cambiario: ${data.resumen.diferencial_cambiario > 0 ? '+' : ''}$${data.resumen.diferencial_cambiario.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     
+    const kpiReposicion = document.getElementById('kpi-reposicion');
+    if (kpiReposicion) {
+      kpiReposicion.textContent = `$${(data.resumen.reposicion_stock_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+    }
+
     document.getElementById('kpi-utilidad').textContent = `$${data.resumen.utilidad_neta.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     
     const isProfit = data.resumen.utilidad_neta >= 0;

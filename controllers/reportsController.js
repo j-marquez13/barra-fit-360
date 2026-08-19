@@ -46,12 +46,21 @@ export async function cierreDiario(req, res) {
     `, [fecha]);
     const totalAbonos = parseFloat(abonosResumen[0]?.total_abonos || 0);
 
-    // 3. Gastos Operacionales
+    // 3. Gastos Operacionales (Nómina y Gastos Generales).
+    //    La reposición de inventario NO se resta aquí: es compra de stock y ya
+    //    impacta la utilidad por la vía del costo de producción cuando se vende.
     const gastosResumen = await db.query(`
       SELECT COALESCE(SUM(monto_cop), 0) as total_gastos
-      FROM gastos WHERE ${dateExpr('fecha')} = $1
+      FROM gastos WHERE ${dateExpr('fecha')} = $1 AND categoria != 'REPOSICION'
     `, [fecha]);
     const totalGastos = parseFloat(gastosResumen[0]?.total_gastos || 0);
+
+    // 3.1 Reposición de inventario (compra de stock, no es gasto operacional)
+    const reposicionResumen = await db.query(`
+      SELECT COALESCE(SUM(monto_cop), 0) as total_reposicion
+      FROM gastos WHERE ${dateExpr('fecha')} = $1 AND categoria = 'REPOSICION'
+    `, [fecha]);
+    const totalReposicion = parseFloat(reposicionResumen[0]?.total_reposicion || 0);
 
     // 3.1 Desglose individual de gastos del día
     const gastosDetalle = await db.query(`
@@ -123,6 +132,7 @@ export async function cierreDiario(req, res) {
         flujo_caja_ingresos: totalVentas + totalAbonos,
         costo_produccion: costoProduccion,
         gastos_operacionales: totalGastos,
+        reposicion_stock_cop: totalReposicion,
         costo_cortesias: costoCortesias,
         diferencial_cambiario: diferencialCambiarioTotal,
         utilidad_neta: utilidadNeta
@@ -168,12 +178,21 @@ export async function cierreSemanal(req, res) {
       WHERE ${dateFilter} AND v.tipo_transaccion != 'Anulada' GROUP BY pv.metodo_pago, pv.moneda ORDER BY total_cop DESC
     `);
 
-    // 4. Gastos Operacionales
+    // 4. Gastos Operacionales (Nómina y Gastos Generales).
+    //    La reposición de inventario no se resta aquí: ya impacta la utilidad
+    //    por el costo de producción cuando el producto se vende.
     const gastosResumen = await db.query(`
       SELECT COALESCE(SUM(monto_cop), 0) as total_gastos
-      FROM gastos WHERE ${dateFilterGastos}
+      FROM gastos WHERE ${dateFilterGastos} AND categoria != 'REPOSICION'
     `);
     const totalGastos = parseFloat(gastosResumen[0]?.total_gastos || 0);
+
+    // 4.1 Reposición de inventario (compra de stock, no es gasto operacional)
+    const reposicionResumen = await db.query(`
+      SELECT COALESCE(SUM(monto_cop), 0) as total_reposicion
+      FROM gastos WHERE ${dateFilterGastos} AND categoria = 'REPOSICION'
+    `);
+    const totalReposicion = parseFloat(reposicionResumen[0]?.total_reposicion || 0);
 
     // 5. Cortesías
     const cortesiasResumen = await db.query(`
@@ -206,6 +225,7 @@ export async function cierreSemanal(req, res) {
         ingresos_totales_cop: totalVentas,
         costo_produccion: costoProduccion,
         gastos_operacionales: totalGastos,
+        reposicion_stock_cop: totalReposicion,
         costo_cortesias: costoCortesias,
         utilidad_neta: utilidadNeta
       },
