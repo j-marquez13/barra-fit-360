@@ -247,7 +247,7 @@ export async function processSale(req, res) {
 
             for (const baseId of baseIds) {
               const insumosBase = await tx.query(
-                `SELECT rbi.insumo_id, i.cantidad_sola, i.cantidad_combinada, i.es_sabor_batido
+                `SELECT rbi.insumo_id, rbi.cantidad, i.es_sabor_batido
                  FROM recetas_base_insumos rbi
                  JOIN insumos i ON rbi.insumo_id = i.id
                  WHERE rbi.receta_base_id = $1`,
@@ -256,9 +256,7 @@ export async function processSale(req, res) {
 
               for (const ins of insumosBase) {
                 const esSabor = (ins.es_sabor_batido === true || ins.es_sabor_batido === 1 || ins.es_sabor_batido === '1' || ins.es_sabor_batido === 'true') ? true : false;
-                const cantidadADescontar = (parseFloat(ins.cantidad_combinada) > 0)
-                  ? parseFloat(ins.cantidad_combinada)
-                  : (parseFloat(ins.cantidad_sola) > 0 ? parseFloat(ins.cantidad_sola) : 1);
+                const cantidadADescontar = parseFloat(ins.cantidad) || 1;
 
                 if (esSabor) {
                   // Frutas/sabores: cada receta base descuenta su fruta
@@ -498,7 +496,7 @@ export async function anularVenta(req, res) {
 
             for (const baseId of baseIds) {
               const insumosBase = await tx.query(
-                `SELECT rbi.insumo_id, i.cantidad_sola, i.cantidad_combinada, i.es_sabor_batido
+                `SELECT rbi.insumo_id, rbi.cantidad, i.es_sabor_batido
                  FROM recetas_base_insumos rbi
                  JOIN insumos i ON rbi.insumo_id = i.id
                  WHERE rbi.receta_base_id = $1`,
@@ -507,9 +505,7 @@ export async function anularVenta(req, res) {
 
               for (const ins of insumosBase) {
                 const esSabor = ins.es_sabor_batido ? true : false;
-                const cantidadADevolver = (parseFloat(ins.cantidad_combinada) > 0)
-                  ? parseFloat(ins.cantidad_combinada)
-                  : (parseFloat(ins.cantidad_sola) > 0 ? parseFloat(ins.cantidad_sola) : 1);
+                const cantidadADevolver = parseFloat(ins.cantidad) || 1;
 
                 if (esSabor) {
                   sabores.push({ insumo_id: ins.insumo_id, cantidad: cantidadADevolver });
