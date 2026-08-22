@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -746,6 +747,9 @@
             <button class="mod-tab" data-report-tab="semanal" id="tab-semanal">
               <i data-lucide="calendar-range"></i> Cierre Semanal
             </button>
+            <button class="mod-tab" data-report-tab="mensual" id="tab-mensual">
+              <i data-lucide="calendar-days"></i> Cierre Mensual
+            </button>
             <button class="mod-tab" data-report-tab="historial" id="tab-historial">
               <i data-lucide="history"></i> Historial
             </button>
@@ -889,28 +893,69 @@
             </div>
           </div>
 
-          <!-- Sub-vista: Cierre Semanal -->
+          <!-- Sub-vista: Cierre Semanal Personalizado -->
           <div class="report-panel" id="report-semanal">
             <div class="panel-header">
-              <h3>Resumen Semanal (Últimos 7 días)</h3>
-              <button class="action-btn" id="btn-load-semanal">
-                <i data-lucide="refresh-cw"></i> Actualizar
-              </button>
+              <h3>Cierre Semanal Personalizado</h3>
+            </div>
+            
+            <!-- Filtros de rango -->
+            <div class="report-section" style="padding: 15px;">
+              <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;">
+                <div style="flex: 1; min-width: 140px;">
+                  <label class="input-label" style="display:block; margin-bottom:4px; font-size:0.85em; color:var(--color-muted);">Fecha Desde</label>
+                  <input type="date" id="sem-fecha-desde" class="date-picker" style="width:100%;">
+                </div>
+                <div style="flex: 1; min-width: 120px;">
+                  <label class="input-label" style="display:block; margin-bottom:4px; font-size:0.85em; color:var(--color-muted);">Turno Desde</label>
+                  <select id="sem-turno-desde" class="date-picker" style="width:100%; padding:8px 10px;">
+                    <option value="">Todos</option>
+                    <option value="Mañana">Mañana</option>
+                    <option value="Tarde">Tarde</option>
+                  </select>
+                </div>
+                <div style="flex: 1; min-width: 140px;">
+                  <label class="input-label" style="display:block; margin-bottom:4px; font-size:0.85em; color:var(--color-muted);">Fecha Hasta</label>
+                  <input type="date" id="sem-fecha-hasta" class="date-picker" style="width:100%;">
+                </div>
+                <div style="flex: 1; min-width: 120px;">
+                  <label class="input-label" style="display:block; margin-bottom:4px; font-size:0.85em; color:var(--color-muted);">Turno Hasta</label>
+                  <select id="sem-turno-hasta" class="date-picker" style="width:100%; padding:8px 10px;">
+                    <option value="">Todos</option>
+                    <option value="Mañana">Mañana</option>
+                    <option value="Tarde">Tarde</option>
+                  </select>
+                </div>
+                <div>
+                  <button class="action-btn btn-primary" id="btn-load-semanal" style="height:38px;">
+                    <i data-lucide="search"></i> Consultar
+                  </button>
+                </div>
+              </div>
             </div>
 
+            <!-- KPIs Semanal con métricas completas -->
             <div class="kpi-grid" id="kpi-grid-semanal">
               <div class="kpi-card kpi-ventas">
                 <div class="kpi-icon"><i data-lucide="receipt"></i></div>
                 <div class="kpi-data">
-                  <span class="kpi-label">Ventas Semana</span>
+                  <span class="kpi-label">Ventas del Período</span>
                   <span class="kpi-value" id="kpi-ventas-sem">$0</span>
                   <span class="kpi-sub" id="kpi-trans-sem">0 transacciones</span>
+                </div>
+              </div>
+              <div class="kpi-card kpi-costo">
+                <div class="kpi-icon"><i data-lucide="trending-down"></i></div>
+                <div class="kpi-data">
+                  <span class="kpi-label">Costo de Producción</span>
+                  <span class="kpi-value" id="kpi-costo-sem">$0</span>
+                  <span class="kpi-sub" id="kpi-gastos-sem-sub">Gastos Op.: $0</span>
                 </div>
               </div>
               <div class="kpi-card kpi-utilidad">
                 <div class="kpi-icon"><i data-lucide="trending-up"></i></div>
                 <div class="kpi-data">
-                  <span class="kpi-label">Utilidad Semana</span>
+                  <span class="kpi-label">Ganancia Neta</span>
                   <span class="kpi-value" id="kpi-utilidad-sem">$0</span>
                   <span class="kpi-sub" id="kpi-margen-sem">Margen: 0%</span>
                 </div>
@@ -925,9 +970,30 @@
               </div>
             </div>
 
+            <!-- Desglose pagos semanal -->
+            <div class="report-section" id="section-pagos-semanal">
+              <h4><i data-lucide="wallet"></i> Desglose por Método de Pago</h4>
+              <div class="data-table-wrapper">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Método</th>
+                      <th>Moneda</th>
+                      <th>Cant. Pagos</th>
+                      <th>Total Original</th>
+                      <th>Total COP</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-pagos-semanal">
+                    <tr><td colspan="5" class="loading-cell">Seleccione el rango y presione Consultar</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
             <!-- Top productos de la semana -->
             <div class="report-section">
-              <h4><i data-lucide="trophy"></i> Top Productos de la Semana</h4>
+              <h4><i data-lucide="trophy"></i> Top Productos del Período</h4>
               <div class="data-table-wrapper">
                 <table class="data-table">
                   <thead>
@@ -937,10 +1003,113 @@
                       <th>Unidades</th>
                       <th>Ingreso</th>
                       <th>Costo</th>
+                      <th>Utilidad</th>
                     </tr>
                   </thead>
                   <tbody id="tbody-productos-semanal">
-                    <tr><td colspan="5" class="loading-cell">Presione Actualizar para cargar datos</td></tr>
+                    <tr><td colspan="6" class="loading-cell">Presione Consultar para cargar datos</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sub-vista: Cierre Mensual -->
+          <div class="report-panel" id="report-mensual">
+            <div class="panel-header">
+              <h3>Cierre Mensual</h3>
+              <div class="header-actions">
+                <select id="mensual-mes" class="date-picker" style="padding:8px 10px; min-width:160px;">
+                  <!-- Se llena dinámicamente con los últimos 12 meses -->
+                </select>
+                <button class="action-btn btn-primary" id="btn-load-mensual">
+                  <i data-lucide="search"></i> Consultar
+                </button>
+              </div>
+            </div>
+
+            <!-- KPIs Mensual con métricas completas -->
+            <div class="kpi-grid" id="kpi-grid-mensual">
+              <div class="kpi-card kpi-ventas">
+                <div class="kpi-icon"><i data-lucide="receipt"></i></div>
+                <div class="kpi-data">
+                  <span class="kpi-label">Ventas del Mes</span>
+                  <span class="kpi-value" id="kpi-ventas-men">$0</span>
+                  <span class="kpi-sub" id="kpi-trans-men">0 transacciones</span>
+                </div>
+              </div>
+              <div class="kpi-card kpi-ventas" style="border-left-color: #32c8ff;">
+                <div class="kpi-icon"><i data-lucide="wallet"></i></div>
+                <div class="kpi-data">
+                  <span class="kpi-label">Deudas Cobradas</span>
+                  <span class="kpi-value" id="kpi-cobranza-men">$0</span>
+                  <span class="kpi-sub" id="kpi-reposicion-men">Repos. Stock: $0</span>
+                </div>
+              </div>
+              <div class="kpi-card kpi-costo">
+                <div class="kpi-icon"><i data-lucide="trending-down"></i></div>
+                <div class="kpi-data">
+                  <span class="kpi-label">Costo de Producción</span>
+                  <span class="kpi-value" id="kpi-costo-men">$0</span>
+                  <span class="kpi-sub" id="kpi-gastos-men-sub">Gastos Op.: $0 | Cortesías: $0</span>
+                </div>
+              </div>
+              <div class="kpi-card kpi-utilidad">
+                <div class="kpi-icon"><i data-lucide="trending-up"></i></div>
+                <div class="kpi-data">
+                  <span class="kpi-label">Ganancia Neta</span>
+                  <span class="kpi-value" id="kpi-utilidad-men">$0</span>
+                  <span class="kpi-sub" id="kpi-margen-men">Margen: 0%</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Ventas por día del mes -->
+            <div class="report-section">
+              <h4><i data-lucide="calendar-days"></i> Ventas por Día</h4>
+              <div class="chart-bars" id="chart-ventas-mes">
+                <!-- Dinámico: barras de gráfico -->
+              </div>
+            </div>
+
+            <!-- Desglose pagos mensual -->
+            <div class="report-section">
+              <h4><i data-lucide="wallet"></i> Desglose por Método de Pago</h4>
+              <div class="data-table-wrapper">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Método</th>
+                      <th>Moneda</th>
+                      <th>Cant. Pagos</th>
+                      <th>Total Original</th>
+                      <th>Total COP</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-pagos-mensual">
+                    <tr><td colspan="5" class="loading-cell">Seleccione el mes y presione Consultar</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Top productos del mes -->
+            <div class="report-section">
+              <h4><i data-lucide="trophy"></i> Top Productos del Mes</h4>
+              <div class="data-table-wrapper">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Producto</th>
+                      <th>Categoría</th>
+                      <th>Unidades</th>
+                      <th>Ingreso</th>
+                      <th>Costo</th>
+                      <th>Utilidad</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-productos-mensual">
+                    <tr><td colspan="6" class="loading-cell">Presione Consultar para cargar datos</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -1308,9 +1477,12 @@
           </div>
         </div>
         
-        <div style="display: flex; gap: 15px; justify-content: center;">
+        <div style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
           <button class="action-btn btn-primary" id="btn-cierre-imprimir">
             <i data-lucide="printer"></i> Imprimir Ticket
+          </button>
+          <button class="action-btn" id="btn-cierre-consolidado" style="background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; border: none;">
+            <i data-lucide="calendar-check"></i> Ver Cierre del Día Completo
           </button>
           <button class="action-btn secondary" id="btn-cierre-salir">
             <i data-lucide="log-out"></i> Salir al Login
@@ -1321,6 +1493,43 @@
     </div>
   </div>
 
+
+  <!-- ============================================ -->
+  <!-- MODAL CIERRE DIARIO CONSOLIDADO              -->
+  <!-- ============================================ -->
+  <div class="modal-overlay" id="cierre-dia-overlay" style="z-index: 3100;">
+    <div class="modal-box cierre-caja-box">
+      <div style="text-align: center; padding: 20px;">
+        <div class="success-icon-anim">
+          <i data-lucide="calendar-check" style="width: 64px; height: 64px; color: var(--success);"></i>
+        </div>
+        <h2 style="margin: 15px 0;">Cierre Diario Consolidado</h2>
+        <p class="text-muted" style="margin-bottom: 20px;">Resumen de todos los turnos del día.</p>
+
+        <div class="cierre-ticket-preview" style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-glass); border-radius: 12px; padding: 20px; text-align: left; max-width: 400px; margin: 0 auto 25px;">
+          <h4 style="text-align: center; border-bottom: 1px dashed var(--border-glass); padding-bottom: 10px; margin-bottom: 15px;">TICKET DEL DÍA</h4>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Turnos Incluidos:</span><strong id="dia-turnos">0</strong></div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Total Ventas:</span><strong id="dia-ventas">$0</strong></div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Costo de Producción:</span><strong id="dia-costo">$0</strong></div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Total Gastos:</span><strong id="dia-gastos">$0</strong></div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 15px; padding-top: 10px; border-top: 1px solid var(--border-glass); font-size: 1.05em;"><span>Utilidad Neta:</span><strong id="dia-utilidad">$0</strong></div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Declarado:</span><strong id="dia-declarado">$0</strong></div>
+          <div style="display: flex; justify-content: space-between; border-top: 1px solid var(--border-glass); padding-top: 10px; font-size: 1.1em; color: var(--success);" id="dia-diff-row">
+            <span>Diferencia:</span><strong id="dia-diferencia">$0</strong>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 15px; justify-content: center;">
+          <button class="action-btn btn-primary" id="btn-dia-imprimir">
+            <i data-lucide="printer"></i> Imprimir Ticket
+          </button>
+          <button class="action-btn secondary" id="btn-dia-cerrar">
+            <i data-lucide="x"></i> Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- ============================================ -->
   <!-- MODAL DE RECIBO DE COMPRA (EXITOSO)          -->

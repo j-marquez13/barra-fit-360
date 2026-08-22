@@ -239,6 +239,149 @@ export async function cierreSemanal(req, res) {
   }
 }
 
+// GET /api/reportes/cierre-rango — Resumen de un rango de fechas personalizado
+// Query params: desde (YYYY-MM-DD), hasta (YYYY-MM-DD), turno_desde (Mañana|Tarde|Completo), turno_hasta (Mañana|Tarde|Completo)
+export async function cierreRango(req, res) {
+  try {
+    const hasta = req.query.hasta || localDate();
+    // Default: últimos 7 días si no se envía 'desde'
+    const desde = req.query.desde || (() => {
+      const d = new Date(hasta + 'T12:00:00');
+      d.setDate(d.getDate() - 6);
+      return d.toISOString().slice(0, 10);
+    })();
+    const turnoDesde = req.query.turno_desde || null; // Mañana, Tarde, Completo
+    const turnoHasta = req.query.turno_hasta || null;
+
+    const isPg = !!(process.env.DATABASE_URL || process.env.PGHOST);
+
+    // Build date filter for ventas/pagos
+    const dateFilterVentas = `${dateExpr('v.fecha')} >= $1 AND ${dateExpr('v.fecha')} <= $2`;
+    const dateFilterGastos = `${dateExpr('fecha')} >= $1 AND ${dateExpr('fecha')} <= $2`;
+    const dateFilterAbonos = `${dateExpr('a.fecha')} >= $1 AND ${dateExpr('a.fecha')} <= $2`;
+
+    // Optional turno filter: cross-reference with sesiones_caja if turno specified
+    let turnoJoin = '';
+    let turnoCondition = '';
+    const params = [desde, hasta];
+    let paramIdx = 3;
+
+    if (turnoDesde || turnoHasta) {
+      turnoJoin = `JOIN sesiones_caja sc ON v.fecha >= sc.fecha_apertura AND (sc.fecha_cierre IS NULL OR v.fecha <= sc.fecha_cierre)`;
+      if (turnoDesde) {
+        turnoCondition += ` AND sc.turno >= $${paramIdx}`;
+        params.push(turnoDesde);
+        paramIdx++;
+      }
+      if (turnoHasta) {
+        turnoCondition += ` AND sc.turno <= $${paramIdx}`;
+        params.push(turnoHasta);
+        paramIdx++;
+      }
+    }
+
+    const baseParams = [desde, hasta]; // Queries that don't need turno
+
+    // 1. Resumen general del rango
+    const resumenQuery = `
+      SELECT COUNT(DISTINCT v.id) as total_transacciones, COALESCE(SUM(v.total), 0) as total_ventas_cop
+      FROM ventas v ${turnoJoin}
+      WHERE ${dateFilterVentas} AND v.tipo_transaccion = 'Venta' ${turnoCondition}
+    `;
+    const resumenRango = await db.query(resumenQuery, params);
+
+    // 2. Ventas por día
+    const diaSelect = isPg ? `${dateExpr('v.fecha')}::text` : dateExpr('v.fecha');
+    const ventasPorDia = await db.query(`
+      SELECT ${diaSelect} as dia, COUNT(*) as transacciones, SUM(v.total) as total_cop
+      FROM ventas v ${turnoJoin}
+      WHERE ${dateFilterVentas} AND v.tipo_transaccion = 'Venta' ${turnoCondition}
+      GROUP BY ${dateExpr('v.fecha')} ORDER BY dia ASC
+    `, params);
+
+    // 3. Desglose por método de pago (Ventas + Abonos)
+    const pagosRango = await db.query(`
+      SELECT metodo_pago, moneda, sum(cantidad_pagos) as cantidad_pagos, sum(total_original) as total_original, sum(total_cop) as total_cop
+      FROM (
+        SELECT pv.metodo_pago, pv.moneda, COUNT(*) as cantidad_pagos, SUM(pv.monto_original) as total_original, SUM(pv.monto_base) as total_cop
+        FROM pagos_ventas pv JOIN ventas v ON pv.venta_id = v.id
+        WHERE ${dateFilterVentas} AND v.tipo_transaccion != 'Anulada' GROUP BY pv.metodo_pago, pv.moneda
+        UNION ALL
+        SELECT pa.metodo_pago, pa.moneda, COUNT(*) as cantidad_pagos, SUM(pa.monto_original) as total_original, SUM(pa.monto_base) as total_cop
+        FROM pagos_abonos pa JOIN abonos_credito a ON pa.abono_id = a.id
+        WHERE ${dateFilterAbonos} GROUP BY pa.metodo_pago, pa.moneda
+      ) combined
+      GROUP BY metodo_pago, moneda ORDER BY total_cop DESC
+    `, baseParams);
+
+    // 3.5 Cobranza de deudas
+    const abonosResumen = await db.query(`
+      SELECT COALESCE(SUM(monto_total_cop), 0) as total_abonos
+      FROM abonos_credito a
+      WHERE ${dateFilterAbonos}
+    `, baseParams);
+    const totalAbonos = parseFloat(abonosResumen[0]?.total_abonos || 0);
+
+    // 4. Gastos Operacionales (excluye reposición)
+    const gastosResumen = await db.query(`
+      SELECT COALESCE(SUM(monto_cop), 0) as total_gastos
+      FROM gastos WHERE ${dateFilterGastos} AND categoria != 'REPOSICION'
+    `, baseParams);
+    const totalGastos = parseFloat(gastosResumen[0]?.total_gastos || 0);
+
+    // 4.1 Reposición de inventario
+    const reposicionResumen = await db.query(`
+      SELECT COALESCE(SUM(monto_cop), 0) as total_reposicion
+      FROM gastos WHERE ${dateFilterGastos} AND categoria = 'REPOSICION'
+    `, baseParams);
+    const totalReposicion = parseFloat(reposicionResumen[0]?.total_reposicion || 0);
+
+    // 5. Cortesías
+    const cortesiasResumen = await db.query(`
+      SELECT COALESCE(SUM(dv.cantidad * COALESCE(dv.costo_unitario, p.costo_produccion)), 0) as costo_cortesias
+      FROM detalle_ventas dv JOIN ventas v ON dv.venta_id = v.id JOIN productos p ON dv.producto_id = p.id
+      WHERE ${dateFilterVentas} AND v.tipo_transaccion = 'Cortesia'
+    `, baseParams);
+    const costoCortesias = parseFloat(cortesiasResumen[0]?.costo_cortesias || 0);
+
+    // 6. Top productos
+    const topProductos = await db.query(`
+      SELECT p.nombre, p.categoria, SUM(dv.cantidad) as unidades_vendidas,
+             SUM(dv.subtotal) as ingreso_total, SUM(dv.cantidad * COALESCE(dv.costo_unitario, p.costo_produccion)) as costo_total
+      FROM detalle_ventas dv JOIN ventas v ON dv.venta_id = v.id JOIN productos p ON dv.producto_id = p.id
+      WHERE ${dateFilterVentas} AND v.tipo_transaccion = 'Venta'
+      GROUP BY p.id, p.nombre, p.categoria ORDER BY unidades_vendidas DESC
+    `, baseParams);
+
+    // 7. Calcular totales financieros
+    const totalVentas = parseFloat(resumenRango[0]?.total_ventas_cop || 0);
+    const costoProduccion = topProductos.reduce((sum, p) => sum + parseFloat(p.costo_total || 0), 0);
+    const utilidadNeta = totalVentas - costoProduccion - totalGastos - costoCortesias;
+    const margenUtilidad = totalVentas > 0 ? Math.round((utilidadNeta / totalVentas) * 10000) / 100 : 0;
+
+    return res.json({
+      periodo: { desde, hasta, turno_desde: turnoDesde, turno_hasta: turnoHasta },
+      resumen: {
+        total_transacciones: parseInt(resumenRango[0]?.total_transacciones || 0),
+        ingresos_totales_cop: totalVentas,
+        cobranza_deudas_cop: totalAbonos,
+        costo_produccion: costoProduccion,
+        gastos_operacionales: totalGastos,
+        reposicion_stock_cop: totalReposicion,
+        costo_cortesias: costoCortesias,
+        utilidad_neta: utilidadNeta,
+        margen_utilidad_pct: margenUtilidad
+      },
+      ventas_por_dia: ventasPorDia,
+      desglose_pagos: pagosRango,
+      productos_vendidos: topProductos
+    });
+  } catch (error) {
+    console.error('Error al generar cierre por rango:', error);
+    return res.status(500).json({ error: 'Error al generar el cierre por rango.', detalle: error.message });
+  }
+}
+
 // GET /api/reportes/ventas — Historial de ventas con filtros
 export async function historialVentas(req, res) {
   try {

@@ -468,12 +468,39 @@ checkApiHealth();
   document.getElementById('report-date').value = localDateStr();
   document.getElementById('btn-load-cierre')?.addEventListener('click', loadCierreDiario);
   document.getElementById('btn-load-semanal')?.addEventListener('click', loadCierreSemanal);
+  document.getElementById('btn-load-mensual')?.addEventListener('click', loadCierreMensual);
   document.getElementById('btn-load-historial')?.addEventListener('click', loadHistorial);
 
-  // Establecer fecha hoy en campos
+  // Establecer fechas predeterminadas
   const today = localDateStr();
   document.getElementById('hist-desde').value = today;
   document.getElementById('hist-hasta').value = today;
+  
+  const semDesde = new Date();
+  semDesde.setDate(semDesde.getDate() - 6);
+  const tzOffset = -4; // UTC-4 Venezuela
+  const semDesdeLocal = new Date(semDesde.getTime() + tzOffset * 60 * 60 * 1000).toISOString().slice(0, 10);
+  
+  if (document.getElementById('sem-fecha-desde')) document.getElementById('sem-fecha-desde').value = semDesdeLocal;
+  if (document.getElementById('sem-fecha-hasta')) document.getElementById('sem-fecha-hasta').value = today;
+
+  // Llenar meses para el reporte mensual
+  const mensualSelect = document.getElementById('mensual-mes');
+  if (mensualSelect) {
+    const d = new Date(new Date().getTime() + tzOffset * 60 * 60 * 1000);
+    const mNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    for (let i = 0; i < 12; i++) {
+      const year = d.getFullYear();
+      const month = d.getMonth();
+      const value = `${year}-${String(month + 1).padStart(2, '0')}`;
+      const text = `${mNames[month]} ${year}`;
+      const opt = document.createElement('option');
+      opt.value = value;
+      opt.textContent = text;
+      mensualSelect.appendChild(opt);
+      d.setMonth(d.getMonth() - 1);
+    }
+  }
 });
 
 // ============================================
@@ -2504,15 +2531,28 @@ async function loadCierreDiario() {
 async function loadCierreSemanal() {
   if (!STATE.apiOnline) return;
   try {
-    const data = await fetch('/api/reportes/cierre-semanal').then(r => r.json());
+    const desde = document.getElementById('sem-fecha-desde').value;
+    const hasta = document.getElementById('sem-fecha-hasta').value;
+    const turnoDesde = document.getElementById('sem-turno-desde').value;
+    const turnoHasta = document.getElementById('sem-turno-hasta').value;
+
+    let url = `/api/reportes/cierre-rango?desde=${desde}&hasta=${hasta}`;
+    if (turnoDesde) url += `&turno_desde=${encodeURIComponent(turnoDesde)}`;
+    if (turnoHasta) url += `&turno_hasta=${encodeURIComponent(turnoHasta)}`;
+
+    const data = await fetch(url).then(r => r.json());
 
     const ingresos = data.resumen.ingresos_totales_cop || 0;
+    const costo = data.resumen.costo_produccion || 0;
+    const gastos = data.resumen.gastos_operacionales || 0;
     const utilidad = data.resumen.utilidad_neta || 0;
-    const margen = ingresos > 0 ? Math.round((utilidad / ingresos) * 100) : 0;
+    const margen = data.resumen.margen_utilidad_pct || 0;
 
-    document.getElementById('kpi-ventas-sem').textContent = `$${ingresos.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+    document.getElementById('kpi-ventas-sem').textContent = `$${ingresos.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
     document.getElementById('kpi-trans-sem').textContent = `${data.resumen.total_transacciones} transacciones`;
-    document.getElementById('kpi-utilidad-sem').textContent = `$${utilidad.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+    document.getElementById('kpi-costo-sem').textContent = `$${costo.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    document.getElementById('kpi-gastos-sem-sub').textContent = `Gastos Op.: $${gastos.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    document.getElementById('kpi-utilidad-sem').textContent = `$${utilidad.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
     document.getElementById('kpi-margen-sem').textContent = `Margen: ${margen}%`;
     document.getElementById('kpi-utilidad-sem').style.color = utilidad >= 0 ? 'var(--success)' : 'var(--danger)';
 
@@ -2523,7 +2563,6 @@ async function loadCierreSemanal() {
       chartContainer.innerHTML = data.ventas_por_dia.map(d => {
         const val = parseFloat(d.total_cop) || 0;
         const height = maxVal > 0 ? Math.max(4, (val / maxVal) * 100) : 4;
-        // Handle both string ("2026-07-27") and Date object from PostgreSQL
         const diaStr = typeof d.dia === 'string' ? d.dia : (d.dia instanceof Date ? d.dia.toISOString().slice(0, 10) : String(d.dia).slice(0, 10));
         const dateObj = new Date(diaStr + 'T12:00:00');
         const dayName = dateObj.toLocaleDateString('es-ES', { weekday: 'short' });
@@ -2537,26 +2576,143 @@ async function loadCierreSemanal() {
         `;
       }).join('');
     } else {
-      chartContainer.innerHTML = '<div style="text-align:center; color:var(--color-muted); padding:40px; width:100%;">Sin datos para la semana.</div>';
+      chartContainer.innerHTML = '<div style="text-align:center; color:var(--color-muted); padding:40px; width:100%;">Sin datos para este período.</div>';
+    }
+
+    // Desglose pagos
+    const tbodyPagos = document.getElementById('tbody-pagos-semanal');
+    if (data.desglose_pagos && data.desglose_pagos.length > 0) {
+      tbodyPagos.innerHTML = data.desglose_pagos.map(p => `
+        <tr>
+          <td><strong>${p.metodo_pago}</strong></td>
+          <td>${p.moneda}</td>
+          <td>${p.cantidad_pagos}</td>
+          <td>${parseFloat(p.total_original).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+          <td class="font-outfit">$${parseFloat(p.total_cop).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+        </tr>
+      `).join('');
+    } else {
+      tbodyPagos.innerHTML = '<tr><td colspan="5" class="loading-cell">Sin pagos registrados en este período.</td></tr>';
     }
 
     // Top productos
     const tbody = document.getElementById('tbody-productos-semanal');
     if (data.productos_vendidos.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" class="loading-cell">Sin ventas esta semana.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="loading-cell">Sin ventas en este período.</td></tr>';
     } else {
-      tbody.innerHTML = data.productos_vendidos.map(p => `
+      tbody.innerHTML = data.productos_vendidos.map(p => {
+        const ingreso = parseFloat(p.ingreso_total);
+        const costoP = parseFloat(p.costo_total);
+        return `
         <tr>
           <td><strong>${p.nombre}</strong></td>
           <td>${p.categoria}</td>
           <td>${parseFloat(p.unidades_vendidas)}</td>
-          <td class="font-outfit">$${parseFloat(p.ingreso_total).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
-          <td>$${parseFloat(p.costo_total).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+          <td class="font-outfit">$${ingreso.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+          <td>$${costoP.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+          <td class="text-success font-outfit">$${(ingreso - costoP).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
         </tr>
-      `).join('');
+      `;
+      }).join('');
     }
   } catch (err) {
     console.error('Error cargando cierre semanal:', err);
+  }
+}
+
+// ============== CIERRE MENSUAL ==============
+async function loadCierreMensual() {
+  if (!STATE.apiOnline) return;
+  try {
+    const mesValue = document.getElementById('mensual-mes').value; // formato YYYY-MM
+    if (!mesValue) return;
+    const [year, month] = mesValue.split('-').map(Number);
+    const desde = `${year}-${String(month).padStart(2, '0')}-01`;
+    // Último día del mes
+    const lastDay = new Date(year, month, 0).getDate();
+    const hasta = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+    const data = await fetch(`/api/reportes/cierre-rango?desde=${desde}&hasta=${hasta}`).then(r => r.json());
+
+    const ingresos = data.resumen.ingresos_totales_cop || 0;
+    const costo = data.resumen.costo_produccion || 0;
+    const gastos = data.resumen.gastos_operacionales || 0;
+    const cortesias = data.resumen.costo_cortesias || 0;
+    const cobranza = data.resumen.cobranza_deudas_cop || 0;
+    const reposicion = data.resumen.reposicion_stock_cop || 0;
+    const utilidad = data.resumen.utilidad_neta || 0;
+    const margen = data.resumen.margen_utilidad_pct || 0;
+
+    document.getElementById('kpi-ventas-men').textContent = `$${ingresos.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    document.getElementById('kpi-trans-men').textContent = `${data.resumen.total_transacciones} transacciones`;
+    document.getElementById('kpi-cobranza-men').textContent = `$${cobranza.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    document.getElementById('kpi-reposicion-men').textContent = `Repos. Stock: $${reposicion.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    document.getElementById('kpi-costo-men').textContent = `$${costo.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    document.getElementById('kpi-gastos-men-sub').textContent = `Gastos Op.: $${gastos.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} | Cortesías: $${cortesias.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    document.getElementById('kpi-utilidad-men').textContent = `$${utilidad.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    document.getElementById('kpi-margen-men').textContent = `Margen: ${margen}%`;
+    document.getElementById('kpi-utilidad-men').style.color = utilidad >= 0 ? 'var(--success)' : 'var(--danger)';
+
+    // Chart de barras
+    const chartContainer = document.getElementById('chart-ventas-mes');
+    if (data.ventas_por_dia.length > 0) {
+      const maxVal = Math.max(...data.ventas_por_dia.map(d => parseFloat(d.total_cop) || 0));
+      chartContainer.innerHTML = data.ventas_por_dia.map(d => {
+        const val = parseFloat(d.total_cop) || 0;
+        const height = maxVal > 0 ? Math.max(4, (val / maxVal) * 100) : 4;
+        const diaStr = typeof d.dia === 'string' ? d.dia : (d.dia instanceof Date ? d.dia.toISOString().slice(0, 10) : String(d.dia).slice(0, 10));
+        const dateObj = new Date(diaStr + 'T12:00:00');
+        const dayDate = dateObj.toLocaleDateString('es-ES', { day: '2-digit' });
+        return `
+          <div class="chart-bar-item">
+            <span class="chart-bar-value">$${(val / 1000).toFixed(0)}k</span>
+            <div class="chart-bar" style="height: ${height}%"></div>
+            <span class="chart-bar-label">${dayDate}</span>
+          </div>
+        `;
+      }).join('');
+    } else {
+      chartContainer.innerHTML = '<div style="text-align:center; color:var(--color-muted); padding:40px; width:100%;">Sin datos para este mes.</div>';
+    }
+
+    // Desglose pagos
+    const tbodyPagos = document.getElementById('tbody-pagos-mensual');
+    if (data.desglose_pagos && data.desglose_pagos.length > 0) {
+      tbodyPagos.innerHTML = data.desglose_pagos.map(p => `
+        <tr>
+          <td><strong>${p.metodo_pago}</strong></td>
+          <td>${p.moneda}</td>
+          <td>${p.cantidad_pagos}</td>
+          <td>${parseFloat(p.total_original).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+          <td class="font-outfit">$${parseFloat(p.total_cop).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+        </tr>
+      `).join('');
+    } else {
+      tbodyPagos.innerHTML = '<tr><td colspan="5" class="loading-cell">Sin pagos registrados en este mes.</td></tr>';
+    }
+
+    // Top productos
+    const tbody = document.getElementById('tbody-productos-mensual');
+    if (data.productos_vendidos.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="loading-cell">Sin ventas este mes.</td></tr>';
+    } else {
+      tbody.innerHTML = data.productos_vendidos.map(p => {
+        const ingreso = parseFloat(p.ingreso_total);
+        const costoP = parseFloat(p.costo_total);
+        return `
+        <tr>
+          <td><strong>${p.nombre}</strong></td>
+          <td>${p.categoria}</td>
+          <td>${parseFloat(p.unidades_vendidas)}</td>
+          <td class="font-outfit">$${ingreso.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+          <td>$${costoP.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+          <td class="text-success font-outfit">$${(ingreso - costoP).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+        </tr>
+      `;
+      }).join('');
+    }
+  } catch (err) {
+    console.error('Error cargando cierre mensual:', err);
   }
 }
 
@@ -3487,6 +3643,9 @@ async function loadCajaData() {
         <button class="action-btn btn-success" style="width:100%; margin-top:10px;" onclick="showTurnoScreen()">
           <i data-lucide="play"></i> Abrir Nuevo Turno
         </button>
+        <button class="action-btn btn-primary" style="width:100%; margin-top:10px;" onclick="loadCierreDia()">
+          <i data-lucide="calendar-check"></i> Cierre Diario Consolidado
+        </button>
       `;
     }
     
@@ -3717,8 +3876,69 @@ async function cerrarTurnoActual() {
   document.getElementById('btn-cierre-imprimir').onclick = () => {
     window.print(); // Solución simple de impresión, idealmente conectada a un thermal printer handler
   };
+
+  document.getElementById('btn-cierre-consolidado').onclick = () => {
+    overlay.classList.remove('open');
+    if (typeof loadCierreDia === 'function') {
+      loadCierreDia();
+    }
+  };
 }
 
+window.loadCierreDia = async function() {
+  if (!STATE.apiOnline) {
+    showToast('Modo Local. Conecta al servidor para ver el cierre diario.', 'warning');
+    return;
+  }
+  try {
+    const fecha = localDateStr();
+    const res = await fetch(`/api/caja/cierre-dia?fecha=${fecha}`);
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'Error al cargar el cierre diario');
+
+    const r = d.resumen || {};
+
+    document.getElementById('dia-turnos').textContent = r.total_turnos || 0;
+    document.getElementById('dia-ventas').textContent = `$${(r.total_ventas_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+    document.getElementById('dia-costo').textContent = `$${(r.costo_produccion || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+    document.getElementById('dia-gastos').textContent = `$${(r.total_gastos_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+    document.getElementById('dia-declarado').textContent = `$${(r.declarado_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+
+    const utilidad = r.utilidad_neta || 0;
+    const utilEl = document.getElementById('dia-utilidad');
+    utilEl.textContent = `$${utilidad.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+    utilEl.style.color = utilidad >= 0 ? 'var(--success)' : 'var(--danger)';
+
+    const diff = r.diferencia_caja || 0;
+    const diffEl = document.getElementById('dia-diferencia');
+    const diffRow = document.getElementById('dia-diff-row');
+    if (Math.abs(diff) < 100) {
+      diffEl.textContent = '$0';
+      diffRow.style.color = 'var(--success)';
+    } else if (diff < 0) {
+      diffEl.textContent = `-$${Math.abs(diff).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      diffRow.style.color = 'var(--danger)';
+    } else {
+      diffEl.textContent = `+$${Math.abs(diff).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      diffRow.style.color = 'var(--warning)';
+    }
+
+    document.getElementById('cierre-dia-overlay').classList.add('open');
+
+    document.getElementById('btn-dia-cerrar').onclick = () => {
+      document.getElementById('cierre-dia-overlay').classList.remove('open');
+      loadCajaData();
+    };
+    document.getElementById('btn-dia-imprimir').onclick = () => {
+      window.print();
+    };
+
+    lucide.createIcons();
+  } catch (e) {
+    console.error('Error cargando cierre diario:', e);
+    showToast(e.message || 'Error al cargar el cierre diario', 'danger');
+  }
+};
 
 async function loadGastos() {
   if (!STATE.apiOnline) return;

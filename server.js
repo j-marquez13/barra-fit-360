@@ -7,9 +7,9 @@ import path from 'path';
 import { processSale, anularVenta } from './controllers/salesController.js';
 import { createClient, getClients, getClientDetails, processAbono, registrarDeuda, deleteAbono, updateClient } from './controllers/creditController.js';
 import { getInsumos, createInsumo, updateInsumo, restockInsumo, getMermas, createMerma, getProductos, createProducto, updateProducto, deleteProducto, deleteInsumo, getValorizacionInventario, getOrdenCompra, getProductoReceta, getRecetasBase, createRecetaBase, updateRecetaBase, deleteRecetaBase, toggleRecetaBaseBatido } from './controllers/inventoryController.js';
-import { cierreDiario, cierreSemanal, historialVentas } from './controllers/reportsController.js';
+import { cierreDiario, cierreSemanal, cierreRango, historialVentas } from './controllers/reportsController.js';
 import { listarGastos, registrarGasto } from './controllers/expensesController.js';
-import { estadoCaja, abrirCaja, cerrarCaja } from './controllers/cashierController.js';
+import { estadoCaja, abrirCaja, cerrarCaja, cierreDia } from './controllers/cashierController.js';
 import { getSaldos, transferirFondos } from './controllers/treasuryController.js';
 import { initializeDatabase } from './initDb.js';
 import * as db from './db.js';
@@ -146,6 +146,7 @@ app.post('/api/clientes/:id/deuda', registrarDeuda);
 // ============================================
 app.get('/api/reportes/cierre-diario', cierreDiario);
 app.get('/api/reportes/cierre-semanal', cierreSemanal);
+app.get('/api/reportes/cierre-rango', cierreRango);
 app.get('/api/reportes/ventas', historialVentas);
 
 // ============================================
@@ -160,6 +161,7 @@ app.post('/api/gastos', registrarGasto);
 app.get('/api/caja/estado', estadoCaja);
 app.post('/api/caja/abrir', abrirCaja);
 app.post('/api/caja/cerrar', cerrarCaja);
+app.get('/api/caja/cierre-dia', cierreDia);
 
 // ============================================
 // RUTAS DE USUARIOS Y AUTENTICACIÓN

@@ -1,5 +1,5 @@
 import * as db from '../db.js';
-import { localNow, isPostgres } from '../db.js';
+import { localNow, isPostgres, localDate, dateExpr } from '../db.js';
 
 /**
  * Controlador de Arqueo y Sesiones de Caja (Turnos)
@@ -141,6 +141,42 @@ export async function abrirCaja(req, res) {
   }
 }
 
+// GET /api/caja/cierre-dia — Cierre consolidado de todos los turnos del día
+export async function cierreDia(req, res) {
+  try {
+    const fecha = req.query.fecha || localDate();
+    const rows = await db.query(`
+      SELECT
+        COUNT(*) as total_turnos,
+        COALESCE(SUM(total_ventas_cop), 0) as total_ventas_cop,
+        COALESCE(SUM(total_gastos_cop), 0) as total_gastos_cop,
+        COALESCE(SUM(costo_produccion), 0) as costo_produccion,
+        COALESCE(SUM(utilidad_neta), 0) as utilidad_neta,
+        COALESCE(SUM(declarado_cop), 0) as declarado_cop,
+        COALESCE(SUM(diferencia_caja), 0) as diferencia_caja
+      FROM sesiones_caja
+      WHERE ${dateExpr('fecha_apertura')} = $1 AND estado = 'Cerrada'
+    `, [fecha]);
+
+    const r = rows[0] || {};
+    return res.json({
+      fecha,
+      resumen: {
+        total_turnos: parseInt(r.total_turnos || 0, 10),
+        total_ventas_cop: parseFloat(r.total_ventas_cop || 0),
+        total_gastos_cop: parseFloat(r.total_gastos_cop || 0),
+        costo_produccion: parseFloat(r.costo_produccion || 0),
+        utilidad_neta: parseFloat(r.utilidad_neta || 0),
+        declarado_cop: parseFloat(r.declarado_cop || 0),
+        diferencia_caja: parseFloat(r.diferencia_caja || 0)
+      }
+    });
+  } catch (error) {
+    console.error('Error al generar cierre diario consolidado:', error);
+    return res.status(500).json({ error: 'Error al generar el cierre diario consolidado.', detalle: error.message });
+  }
+}
+
 // POST /api/caja/cerrar
 export async function cerrarCaja(req, res) {
   try {
@@ -242,10 +278,10 @@ export async function cerrarCaja(req, res) {
     // Cerrar la sesión
     const now = localNow();
     const sqlUpdate = isPg
-      ? `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_efectivo_bs = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9 WHERE id = $10 RETURNING *`
-      : `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_efectivo_bs = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9 WHERE id = $10`;
+      ? `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_efectivo_bs = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9, costo_produccion = $10, utilidad_neta = $11, declarado_cop = $12 WHERE id = $13 RETURNING *`
+      : `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_efectivo_bs = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9, costo_produccion = $10, utilidad_neta = $11, declarado_cop = $12 WHERE id = $13`;
       
-    const result = await db.execute(sqlUpdate, [now, totalIngresosCop, totalGastos, diferencia, decBs, decZelle, decBinance, decPesos, decBancolombia, currentSession.id]);
+    const result = await db.execute(sqlUpdate, [now, totalIngresosCop, totalGastos, diferencia, decBs, decZelle, decBinance, decPesos, decBancolombia, costoProduccion, utilidadNeta, declarado, currentSession.id]);
     
     let sessionRes = result;
     if (!isPg) {

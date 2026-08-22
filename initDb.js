@@ -59,6 +59,9 @@ export async function initializeDatabase() {
       await db.execute('ALTER TABLE insumos ADD COLUMN IF NOT EXISTS cantidad_combinada DOUBLE PRECISION NOT NULL DEFAULT 0.0;');
       await db.execute('ALTER TABLE productos ADD COLUMN IF NOT EXISTS es_combinado BOOLEAN DEFAULT FALSE;');
       await db.execute('ALTER TABLE detalle_ventas ADD COLUMN IF NOT EXISTS insumos_manuales TEXT;');
+      await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS costo_produccion DOUBLE PRECISION DEFAULT 0.0;');
+      await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS utilidad_neta DOUBLE PRECISION DEFAULT 0.0;');
+      await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_cop DOUBLE PRECISION DEFAULT 0.0;');
 
       // El sistema permite stock negativo al facturar (emite advertencia y procesa la venta),
       // por lo que hay que eliminar cualquier CHECK que impida stock_actual < 0.
@@ -484,6 +487,18 @@ async function runMigrations() {
   try {
     await db.execute("ALTER TABLE detalle_ventas ADD COLUMN insumos_manuales TEXT");
     console.log('   🔄 Migración: columna insumos_manuales agregada a detalle_ventas.');
+  } catch(e) {}
+  try {
+    await db.execute("ALTER TABLE sesiones_caja ADD COLUMN costo_produccion REAL DEFAULT 0.0");
+    console.log('   🔄 Migración: columna costo_produccion agregada a sesiones_caja.');
+  } catch(e) {}
+  try {
+    await db.execute("ALTER TABLE sesiones_caja ADD COLUMN utilidad_neta REAL DEFAULT 0.0");
+    console.log('   🔄 Migración: columna utilidad_neta agregada a sesiones_caja.');
+  } catch(e) {}
+  try {
+    await db.execute("ALTER TABLE sesiones_caja ADD COLUMN declarado_cop REAL DEFAULT 0.0");
+    console.log('   🔄 Migración: columna declarado_cop agregada a sesiones_caja.');
   } catch(e) {}
 }
 
