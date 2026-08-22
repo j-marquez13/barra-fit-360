@@ -3675,7 +3675,13 @@ async function cerrarTurnoActual() {
       viewSuccess.style.display = 'block';
       
       document.getElementById('ticket-ventas').textContent = `$${d.resumen.total_ventas.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      document.getElementById('ticket-costo').textContent = `$${(d.resumen.costo_produccion || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       document.getElementById('ticket-gastos').textContent = `$${d.resumen.total_gastos.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      
+      const utilidad = d.resumen.utilidad_neta || 0;
+      const utilEl = document.getElementById('ticket-utilidad');
+      utilEl.textContent = `$${utilidad.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      utilEl.style.color = utilidad >= 0 ? 'var(--success)' : 'var(--danger)';
       document.getElementById('ticket-esperado').textContent = `$${d.resumen.saldo_teorico.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       document.getElementById('ticket-declarado').textContent = `$${d.resumen.monto_declarado.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       

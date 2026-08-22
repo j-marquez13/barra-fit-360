@@ -214,6 +214,20 @@ export async function cerrarCaja(req, res) {
     const saldoTeorico = (saldosMoneda.COP || 0) + (saldosMoneda.USD || 0) * tasaUsd + (saldosMoneda.VES || 0) * tasaVes - totalGastos;
     const totalIngresosCop = totalVentasCop + totalAbonosCop;
 
+    // 3.1 Costo de producción de las ventas del turno (para utilidad neta)
+    const costoProdQuery = `
+      SELECT COALESCE(SUM(dv.cantidad * COALESCE(dv.costo_unitario, p.costo_produccion)), 0) as total
+      FROM detalle_ventas dv
+      JOIN ventas v ON dv.venta_id = v.id
+      JOIN productos p ON dv.producto_id = p.id
+      WHERE v.fecha >= $1 AND v.tipo_transaccion != 'Anulada'
+    `;
+    const costoProdData = await db.query(costoProdQuery, [fechaApertura]);
+    const costoProduccion = parseFloat(costoProdData[0]?.total || 0);
+
+    // 3.2 Utilidad Neta = Ingresos por ventas - Costo de producción - Gastos operacionales
+    const utilidadNeta = totalVentasCop - costoProduccion - totalGastos;
+
     // 4. Diferencia de Caja = Monto Físico Declarado (COP) - Saldo Teórico
     const declarado = parseFloat(monto_declarado_cop) || 0;
     const diferencia = declarado - saldoTeorico;
@@ -247,6 +261,8 @@ export async function cerrarCaja(req, res) {
         total_ventas_detalle_cop: totalVentasCop,
         total_abonos_cop: totalAbonosCop,
         total_gastos: totalGastos,
+        costo_produccion: costoProduccion,
+        utilidad_neta: utilidadNeta,
         saldo_teorico: saldoTeorico,
         monto_declarado: declarado,
         diferencia: diferencia
