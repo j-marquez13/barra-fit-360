@@ -3978,13 +3978,13 @@ async function loadCierresAdmin() {
     cierresCache = d.cierres || [];
     const tbody = document.getElementById('tabla-cierres');
     if (cierresCache.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="9" class="loading-cell">No hay cierres registrados en el rango seleccionado.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10" class="loading-cell">No hay cierres registrados en el rango seleccionado.</td></tr>';
       return;
     }
 
     const fmt = (v) => Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
-    tbody.innerHTML = cierresCache.map(c => {
+    tbody.innerHTML = cierresCache.map((c, idx) => {
       const diffColor = Math.abs(c.diferencia_caja) < 100 ? 'var(--success)' : 'var(--danger)';
       const utilColor = c.utilidad_neta >= 0 ? 'var(--success)' : 'var(--danger)';
       return `<tr>
@@ -3997,13 +3997,54 @@ async function loadCierresAdmin() {
         <td class="font-outfit" style="color:${utilColor}">$${fmt(c.utilidad_neta)}</td>
         <td class="font-outfit">$${fmt(c.declarado_cop)}</td>
         <td class="font-outfit" style="color:${diffColor}">$${fmt(c.diferencia_caja)}</td>
+        <td style="text-align:right;">
+          <button class="action-btn" style="padding:5px 10px; font-size:12px;" onclick="verTicketCierre(${idx})">
+            <i data-lucide="receipt"></i> Ver ticket
+          </button>
+        </td>
       </tr>`;
     }).join('');
+    lucide.createIcons();
   } catch (e) {
     console.error('Error cargando cierres:', e);
     showToast(e.message || 'Error al cargar el historial de cierres', 'danger');
   }
 }
+
+window.verTicketCierre = function(idx) {
+  const c = cierresCache[idx];
+  if (!c) return;
+  const fmt = (v) => Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+
+  document.getElementById('dia-fecha').textContent = c.fecha;
+  document.getElementById('dia-turnos').textContent = c.total_turnos || 0;
+  document.getElementById('dia-ventas').textContent = `$${fmt(c.total_ventas_cop)}`;
+  document.getElementById('dia-costo').textContent = `-$${fmt(c.costo_produccion)}`;
+  document.getElementById('dia-gastos').textContent = `-$${fmt(c.total_gastos_cop)}`;
+  document.getElementById('dia-reposicion').textContent = `-$${fmt(c.reposicion)}`;
+  document.getElementById('dia-declarado').textContent = `$${fmt(c.declarado_cop)}`;
+
+  const utilEl = document.getElementById('dia-utilidad');
+  utilEl.textContent = `$${fmt(c.utilidad_neta)}`;
+  utilEl.style.color = c.utilidad_neta >= 0 ? 'var(--success)' : 'var(--danger)';
+
+  const diff = c.diferencia_caja || 0;
+  const diffEl = document.getElementById('dia-diferencia');
+  const diffRow = document.getElementById('dia-diff-row');
+  if (Math.abs(diff) < 100) {
+    diffEl.textContent = '$0';
+    diffRow.style.color = 'var(--success)';
+  } else if (diff < 0) {
+    diffEl.textContent = `-$${Math.abs(diff).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+    diffRow.style.color = 'var(--danger)';
+  } else {
+    diffEl.textContent = `+$${diff.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+    diffRow.style.color = 'var(--warning)';
+  }
+
+  document.getElementById('cierre-dia-overlay').classList.add('open');
+  lucide.createIcons();
+};
 
 function exportarCierresCSV() {
   if (cierresCache.length === 0) {

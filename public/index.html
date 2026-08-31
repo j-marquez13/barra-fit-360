@@ -1267,10 +1267,11 @@
                   <th>Utilidad</th>
                   <th>Declarado</th>
                   <th>Diferencia</th>
+                  <th style="text-align:right;">Ticket</th>
                 </tr>
               </thead>
               <tbody id="tabla-cierres">
-                <tr><td colspan="9" class="loading-cell">Cargando cierres…</td></tr>
+                <tr><td colspan="10" class="loading-cell">Cargando cierres…</td></tr>
               </tbody>
             </table>
           </div>
@@ -1556,10 +1557,12 @@
 
         <div class="cierre-ticket-preview" style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-glass); border-radius: 12px; padding: 20px; text-align: left; max-width: 400px; margin: 0 auto 25px;">
           <h4 style="text-align: center; border-bottom: 1px dashed var(--border-glass); padding-bottom: 10px; margin-bottom: 15px;">TICKET DEL DÍA</h4>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Fecha:</span><strong id="dia-fecha">—</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Turnos Incluidos:</span><strong id="dia-turnos">0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Total Ventas:</span><strong id="dia-ventas">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Costo de Producción:</span><strong id="dia-costo">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Total Gastos:</span><strong id="dia-gastos">$0</strong></div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Reposición de Stock:</span><strong id="dia-reposicion">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 15px; padding-top: 10px; border-top: 1px solid var(--border-glass); font-size: 1.05em;"><span>Utilidad Neta:</span><strong id="dia-utilidad">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Declarado:</span><strong id="dia-declarado">$0</strong></div>
           <div style="display: flex; justify-content: space-between; border-top: 1px solid var(--border-glass); padding-top: 10px; font-size: 1.1em; color: var(--success);" id="dia-diff-row">
