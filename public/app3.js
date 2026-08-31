@@ -3687,7 +3687,7 @@ async function cerrarTurnoActual() {
     }
     
     currentSessionData = data;
-    const arqueo = data.arqueo || { ventas_moneda: {}, abonos_moneda: {}, total_gastos_cop: 0 };
+    const arqueo = data.arqueo || { ventas_moneda: {}, ventas_detalle: {}, abonos_moneda: {}, total_gastos_cop: 0 };
     const fondoBaseCop = parseFloat(data.sesion.fondo_inicial_cop) || 0;
     const gastosCop = parseFloat(arqueo.total_gastos_cop) || 0;
     
@@ -3695,9 +3695,14 @@ async function cerrarTurnoActual() {
     const rateUsd = STATE.tasas.USD || 1;
     const rateVes = STATE.tasas.VES || 1;
     
+    // El crédito (cuenta por cobrar) NO es dinero físico en caja: se excluye del
+    // efectivo esperado, igual que hace el backend en POST /api/caja/cerrar.
+    const ventasDetalleCierre = arqueo.ventas_detalle || {};
+    const creditoVentaCop = parseFloat(ventasDetalleCierre.COP?.['Crédito']) || 0;
+    
     let ventasCop = 0;
     Object.entries(arqueo.ventas_moneda || {}).forEach(([moneda, monto]) => {
-      if (moneda === 'COP') ventasCop += monto;
+      if (moneda === 'COP') ventasCop += (monto - creditoVentaCop);
       else if (moneda === 'USD') ventasCop += monto * rateUsd;
       else if (moneda === 'VES') ventasCop += monto * rateVes;
     });
