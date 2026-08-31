@@ -188,6 +188,10 @@
           <i data-lucide="users"></i>
           <span>Gestión Usuarios</span>
         </button>
+        <button class="nav-item" data-view="cierres" id="nav-cierres" style="display:none;">
+          <i data-lucide="archive"></i>
+          <span>Cierres</span>
+        </button>
       </div>
 
       <!-- Info de Turno Activo en Sidebar -->
@@ -1224,6 +1228,49 @@
               </thead>
               <tbody id="tabla-usuarios">
                 <!-- Carga dinámica -->
+              </tbody>
+            </table>
+          </div>
+        </main>
+      </div>
+
+      <!-- ============================================ -->
+      <!-- VISTA 8: CIERRES DIARIOS (ADMIN)             -->
+      <!-- ============================================ -->
+      <div class="view-panel" id="view-cierres" style="padding: 20px;">
+        <main class="app-body">
+          <div class="view-header-row" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; gap:10px;">
+            <h2>Historial de Cierres Diarios</h2>
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+              <input type="date" id="cierres-desde" class="date-picker">
+              <span style="color:var(--text-muted);">hasta</span>
+              <input type="date" id="cierres-hasta" class="date-picker">
+              <button class="action-btn" id="btn-load-cierres">
+                <i data-lucide="refresh-cw"></i> Cargar
+              </button>
+              <button class="action-btn btn-success" id="btn-export-cierres">
+                <i data-lucide="download"></i> Exportar CSV
+              </button>
+            </div>
+          </div>
+
+          <div class="data-table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Turnos</th>
+                  <th>Ventas</th>
+                  <th>Costo Prod.</th>
+                  <th>Gastos</th>
+                  <th>Reposición</th>
+                  <th>Utilidad</th>
+                  <th>Declarado</th>
+                  <th>Diferencia</th>
+                </tr>
+              </thead>
+              <tbody id="tabla-cierres">
+                <tr><td colspan="9" class="loading-cell">Cargando cierres…</td></tr>
               </tbody>
             </table>
           </div>

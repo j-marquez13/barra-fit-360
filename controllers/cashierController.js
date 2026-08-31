@@ -141,6 +141,74 @@ export async function abrirCaja(req, res) {
   }
 }
 
+// GET /api/admin/cierres — Histórico de cierres diarios (solo administrador)
+export async function listarCierresAdmin(req, res) {
+  try {
+    const desde = req.query.desde || null;
+    const hasta = req.query.hasta || null;
+
+    let where = "WHERE estado = 'Cerrada'";
+    const params = [];
+    if (desde) {
+      params.push(desde);
+      where += ` AND ${dateExpr('fecha_apertura')} >= $${params.length}`;
+    }
+    if (hasta) {
+      params.push(hasta);
+      where += ` AND ${dateExpr('fecha_apertura')} <= $${params.length}`;
+    }
+
+    const fechaExpr = `CAST(${dateExpr('fecha_apertura')} AS TEXT)`;
+
+    const rows = await db.query(`
+      SELECT
+        ${fechaExpr} as fecha,
+        COUNT(*) as total_turnos,
+        COALESCE(SUM(total_ventas_cop), 0) as total_ventas_cop,
+        COALESCE(SUM(total_gastos_cop), 0) as total_gastos_cop,
+        COALESCE(SUM(costo_produccion), 0) as costo_produccion,
+        COALESCE(SUM(utilidad_neta), 0) as utilidad_neta,
+        COALESCE(SUM(declarado_cop), 0) as declarado_cop,
+        COALESCE(SUM(diferencia_caja), 0) as diferencia_caja
+      FROM sesiones_caja
+      ${where}
+      GROUP BY ${fechaExpr}
+      ORDER BY fecha DESC
+    `, params);
+
+    // Reposición de stock por fecha (compra de inventario, no gasto operativo)
+    const reposicionPorFecha = {};
+    if (rows.length > 0) {
+      const fechas = rows.map(r => r.fecha);
+      const placeholders = fechas.map((_, i) => `$${i + 1}`).join(', ');
+      const repRows = await db.query(`
+        SELECT CAST(${dateExpr('fecha')} AS TEXT) as fecha, COALESCE(SUM(monto_cop), 0) as total
+        FROM gastos
+        WHERE categoria = 'REPOSICION' AND CAST(${dateExpr('fecha')} AS TEXT) IN (${placeholders})
+        GROUP BY CAST(${dateExpr('fecha')} AS TEXT)
+      `, fechas);
+      repRows.forEach(r => { reposicionPorFecha[r.fecha] = parseFloat(r.total || 0); });
+    }
+
+    const cierres = rows.map(r => ({
+      fecha: r.fecha,
+      total_turnos: parseInt(r.total_turnos || 0, 10),
+      total_ventas_cop: parseFloat(r.total_ventas_cop || 0),
+      total_gastos_cop: parseFloat(r.total_gastos_cop || 0),
+      costo_produccion: parseFloat(r.costo_produccion || 0),
+      reposicion: reposicionPorFecha[r.fecha] || 0,
+      utilidad_neta: parseFloat(r.utilidad_neta || 0),
+      declarado_cop: parseFloat(r.declarado_cop || 0),
+      diferencia_caja: parseFloat(r.diferencia_caja || 0)
+    }));
+
+    return res.json({ cierres });
+  } catch (error) {
+    console.error('Error al listar cierres admin:', error);
+    return res.status(500).json({ error: 'Error al obtener el histórico de cierres.', detalle: error.message });
+  }
+}
+
 // GET /api/caja/cierre-dia — Cierre consolidado de todos los turnos del día
 export async function cierreDia(req, res) {
   try {

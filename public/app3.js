@@ -471,6 +471,10 @@ checkApiHealth();
   document.getElementById('btn-load-mensual')?.addEventListener('click', loadCierreMensual);
   document.getElementById('btn-load-historial')?.addEventListener('click', loadHistorial);
 
+  // Cierres (admin)
+  document.getElementById('btn-load-cierres')?.addEventListener('click', loadCierresAdmin);
+  document.getElementById('btn-export-cierres')?.addEventListener('click', exportarCierresCSV);
+
   // Establecer fechas predeterminadas
   const today = localDateStr();
   document.getElementById('hist-desde').value = today;
@@ -527,7 +531,8 @@ function switchView(viewName) {
     credito: 'Cuentas por Cobrar',
     reportes: 'Reportes & Cierres',
     caja: 'Caja y Gastos',
-    tesoreria: 'Tesorería y Flujo de Caja'
+    tesoreria: 'Tesorería y Flujo de Caja',
+    cierres: 'Historial de Cierres Diarios'
   };
   DOM.viewTitle.textContent = titles[viewName] || viewName;
 
@@ -538,6 +543,7 @@ function switchView(viewName) {
   if (viewName === 'caja') loadCajaData();
   if (viewName === 'tesoreria') loadTesoreriaData();
   if (viewName === 'usuarios') loadUsuariosData();
+  if (viewName === 'cierres') loadCierresAdmin();
 
   // Cerrar sidebar en móvil
   DOM.sidebar.classList.remove('open');
@@ -3945,6 +3951,88 @@ window.loadCierreDia = async function() {
     showToast(e.message || 'Error al cargar el cierre diario', 'danger');
   }
 };
+
+// ============================================
+// MÓDULO CIERRES (ADMIN)
+// ============================================
+let cierresCache = [];
+
+async function loadCierresAdmin() {
+  if (!STATE.apiOnline) {
+    showToast('Modo Local. Conecta al servidor para ver el historial de cierres.', 'warning');
+    return;
+  }
+  const desde = document.getElementById('cierres-desde')?.value || '';
+  const hasta = document.getElementById('cierres-hasta')?.value || '';
+  let url = '/api/admin/cierres';
+  const qs = [];
+  if (desde) qs.push(`desde=${encodeURIComponent(desde)}`);
+  if (hasta) qs.push(`hasta=${encodeURIComponent(hasta)}`);
+  if (qs.length) url += '?' + qs.join('&');
+
+  try {
+    const res = await fetch(url);
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'Error al cargar los cierres');
+
+    cierresCache = d.cierres || [];
+    const tbody = document.getElementById('tabla-cierres');
+    if (cierresCache.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="9" class="loading-cell">No hay cierres registrados en el rango seleccionado.</td></tr>';
+      return;
+    }
+
+    const fmt = (v) => Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+    tbody.innerHTML = cierresCache.map(c => {
+      const diffColor = Math.abs(c.diferencia_caja) < 100 ? 'var(--success)' : 'var(--danger)';
+      const utilColor = c.utilidad_neta >= 0 ? 'var(--success)' : 'var(--danger)';
+      return `<tr>
+        <td>${c.fecha}</td>
+        <td>${c.total_turnos}</td>
+        <td class="font-outfit">$${fmt(c.total_ventas_cop)}</td>
+        <td class="font-outfit" style="color:var(--danger)">-$${fmt(c.costo_produccion)}</td>
+        <td class="font-outfit" style="color:var(--danger)">-$${fmt(c.total_gastos_cop)}</td>
+        <td class="font-outfit" style="color:var(--warning)">-$${fmt(c.reposicion)}</td>
+        <td class="font-outfit" style="color:${utilColor}">$${fmt(c.utilidad_neta)}</td>
+        <td class="font-outfit">$${fmt(c.declarado_cop)}</td>
+        <td class="font-outfit" style="color:${diffColor}">$${fmt(c.diferencia_caja)}</td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    console.error('Error cargando cierres:', e);
+    showToast(e.message || 'Error al cargar el historial de cierres', 'danger');
+  }
+}
+
+function exportarCierresCSV() {
+  if (cierresCache.length === 0) {
+    showToast('No hay datos para exportar. Carga el historial primero.', 'warning');
+    return;
+  }
+  const encabezado = ['Fecha', 'Turnos', 'Ventas COP', 'Costo Produccion COP', 'Gastos COP', 'Reposicion COP', 'Utilidad COP', 'Declarado COP', 'Diferencia COP'];
+  const filas = cierresCache.map(c => [
+    c.fecha,
+    c.total_turnos,
+    c.total_ventas_cop,
+    c.costo_produccion,
+    c.total_gastos_cop,
+    c.reposicion,
+    c.utilidad_neta,
+    c.declarado_cop,
+    c.diferencia_caja
+  ]);
+  const csv = [encabezado, ...filas]
+    .map(fila => fila.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `cierres-diarios-${localDateStr()}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 async function loadGastos() {
   if (!STATE.apiOnline) return;
