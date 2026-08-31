@@ -3839,9 +3839,9 @@ async function cerrarTurnoActual() {
       viewSuccess.style.display = 'block';
       
       document.getElementById('ticket-ventas').textContent = `$${d.resumen.total_ventas.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-      document.getElementById('ticket-costo').textContent = `$${(d.resumen.costo_produccion || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-      document.getElementById('ticket-gastos').textContent = `$${d.resumen.total_gastos.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-      document.getElementById('ticket-reposicion').textContent = `$${(d.resumen.total_reposicion || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      document.getElementById('ticket-costo').textContent = `-$${(d.resumen.costo_produccion || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      document.getElementById('ticket-gastos').textContent = `-$${d.resumen.total_gastos.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      document.getElementById('ticket-reposicion').textContent = `-$${(d.resumen.total_reposicion || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       
       const utilidad = d.resumen.utilidad_neta || 0;
       const utilEl = document.getElementById('ticket-utilidad');
