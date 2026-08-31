@@ -221,10 +221,17 @@ export async function cerrarCaja(req, res) {
     `;
     const abonosData = await db.query(abonosQuery, [fechaApertura]);
 
-    // 2. Calcular total de gastos operacionales desde apertura (en COP)
-    const expensesQuery = `SELECT SUM(monto_cop) as total FROM gastos WHERE fecha >= $1`;
+    // 2. Calcular total de gastos operacionales desde apertura (en COP).
+    //    La reposición de inventario NO es gasto operativo: es compra de stock
+    //    (activo) y no debe restarse de la utilidad. Solo sale de la caja.
+    const expensesQuery = `SELECT SUM(monto_cop) as total FROM gastos WHERE fecha >= $1 AND categoria != 'REPOSICION'`;
     const expensesData = await db.query(expensesQuery, [fechaApertura]);
     const totalGastos = parseFloat(expensesData[0]?.total || 0);
+
+    // 2.1 Reposición de inventario (compra de stock) desde apertura
+    const reposicionQuery = `SELECT SUM(monto_cop) as total FROM gastos WHERE fecha >= $1 AND categoria = 'REPOSICION'`;
+    const reposicionData = await db.query(reposicionQuery, [fechaApertura]);
+    const totalReposicion = parseFloat(reposicionData[0]?.total || 0);
 
     // 3. Total esperado por moneda = fondo inicial + ingresos (ventas + abonos) - gastos
     const saldosMoneda = {
@@ -247,7 +254,9 @@ export async function cerrarCaja(req, res) {
 
     const totalVentasCop = (ventasMoneda.COP || 0) + (ventasMoneda.USD || 0) * tasaUsd + (ventasMoneda.VES || 0) * tasaVes;
     const totalAbonosCop = (abonosMoneda.COP || 0) + (abonosMoneda.USD || 0) * tasaUsd + (abonosMoneda.VES || 0) * tasaVes;
-    const saldoTeorico = (saldosMoneda.COP || 0) + (saldosMoneda.USD || 0) * tasaUsd + (saldosMoneda.VES || 0) * tasaVes - totalGastos;
+    // El saldo teórico sí descuenta la reposición (salió dinero de la caja para
+    // comprar stock), pero la utilidad neta NO la resta.
+    const saldoTeorico = (saldosMoneda.COP || 0) + (saldosMoneda.USD || 0) * tasaUsd + (saldosMoneda.VES || 0) * tasaVes - totalGastos - totalReposicion;
     const totalIngresosCop = totalVentasCop + totalAbonosCop;
 
     // 3.1 Costo de producción de las ventas del turno (para utilidad neta)
@@ -297,6 +306,7 @@ export async function cerrarCaja(req, res) {
         total_ventas_detalle_cop: totalVentasCop,
         total_abonos_cop: totalAbonosCop,
         total_gastos: totalGastos,
+        total_reposicion: totalReposicion,
         costo_produccion: costoProduccion,
         utilidad_neta: utilidadNeta,
         saldo_teorico: saldoTeorico,
