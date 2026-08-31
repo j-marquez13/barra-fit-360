@@ -4044,6 +4044,13 @@ window.verTicketCierre = function(idx) {
 
   document.getElementById('cierre-dia-overlay').classList.add('open');
   lucide.createIcons();
+
+  document.getElementById('btn-dia-cerrar').onclick = () => {
+    document.getElementById('cierre-dia-overlay').classList.remove('open');
+  };
+  document.getElementById('btn-dia-imprimir').onclick = () => {
+    window.print();
+  };
 };
 
 function exportarCierresCSV() {
