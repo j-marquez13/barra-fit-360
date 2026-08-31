@@ -149,14 +149,9 @@ export async function restockInsumo(req, res) {
           [sesion_caja_id, 'REPOSICION', `Reposición de ${cantidad} ${existing[0].nombre}`, montoOriginal, moneda, tasa, montoCop, metodo_pago]
         );
 
-        // 3. Descontar de cuenta bancaria si el método de pago existe en tesorería
-        const cuentaExiste = await tx.query('SELECT id FROM cuentas_bancarias WHERE nombre = $1', [metodo_pago]);
-        if (cuentaExiste.length > 0) {
-          await tx.execute(
-            'UPDATE cuentas_bancarias SET saldo = saldo - $1 WHERE nombre = $2',
-            [montoCop, metodo_pago]
-          );
-        }
+        // Nota: la tesorería (cuentas_bancarias) se descuenta automáticamente
+        // mediante el trigger `func_tesoreria_gasto_out` al insertar el gasto.
+        // No se debe hacer un UPDATE manual aquí para evitar el doble descuento.
       }
     });
 
