@@ -327,19 +327,39 @@ export async function cerrarCaja(req, res) {
     const saldoTeorico = (saldosMoneda.COP || 0) + (saldosMoneda.USD || 0) * tasaUsd + (saldosMoneda.VES || 0) * tasaVes - totalGastos - totalReposicion;
     const totalIngresosCop = totalVentasCop + totalAbonosCop;
 
-    // 3.1 Costo de producción de las ventas del turno (para utilidad neta)
+    // 3.0 Total real de ventas del turno (solo tipo 'Venta', en COP según v.total)
+    const totalVentasRealQuery = `
+      SELECT COALESCE(SUM(v.total), 0) as total
+      FROM ventas v
+      WHERE v.fecha >= $1 AND v.tipo_transaccion = 'Venta'
+    `;
+    const totalVentasRealData = await db.query(totalVentasRealQuery, [fechaApertura]);
+    const totalVentasReal = parseFloat(totalVentasRealData[0]?.total || 0);
+
+    // 3.1 Costo de producción de las ventas del turno (solo ventas reales tipo 'Venta')
     const costoProdQuery = `
       SELECT COALESCE(SUM(dv.cantidad * COALESCE(dv.costo_unitario, p.costo_produccion)), 0) as total
       FROM detalle_ventas dv
       JOIN ventas v ON dv.venta_id = v.id
       JOIN productos p ON dv.producto_id = p.id
-      WHERE v.fecha >= $1 AND v.tipo_transaccion != 'Anulada'
+      WHERE v.fecha >= $1 AND v.tipo_transaccion = 'Venta'
     `;
     const costoProdData = await db.query(costoProdQuery, [fechaApertura]);
     const costoProduccion = parseFloat(costoProdData[0]?.total || 0);
 
-    // 3.2 Utilidad Neta = Ingresos por ventas - Costo de producción - Gastos operacionales
-    const utilidadNeta = totalVentasCop - costoProduccion - totalGastos;
+    // 3.2 Costo de cortesías del turno (tipo 'Cortesia')
+    const cortesiasQuery = `
+      SELECT COALESCE(SUM(dv.cantidad * COALESCE(dv.costo_unitario, p.costo_produccion)), 0) as costo_cortesias
+      FROM detalle_ventas dv
+      JOIN ventas v ON dv.venta_id = v.id
+      JOIN productos p ON dv.producto_id = p.id
+      WHERE v.fecha >= $1 AND v.tipo_transaccion = 'Cortesia'
+    `;
+    const cortesiasData = await db.query(cortesiasQuery, [fechaApertura]);
+    const costoCortesias = parseFloat(cortesiasData[0]?.costo_cortesias || 0);
+
+    // 3.3 Utilidad Neta = Total Ventas del Turno - Costo de producción - Gastos operacionales - Costo de Cortesías
+    const utilidadNeta = totalVentasReal - costoProduccion - totalGastos - costoCortesias;
 
     // 4. Diferencia de Caja = Monto Físico Declarado (COP) - Saldo Teórico
     const declarado = parseFloat(monto_declarado_cop) || 0;
@@ -376,6 +396,8 @@ export async function cerrarCaja(req, res) {
         total_gastos: totalGastos,
         total_reposicion: totalReposicion,
         costo_produccion: costoProduccion,
+        costo_cortesias: costoCortesias,
+        total_ventas_real_cop: totalVentasReal,
         utilidad_neta: utilidadNeta,
         saldo_teorico: saldoTeorico,
         monto_declarado: declarado,
