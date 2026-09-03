@@ -1507,60 +1507,150 @@ async function loadInventarioData() {
   }
 }
 
+let ordenCompraItems = [];
+
 window.loadOrdenCompra = async function() {
   const tbody = document.getElementById('tbody-orden');
-  const valTotal = document.getElementById('val-total-orden');
   if (!tbody) return;
-  
-  tbody.innerHTML = '<tr><td colspan="6" class="loading-cell"><i data-lucide="loader" class="spin"></i> Calculando orden...</td></tr>';
-  lucide.createIcons();
-  
+  tbody.innerHTML = '<tr><td colspan="7" class="loading-cell">Calculando orden...</td></tr>';
   try {
     const res = await fetch('/api/inventario/orden-compra');
     if (!res.ok) throw new Error('Error al generar la orden');
     const data = await res.json();
-    
-    valTotal.textContent = (data.total_orden_cop < 0 ? '-$' + Math.abs(data.total_orden_cop).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 }) : '$' + data.total_orden_cop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 }));
-    if (data.total_orden_cop < 0) {
-      valTotal.style.color = 'var(--success)';
-    } else {
-      valTotal.style.color = '';
-    }
-    
-    if (data.items.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" class="loading-cell" style="color:var(--success);">¡Tu inventario está en los niveles óptimos! No necesitas comprar nada.</td></tr>';
-      return;
-    }
-    
-    // Separar: primero los que faltan (por_comprar > 0), luego los excedentes (por_comprar < 0)
-    const faltantes = data.items.filter(i => i.por_comprar > 0);
-    const excedentes = data.items.filter(i => i.por_comprar < 0);
-    const sorted = [...faltantes, ...excedentes];
-    
-    tbody.innerHTML = sorted.map(item => {
-      const esSobrante = item.por_comprar < 0;
-      const colorCantidad = esSobrante ? 'var(--success)' : 'var(--warning)';
-      const colorCosto = esSobrante ? 'var(--success)' : 'var(--success)';
-      const etiqueta = esSobrante ? 'Sobra ' + Math.abs(item.por_comprar) : item.por_comprar;
-      const costTxt = esSobrante 
-        ? '-$' + Math.abs(item.reposicion_cop).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })
-        : '$' + item.reposicion_cop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 });
-      return `
-      <tr style="${esSobrante ? 'opacity:0.75;' : ''}">
-        <td><strong>${item.nombre}</strong></td>
-        <td>${item.stock_actual} ${item.unidad_medida}</td>
-        <td>${item.stock_fijo} ${item.unidad_medida}</td>
-        <td style="color:${colorCantidad}; font-weight:bold;">${etiqueta} ${item.unidad_medida}</td>
-        <td>$${item.costo_unitario.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
-        <td style="color:${colorCosto}; font-weight:bold;">${costTxt}</td>
-      </tr>
-    `}).join('');
-    
+    // Solo los insumos que faltan (por_comprar > 0); los excedentes no se compran.
+    ordenCompraItems = data.items.filter(i => i.por_comprar > 0);
+    renderOrdenCompraTable();
   } catch (err) {
     console.error('Error cargando orden de compra:', err);
-    tbody.innerHTML = '<tr><td colspan="6" class="loading-cell" style="color:var(--danger);">Error al generar la orden. Inténtalo de nuevo.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="loading-cell" style="color:var(--danger);">Error al generar la orden. Inténtalo de nuevo.</td></tr>';
   }
+};
+
+function renderOrdenCompraTable() {
+  const tbody = document.getElementById('tbody-orden');
+  const chkTodos = document.getElementById('chk-orden-todos');
+  if (!tbody) return;
+
+  if (ordenCompraItems.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="loading-cell" style="color:var(--success);">¡Inventario óptimo! No necesitas comprar nada.</td></tr>';
+    if (chkTodos) chkTodos.checked = false;
+    updateOrdenTotal();
+    return;
+  }
+
+  tbody.innerHTML = ordenCompraItems.map((item, idx) => {
+    return `<tr>
+      <td><input type="checkbox" class="chk-orden-item" data-idx="${idx}" checked></td>
+      <td><strong>${item.nombre}</strong></td>
+      <td>${item.stock_actual} ${item.unidad_medida}</td>
+      <td>${item.stock_fijo} ${item.unidad_medida}</td>
+      <td><input type="number" class="orden-qty" data-idx="${idx}" value="${item.por_comprar}" min="0" step="any" style="width:100px; background:rgba(0,0,0,0.25); border:1px solid var(--border-glass); border-radius:6px; padding:6px 8px; color:var(--color-text); font-family:var(--font-title);"></td>
+      <td>$${item.costo_unitario.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+      <td class="orden-item-total" style="font-weight:bold; color:var(--success);">$${item.reposicion_cop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+    </tr>`;
+  }).join('');
+
+  tbody.querySelectorAll('.chk-orden-item').forEach(chk => chk.addEventListener('change', updateOrdenTotal));
+  tbody.querySelectorAll('.orden-qty').forEach(inp => inp.addEventListener('input', updateOrdenTotal));
+
+  if (chkTodos) {
+    chkTodos.checked = true;
+    chkTodos.onchange = () => {
+      tbody.querySelectorAll('.chk-orden-item').forEach(c => c.checked = chkTodos.checked);
+      updateOrdenTotal();
+    };
+  }
+
+  updateOrdenTotal();
 }
+
+function updateOrdenTotal() {
+  const tbody = document.getElementById('tbody-orden');
+  const valTotal = document.getElementById('val-total-orden');
+  let total = 0;
+  tbody.querySelectorAll('tr').forEach(tr => {
+    const chk = tr.querySelector('.chk-orden-item');
+    const qty = tr.querySelector('.orden-qty');
+    if (!chk || !chk.checked || !qty) return;
+    const item = ordenCompraItems[parseInt(chk.dataset.idx)];
+    if (!item) return;
+    const cantidad = parseFloat(qty.value) || 0;
+    const subtotal = cantidad * (parseFloat(item.costo_unitario) || 0);
+    total += subtotal;
+    const cell = tr.querySelector('.orden-item-total');
+    if (cell) cell.textContent = '$' + subtotal.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 });
+  });
+  if (valTotal) valTotal.textContent = '$' + total.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 });
+  return total;
+}
+
+function getOrdenSeleccion() {
+  const tbody = document.getElementById('tbody-orden');
+  const items = [];
+  tbody.querySelectorAll('tr').forEach(tr => {
+    const chk = tr.querySelector('.chk-orden-item');
+    const qty = tr.querySelector('.orden-qty');
+    if (!chk || !chk.checked || !qty) return;
+    const item = ordenCompraItems[parseInt(chk.dataset.idx)];
+    if (!item) return;
+    const cantidad = parseFloat(qty.value) || 0;
+    if (cantidad <= 0) return;
+    items.push({ insumo_id: item.id, cantidad, costo_unitario: parseFloat(item.costo_unitario) || 0 });
+  });
+  return items;
+}
+
+window.confirmarOrdenCompra = async function() {
+  const items = getOrdenSeleccion();
+  if (items.length === 0) {
+    showToast('Selecciona al menos un insumo para comprar.', 'warning');
+    return;
+  }
+
+  const metodo_pago = document.getElementById('orden-metodo').value;
+  const moneda = document.getElementById('orden-moneda').value;
+  const tasa_cambio = document.getElementById('orden-tasa').value || '1';
+  const total = updateOrdenTotal();
+
+  const lista = items.map(it => {
+    const ins = ordenCompraItems.find(o => o.id === it.insumo_id);
+    const nombre = ins ? ins.nombre : ('Insumo #' + it.insumo_id);
+    const subtotal = it.cantidad * it.costo_unitario;
+    return `<div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span>${nombre} × ${it.cantidad}</span><strong>$${subtotal.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</strong></div>`;
+  }).join('');
+
+  openGenericModal('Confirmar Compra', `
+    <p class="text-muted" style="margin-bottom:12px;">¿Confirmas esta orden de compra?</p>
+    <div style="max-height:240px; overflow-y:auto;">${lista}</div>
+    <div style="display:flex; justify-content:space-between; border-top:1px solid var(--border-glass); padding-top:10px; margin-top:10px; font-size:1.15em; font-weight:800;">
+      <span>Total</span><span style="color:var(--success);">$${total.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span>
+    </div>
+    <div class="text-muted" style="margin-top:8px; font-size:0.8rem;">Pago: ${metodo_pago} (${moneda})</div>
+  `, async () => {
+    const btn = DOM.btnSubmitGeneric;
+    btn.disabled = true;
+    btn.innerHTML = '<i data-lucide="loader" class="spin"></i> Procesando...';
+    lucide.createIcons();
+    try {
+      const res = await fetch('/api/inventario/orden-compra/confirmar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ metodo_pago, moneda, tasa_cambio, items })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al confirmar la compra');
+      closeGenericModal();
+      showToast('Orden de compra confirmada correctamente.', 'success');
+      await loadOrdenCompra();
+      await loadInventarioData();
+    } catch (e) {
+      alert('Error: ' + e.message);
+      btn.disabled = false;
+      btn.innerHTML = '<i data-lucide="check"></i> Guardar';
+      lucide.createIcons();
+    }
+  });
+};
 
 function renderInsumosTable(insumos) {
   const tbody = document.getElementById('tbody-insumos');

@@ -323,6 +323,65 @@ export async function getOrdenCompra(req, res) {
   }
 }
 
+// POST /api/inventario/orden-compra/confirmar — Confirma la compra de los items seleccionados
+export async function confirmarOrdenCompra(req, res) {
+  const { metodo_pago, moneda, tasa_cambio, items } = req.body;
+
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'La orden no tiene items seleccionados.' });
+  }
+  if (!metodo_pago) {
+    return res.status(400).json({ error: 'Selecciona un método de pago.' });
+  }
+
+  try {
+    const tasa = parseFloat(tasa_cambio) || 1;
+    const monedaPago = moneda || 'COP';
+    let totalCop = 0;
+    const procesados = [];
+
+    await db.transaction(async (tx) => {
+      const openSession = await tx.query("SELECT id FROM sesiones_caja WHERE fecha_cierre IS NULL AND estado = 'Abierta' ORDER BY id DESC LIMIT 1");
+      const sesion_caja_id = openSession.length > 0 ? openSession[0].id : null;
+
+      for (const item of items) {
+        const insumoId = item.insumo_id;
+        const cantidad = parseFloat(item.cantidad);
+        const costo = parseFloat(item.costo_unitario) || 0;
+
+        if (!insumoId || !cantidad || cantidad <= 0) continue;
+
+        const existing = await tx.query('SELECT id, nombre, stock_actual FROM insumos WHERE id = $1', [insumoId]);
+        if (existing.length === 0) continue;
+
+        const nombre = existing[0].nombre;
+        const newStock = parseFloat(existing[0].stock_actual) + cantidad;
+        const montoCop = cantidad * costo;
+        totalCop += montoCop;
+
+        await tx.execute('UPDATE insumos SET stock_actual = $1, costo_unitario = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3', [newStock, costo, insumoId]);
+
+        const montoOriginal = monedaPago === 'COP' ? montoCop : montoCop / tasa;
+        await tx.execute(
+          'INSERT INTO gastos (sesion_caja_id, categoria, descripcion, monto, moneda, tasa_cambio, monto_cop, metodo_pago) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+          [sesion_caja_id, 'REPOSICION', `Reposición de ${cantidad} ${nombre}`, montoOriginal, monedaPago, tasa, montoCop, metodo_pago]
+        );
+
+        procesados.push({ insumo_id: insumoId, nombre, cantidad, costo_unitario: costo, monto_cop: montoCop });
+      }
+    });
+
+    return res.json({
+      mensaje: 'Orden de compra confirmada correctamente.',
+      total_cop: totalCop,
+      items: procesados
+    });
+  } catch (error) {
+    console.error('Error al confirmar orden de compra:', error);
+    return res.status(500).json({ error: 'Error al confirmar la orden de compra.', detalle: error.message });
+  }
+}
+
 // ============================================
 // PRODUCTOS (Catálogo)
 // ============================================
