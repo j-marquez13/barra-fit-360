@@ -26,6 +26,13 @@ function getSecret() {
 const SECRET = getSecret();
 const TOKEN_TTL = 12 * 60 * 60 * 1000; // 12 horas
 
+// Lista negra de tokens revocados (en memoria; se limpia al reiniciar el servidor).
+const revokedTokens = new Set();
+
+export function revokeToken(token) {
+  if (token) revokedTokens.add(token);
+}
+
 function b64url(buf) {
   return Buffer.from(buf).toString('base64url');
 }
@@ -45,6 +52,7 @@ export function signToken(user) {
 
 export function verifyToken(token) {
   if (!token || typeof token !== 'string') return null;
+  if (revokedTokens.has(token)) return null;
   const [data, sig] = token.split('.');
   if (!data || !sig) return null;
   const expected = crypto.createHmac('sha256', SECRET).update(data).digest('base64url');

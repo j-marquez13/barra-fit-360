@@ -4362,6 +4362,16 @@ const TURNO_STATE = {
  * Cierra la sesión del dispositivo y vuelve a la pantalla de turno.
  */
 async function cerrarSesion() {
+  // Revocar el token en el servidor (si existe)
+  const auth = JSON.parse(sessionStorage.getItem('bf360_auth') || '{}');
+  if (auth.token) {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-auth-token': auth.token }
+      });
+    } catch (e) {}
+  }
   sessionStorage.removeItem('bf360_auth');
   TURNO_STATE.sesionActiva = null;
 
@@ -4416,17 +4426,14 @@ async function initTurnoSystem() {
       }
       
       // Dispositivo no autenticado → mostrar Quick Login
-      await loadTurnoUsuarios();
       showQuickLogin(data.sesion);
     } else {
       // Sin sesión: mostrar pantalla completa de turno
       sessionStorage.removeItem('bf360_auth');
-      await loadTurnoUsuarios();
       setupTurnoForm();
     }
   } catch (err) {
     console.warn('No se pudo verificar estado de caja:', err);
-    await loadTurnoUsuarios();
     setupTurnoForm();
   }
 }
@@ -4447,10 +4454,7 @@ function showQuickLogin(sesion) {
   const qlCard = document.getElementById('quick-login-card');
   if (qlCard) qlCard.style.display = 'block';
   
-  // Poblar las tarjetas de cajeros
-  if (TURNO_STATE.usuarios.length > 0) {
-    renderUsuariosGrid('ql-usuarios-grid', TURNO_STATE.usuarios, TURNO_STATE.usuarios[0].id);
-  }
+
   
   // Setup listeners
   setupQuickLoginForm(sesion);
@@ -4584,42 +4588,7 @@ async function handleQuickLogin(sesion) {
   }
 }
 
-/**
- * Renderiza las tarjetas de usuarios en un contenedor.
- */
-function renderUsuariosGrid(containerId, usuarios, selectedId) {
-  const grid = document.getElementById(containerId);
-  if (!grid) return;
-  grid.innerHTML = usuarios.map(u => {
-    const inicial = (u.nombre || '?').trim().charAt(0).toUpperCase();
-    const sel = String(u.id) === String(selectedId) ? 'selected' : '';
-    return `<div class="usuario-card ${sel}" data-id="${u.id}" data-turno="${u.turno || 'Mañana'}">
-      <div class="usuario-avatar">${inicial}</div>
-      <div class="usuario-info">
-        <span class="usuario-nombre">${u.nombre}</span>
-        <span class="usuario-turno">Turno ${u.turno || 'Mañana'}</span>
-      </div>
-      <div class="usuario-check">✓</div>
-    </div>`;
-  }).join('');
-}
 
-/**
- * Carga los usuarios de la BD y los muestra como tarjetas.
- */
-async function loadTurnoUsuarios() {
-  const grid = document.getElementById('turno-usuarios-grid');
-  try {
-    const res = await fetch('/api/usuarios');
-    const usuarios = await res.json();
-    TURNO_STATE.usuarios = usuarios;
-    const selectedId = usuarios.length > 0 ? usuarios[0].id : null;
-    if (selectedId) syncTurnoRadioFromUser(usuarios[0].turno);
-    renderUsuariosGrid('turno-usuarios-grid', usuarios, selectedId);
-  } catch (err) {
-    if (grid) grid.innerHTML = '<div class="loading-cell">Error cargando usuarios</div>';
-  }
-}
 
 /**
  * Sincroniza el selector visual de turno cuando se elige un usuario
@@ -4986,8 +4955,7 @@ async function showTurnoScreen() {
 
   // Limpiar contraseña
 
-  // Recargar usuarios
-  await loadTurnoUsuarios();
+
 
   // Mostrar pantalla
   turnoScreen.classList.remove('hiding');

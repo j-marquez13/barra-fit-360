@@ -13,7 +13,7 @@ import { estadoCaja, abrirCaja, cerrarCaja, cierreDia, listarCierresAdmin } from
 import { getSaldos, transferirFondos } from './controllers/treasuryController.js';
 import { initializeDatabase } from './initDb.js';
 import * as db from './db.js';
-import { signToken, verifyToken, requireAuth, requireAdmin } from './auth.js';
+import { signToken, verifyToken, requireAuth, requireAdmin, revokeToken } from './auth.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -332,6 +332,18 @@ app.post('/api/auth/cambiar-password', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Error al cambiar contraseña:', err);
     res.status(500).json({ error: 'Error al cambiar contraseña' });
+  }
+});
+
+// LOGOUT — revoca el token actual para invalidarlo
+app.post('/api/auth/logout', requireAuth, (req, res) => {
+  try {
+    const header = req.headers['x-auth-token']
+      || (req.headers.authorization && req.headers.authorization.replace(/^Bearer\s+/i, ''));
+    revokeToken(header);
+    res.json({ ok: true, mensaje: 'Sesión cerrada correctamente' });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al cerrar sesión' });
   }
 });
 
