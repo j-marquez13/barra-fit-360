@@ -294,23 +294,23 @@ export async function getOrdenCompra(req, res) {
     insumos.forEach(ins => {
       const stockActual = parseFloat(ins.stock_actual) || 0;
       const stockFijo = parseFloat(ins.stock_fijo) || 0;
+      const stockMinimo = parseFloat(ins.stock_minimo) || 0;
       const costo = parseFloat(ins.costo_unitario) || 0;
       
       const porComprar = stockFijo - stockActual;
-      if (porComprar !== 0) {
-        const reposicionCop = porComprar * costo;
-        totalOrdenCop += reposicionCop;
-        itemsComprar.push({
-          id: ins.id,
-          nombre: ins.nombre,
-          unidad_medida: ins.unidad_medida,
-          stock_actual: stockActual,
-          stock_fijo: stockFijo,
-          por_comprar: porComprar,
-          costo_unitario: costo,
-          reposicion_cop: reposicionCop
-        });
-      }
+      const reposicionCop = porComprar * costo;
+      totalOrdenCop += reposicionCop;
+      itemsComprar.push({
+        id: ins.id,
+        nombre: ins.nombre,
+        unidad_medida: ins.unidad_medida,
+        stock_actual: stockActual,
+        stock_fijo: stockFijo,
+        stock_minimo: stockMinimo,
+        por_comprar: porComprar,
+        costo_unitario: costo,
+        reposicion_cop: reposicionCop
+      });
     });
     
     return res.json({

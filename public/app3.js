@@ -1512,18 +1512,18 @@ let ordenCompraItems = [];
 window.loadOrdenCompra = async function() {
   const tbody = document.getElementById('tbody-orden');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="7" class="loading-cell">Calculando orden...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="8" class="loading-cell">Calculando orden...</td></tr>';
   try {
     const res = await fetch('/api/inventario/orden-compra');
     if (!res.ok) throw new Error('Error al generar la orden');
     const data = await res.json();
-    // Solo los insumos que faltan (por_comprar > 0); los excedentes no se compran.
-    ordenCompraItems = data.items.filter(i => i.por_comprar > 0);
+    // Mostrar TODOS los insumos: el usuario decide qué comprar y la cantidad.
+    ordenCompraItems = data.items || [];
     renderOrdenCompraTable();
     loadHistorialCompras();
   } catch (err) {
     console.error('Error cargando orden de compra:', err);
-    tbody.innerHTML = '<tr><td colspan="7" class="loading-cell" style="color:var(--danger);">Error al generar la orden. Inténtalo de nuevo.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="loading-cell" style="color:var(--danger);">Error al generar la orden. Inténtalo de nuevo.</td></tr>';
   }
 };
 
@@ -1533,21 +1533,26 @@ function renderOrdenCompraTable() {
   if (!tbody) return;
 
   if (ordenCompraItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="loading-cell" style="color:var(--success);">¡Inventario óptimo! No necesitas comprar nada.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="loading-cell">No hay insumos registrados.</td></tr>';
     if (chkTodos) chkTodos.checked = false;
     updateOrdenTotal();
     return;
   }
 
   tbody.innerHTML = ordenCompraItems.map((item, idx) => {
+    const sugerido = item.por_comprar;
+    const sugeridoTxt = sugerido > 0 ? ('+' + sugerido) : String(sugerido);
+    const sugeridoColor = sugerido > 0 ? 'var(--warning)' : (sugerido < 0 ? 'var(--success)' : 'var(--color-muted)');
+    const ph = sugerido > 0 ? sugerido : '';
     return `<tr>
-      <td><input type="checkbox" class="chk-orden-item" data-idx="${idx}" checked></td>
+      <td><input type="checkbox" class="chk-orden-item" data-idx="${idx}" ${sugerido > 0 ? 'checked' : ''}></td>
       <td><strong>${item.nombre}</strong></td>
       <td>${item.stock_actual} ${item.unidad_medida}</td>
       <td>${item.stock_fijo} ${item.unidad_medida}</td>
-      <td><input type="number" class="orden-qty" data-idx="${idx}" value="${item.por_comprar}" min="0" step="any" style="width:100px; background:rgba(0,0,0,0.25); border:1px solid var(--border-glass); border-radius:6px; padding:6px 8px; color:var(--color-text); font-family:var(--font-title);"></td>
+      <td style="color:${sugeridoColor}; font-weight:bold;">${sugeridoTxt} ${item.unidad_medida}</td>
+      <td><input type="number" class="orden-qty" data-idx="${idx}" value="" min="0" step="any" placeholder="${ph}" style="width:100px; background:rgba(0,0,0,0.25); border:1px solid var(--border-glass); border-radius:6px; padding:6px 8px; color:var(--color-text); font-family:var(--font-title);"></td>
       <td>$${item.costo_unitario.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
-      <td class="orden-item-total" style="font-weight:bold; color:var(--success);">$${item.reposicion_cop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+      <td class="orden-item-total" style="font-weight:bold; color:var(--success);">$0</td>
     </tr>`;
   }).join('');
 
@@ -1555,7 +1560,7 @@ function renderOrdenCompraTable() {
   tbody.querySelectorAll('.orden-qty').forEach(inp => inp.addEventListener('input', updateOrdenTotal));
 
   if (chkTodos) {
-    chkTodos.checked = true;
+    chkTodos.checked = false;
     chkTodos.onchange = () => {
       tbody.querySelectorAll('.chk-orden-item').forEach(c => c.checked = chkTodos.checked);
       updateOrdenTotal();
