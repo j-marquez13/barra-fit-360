@@ -57,10 +57,10 @@
 
       <!-- Selección de cajero -->
       <div class="turno-field">
-        <label for="turno-cajero-select">Cajero</label>
-        <select id="turno-cajero-select">
-          <option value="">-- Cargando usuarios... --</option>
-        </select>
+        <label>Cajero</label>
+        <div class="usuario-grid" id="turno-usuarios-grid">
+          <div class="loading-cell">Cargando usuarios...</div>
+        </div>
       </div>
 
       <!-- Contraseña para cajero EXISTENTE -->
@@ -115,10 +115,10 @@
 
       <!-- Selector de cajero -->
       <div class="turno-field">
-        <label for="ql-cajero-select">Cajero</label>
-        <select id="ql-cajero-select">
-          <option value="">-- Cargando usuarios... --</option>
-        </select>
+        <label>Cajero</label>
+        <div class="usuario-grid" id="ql-usuarios-grid">
+          <div class="loading-cell">Cargando usuarios...</div>
+        </div>
       </div>
 
       <!-- Contraseña -->
@@ -265,6 +265,10 @@
             <span class="status-text">Buscando Servidor...</span>
           </span>
           <div class="date-time" id="live-time">Cargando fecha...</div>
+          <button class="logout-btn" id="btn-logout" title="Cerrar sesión" onclick="cerrarSesion()">
+            <i data-lucide="log-out"></i>
+            <span>Cerrar sesión</span>
+          </button>
         </div>
       </header>
 

@@ -4359,6 +4359,26 @@ const TURNO_STATE = {
 };
 
 /**
+ * Cierra la sesión del dispositivo y vuelve a la pantalla de turno.
+ */
+async function cerrarSesion() {
+  sessionStorage.removeItem('bf360_auth');
+  TURNO_STATE.sesionActiva = null;
+
+  const turnoScreen = document.getElementById('turno-screen');
+  turnoScreen.classList.remove('hiding');
+  turnoScreen.style.display = 'flex';
+
+  const headerBadge = document.getElementById('header-turno-badge');
+  if (headerBadge) headerBadge.style.display = 'none';
+  const sidebarInfo = document.getElementById('sidebar-turno-info');
+  if (sidebarInfo) sidebarInfo.style.display = 'none';
+
+  await initTurnoSystem();
+  showToast('Sesión cerrada correctamente', 'success');
+}
+
+/**
  * Punto de entrada: verifica si hay sesión activa.
  * Si la hay Y el dispositivo ya se autenticó (sessionStorage), entra directo.
  * Si la hay pero NO se autenticó, muestra Quick Login.
@@ -4427,16 +4447,9 @@ function showQuickLogin(sesion) {
   const qlCard = document.getElementById('quick-login-card');
   if (qlCard) qlCard.style.display = 'block';
   
-  // Poblar el select de cajeros
-  const qlSelect = document.getElementById('ql-cajero-select');
-  if (qlSelect && TURNO_STATE.usuarios.length > 0) {
-    qlSelect.innerHTML = '';
-    TURNO_STATE.usuarios.forEach(u => {
-      const opt = document.createElement('option');
-      opt.value = u.id;
-      opt.textContent = `${u.nombre} (${u.turno})`;
-      qlSelect.appendChild(opt);
-    });
+  // Poblar las tarjetas de cajeros
+  if (TURNO_STATE.usuarios.length > 0) {
+    renderUsuariosGrid('ql-usuarios-grid', TURNO_STATE.usuarios, TURNO_STATE.usuarios[0].id);
   }
   
   // Setup listeners
@@ -4454,6 +4467,16 @@ function setupQuickLoginForm(sesion) {
   btnQL?.addEventListener('click', () => handleQuickLogin(sesion));
   qlPass?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') handleQuickLogin(sesion);
+  });
+
+  // Selección de cajero por tarjeta
+  const qlGrid = document.getElementById('ql-usuarios-grid');
+  qlGrid?.addEventListener('click', (e) => {
+    const card = e.target.closest('.usuario-card');
+    if (!card) return;
+    qlGrid.querySelectorAll('.usuario-card').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+    if (qlPass) { qlPass.value = ''; qlPass.classList.remove('input-error'); }
   });
   
   // Reutilizar los toggle de ojo existentes
@@ -4479,7 +4502,6 @@ function setupQuickLoginForm(sesion) {
 async function handleQuickLogin(sesion) {
   const btnQL = document.getElementById('btn-quick-login');
   const errorEl = document.getElementById('ql-error');
-  const qlSelect = document.getElementById('ql-cajero-select');
   const qlPass = document.getElementById('ql-password');
   
   errorEl.classList.remove('visible');
@@ -4489,7 +4511,8 @@ async function handleQuickLogin(sesion) {
   lucide.createIcons();
   
   try {
-    const usuarioId = parseInt(qlSelect.value);
+    const cardQL = document.querySelector('#ql-usuarios-grid .usuario-card.selected');
+    const usuarioId = cardQL ? parseInt(cardQL.dataset.id) : (TURNO_STATE.usuarios[0]?.id);
     const password = qlPass?.value || '';
     
     if (!password) {
@@ -4559,33 +4582,39 @@ async function handleQuickLogin(sesion) {
 }
 
 /**
- * Carga los usuarios de la BD y los muestra en el select de cajero.
+ * Renderiza las tarjetas de usuarios en un contenedor.
+ */
+function renderUsuariosGrid(containerId, usuarios, selectedId) {
+  const grid = document.getElementById(containerId);
+  if (!grid) return;
+  grid.innerHTML = usuarios.map(u => {
+    const inicial = (u.nombre || '?').trim().charAt(0).toUpperCase();
+    const sel = String(u.id) === String(selectedId) ? 'selected' : '';
+    return `<div class="usuario-card ${sel}" data-id="${u.id}" data-turno="${u.turno || 'Mañana'}">
+      <div class="usuario-avatar">${inicial}</div>
+      <div class="usuario-info">
+        <span class="usuario-nombre">${u.nombre}</span>
+        <span class="usuario-turno">Turno ${u.turno || 'Mañana'}</span>
+      </div>
+      <div class="usuario-check">✓</div>
+    </div>`;
+  }).join('');
+}
+
+/**
+ * Carga los usuarios de la BD y los muestra como tarjetas.
  */
 async function loadTurnoUsuarios() {
-  const select = document.getElementById('turno-cajero-select');
+  const grid = document.getElementById('turno-usuarios-grid');
   try {
     const res = await fetch('/api/usuarios');
     const usuarios = await res.json();
     TURNO_STATE.usuarios = usuarios;
-    
-    select.innerHTML = '';
-    
-    // Usuarios existentes
-    usuarios.forEach(u => {
-      const opt = document.createElement('option');
-      opt.value = u.id;
-      opt.textContent = `${u.nombre} (${u.turno})`;
-      opt.dataset.turno = u.turno;
-      select.appendChild(opt);
-    });
-    
-    // Seleccionar el primero real si existe
-    if (usuarios.length > 0) {
-      select.value = usuarios[0].id;
-      syncTurnoRadioFromUser(usuarios[0].turno);
-    }
+    const selectedId = usuarios.length > 0 ? usuarios[0].id : null;
+    if (selectedId) syncTurnoRadioFromUser(usuarios[0].turno);
+    renderUsuariosGrid('turno-usuarios-grid', usuarios, selectedId);
   } catch (err) {
-    select.innerHTML = '<option value="">Error cargando usuarios</option>';
+    if (grid) grid.innerHTML = '<div class="loading-cell">Error cargando usuarios</div>';
   }
 }
 
@@ -4608,20 +4637,20 @@ function syncTurnoRadioFromUser(turno) {
  * Configura todos los listeners del formulario de turno (con contraseña)
  */
 function setupTurnoForm() {
-  const select = document.getElementById('turno-cajero-select');
+  const grid = document.getElementById('turno-usuarios-grid');
   const passField = document.getElementById('turno-pass-field');
   const passInput = document.getElementById('turno-password');
   const btnIniciar = document.getElementById('btn-iniciar-turno');
 
-  // Cuando cambia el cajero seleccionado
-  select?.addEventListener('change', () => {
-    const val = select.value;
+  // Selección de cajero por tarjeta
+  grid?.addEventListener('click', (e) => {
+    const card = e.target.closest('.usuario-card');
+    if (!card) return;
+    grid.querySelectorAll('.usuario-card').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
     if (passField) passField.style.display = 'block';
-    // Limpiar contraseña al cambiar de usuario
     if (passInput) { passInput.value = ''; passInput.classList.remove('input-error'); }
-    // Sincronizar turno visual
-    const user = TURNO_STATE.usuarios.find(u => String(u.id) === val);
-    if (user) syncTurnoRadioFromUser(user.turno);
+    syncTurnoRadioFromUser(card.dataset.turno);
   });
 
   // Botón iniciar turno
@@ -4754,7 +4783,6 @@ function pedirCambioPassword() {
 async function iniciarTurno() {
   const btnIniciar = document.getElementById('btn-iniciar-turno');
   const errorEl = document.getElementById('turno-error');
-  const select = document.getElementById('turno-cajero-select');
   const fondoInput = document.getElementById('turno-fondo');
   const passInput = document.getElementById('turno-password');
   const turnoSeleccionado = document.querySelector('input[name="turno-sel"]:checked')?.value || 'Mañana';
@@ -4770,7 +4798,8 @@ async function iniciarTurno() {
     let nombreCajero;
 
     // ── CAJERO EXISTENTE — validar contraseña ─────────
-    usuarioId = parseInt(select.value);
+    const cardSeleccionada = document.querySelector('#turno-usuarios-grid .usuario-card.selected');
+    usuarioId = cardSeleccionada ? parseInt(cardSeleccionada.dataset.id) : (TURNO_STATE.usuarios[0]?.id);
     const user = TURNO_STATE.usuarios.find(u => u.id === usuarioId);
     nombreCajero = user?.nombre || 'Cajero';
 

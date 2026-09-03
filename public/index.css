@@ -2644,6 +2644,131 @@ select.receta-insumo option {
 }
 
 /* ============================================ */
+/* TARJETAS DE USUARIO (selección de cajero)    */
+/* ============================================ */
+.usuario-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.usuario-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  transition: all 0.18s ease;
+  user-select: none;
+}
+
+.usuario-card:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  transform: translateY(-1px);
+}
+
+.usuario-card.selected {
+  border-color: var(--cyan-neon);
+  background: rgba(0, 242, 254, 0.07);
+  box-shadow: 0 0 0 3px rgba(0, 242, 254, 0.12);
+}
+
+.usuario-avatar {
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--cyan-neon));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: 1rem;
+  color: white;
+  box-shadow: 0 0 10px var(--cyan-glow);
+}
+
+.usuario-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.usuario-nombre {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.usuario-turno {
+  font-size: 0.7rem;
+  color: var(--color-muted);
+}
+
+.usuario-check {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--cyan-neon);
+  color: white;
+  font-size: 0.7rem;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.usuario-card.selected .usuario-check {
+  display: flex;
+}
+
+/* Botón de cerrar sesión */
+.logout-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 23, 68, 0.3);
+  background: rgba(255, 23, 68, 0.08);
+  color: #ff4d6d;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.logout-btn:hover {
+  background: rgba(255, 23, 68, 0.15);
+  border-color: rgba(255, 23, 68, 0.55);
+}
+
+.logout-btn i {
+  width: 15px;
+  height: 15px;
+}
+
+@media (max-width: 480px) {
+  .usuario-grid {
+    grid-template-columns: 1fr;
+  }
+  .logout-btn span {
+    display: none;
+  }
+}
+
+/* ============================================ */
 /* CIERRE DE CAJA PREMIUM                       */
 /* ============================================ */
 
