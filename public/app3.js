@@ -1532,25 +1532,30 @@ function renderOrdenCompraTable() {
   const chkTodos = document.getElementById('chk-orden-todos');
   if (!tbody) return;
 
-  if (ordenCompraItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="loading-cell">No hay insumos registrados.</td></tr>';
+  const searchTerm = (document.getElementById('search-orden-input')?.value || '').toLowerCase().trim();
+  const itemsFiltrados = searchTerm
+    ? ordenCompraItems.filter(i => (i.nombre || '').toLowerCase().includes(searchTerm))
+    : ordenCompraItems;
+
+  if (itemsFiltrados.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="loading-cell">' + (searchTerm ? 'Sin resultados para "' + searchTerm + '".' : 'No hay insumos registrados.') + '</td></tr>';
     if (chkTodos) chkTodos.checked = false;
     updateOrdenTotal();
     return;
   }
 
-  tbody.innerHTML = ordenCompraItems.map((item, idx) => {
+  tbody.innerHTML = itemsFiltrados.map((item) => {
     const sugerido = item.por_comprar;
     const sugeridoTxt = sugerido > 0 ? ('+' + sugerido) : String(sugerido);
     const sugeridoColor = sugerido > 0 ? 'var(--warning)' : (sugerido < 0 ? 'var(--success)' : 'var(--color-muted)');
     const ph = sugerido > 0 ? sugerido : '';
     return `<tr>
-      <td><input type="checkbox" class="chk-orden-item" data-idx="${idx}" ${sugerido > 0 ? 'checked' : ''}></td>
+      <td><input type="checkbox" class="chk-orden-item" data-id="${item.id}" ${sugerido > 0 ? 'checked' : ''}></td>
       <td><strong>${item.nombre}</strong></td>
       <td>${item.stock_actual} ${item.unidad_medida}</td>
       <td>${item.stock_fijo} ${item.unidad_medida}</td>
       <td style="color:${sugeridoColor}; font-weight:bold;">${sugeridoTxt} ${item.unidad_medida}</td>
-      <td><input type="number" class="orden-qty" data-idx="${idx}" value="" min="0" step="any" placeholder="${ph}" style="width:100px; background:rgba(0,0,0,0.25); border:1px solid var(--border-glass); border-radius:6px; padding:6px 8px; color:var(--color-text); font-family:var(--font-title);"></td>
+      <td><input type="number" class="orden-qty" data-id="${item.id}" value="" min="0" step="any" placeholder="${ph}" style="width:100px; background:rgba(0,0,0,0.25); border:1px solid var(--border-glass); border-radius:6px; padding:6px 8px; color:var(--color-text); font-family:var(--font-title);"></td>
       <td>$${item.costo_unitario.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
       <td class="orden-item-total" style="font-weight:bold; color:var(--success);">$0</td>
     </tr>`;
@@ -1578,7 +1583,7 @@ function updateOrdenTotal() {
     const chk = tr.querySelector('.chk-orden-item');
     const qty = tr.querySelector('.orden-qty');
     if (!chk || !chk.checked || !qty) return;
-    const item = ordenCompraItems[parseInt(chk.dataset.idx)];
+    const item = ordenCompraItems.find(o => String(o.id) === chk.dataset.id);
     if (!item) return;
     const cantidad = parseFloat(qty.value) || 0;
     const subtotal = cantidad * (parseFloat(item.costo_unitario) || 0);
@@ -1597,7 +1602,7 @@ function getOrdenSeleccion() {
     const chk = tr.querySelector('.chk-orden-item');
     const qty = tr.querySelector('.orden-qty');
     if (!chk || !chk.checked || !qty) return;
-    const item = ordenCompraItems[parseInt(chk.dataset.idx)];
+    const item = ordenCompraItems.find(o => String(o.id) === chk.dataset.id);
     if (!item) return;
     const cantidad = parseFloat(qty.value) || 0;
     if (cantidad <= 0) return;
