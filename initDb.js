@@ -33,6 +33,23 @@ export async function initializeDatabase() {
         CONSTRAINT fk_recetas_base FOREIGN KEY (receta_base_id) REFERENCES recetas_base(id) ON DELETE CASCADE,
         CONSTRAINT fk_recetas_base_insumo FOREIGN KEY (insumo_id) REFERENCES insumos(id) ON DELETE CASCADE
       )`);
+      await db.execute(`CREATE TABLE IF NOT EXISTS ordenes_compra (
+        id SERIAL PRIMARY KEY,
+        fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        metodo_pago VARCHAR(50) NOT NULL,
+        moneda VARCHAR(10) NOT NULL,
+        tasa_cambio NUMERIC(12, 4) DEFAULT 1.0000,
+        total_cop NUMERIC(12, 2) NOT NULL,
+        sesion_caja_id INTEGER REFERENCES sesiones_caja(id) ON DELETE SET NULL
+      )`);
+      await db.execute(`CREATE TABLE IF NOT EXISTS ordenes_compra_items (
+        id SERIAL PRIMARY KEY,
+        orden_id INT NOT NULL REFERENCES ordenes_compra(id) ON DELETE CASCADE,
+        insumo_id INT NOT NULL REFERENCES insumos(id) ON DELETE RESTRICT,
+        cantidad NUMERIC(12, 2) NOT NULL,
+        costo_unitario NUMERIC(12, 2) NOT NULL,
+        monto_cop NUMERIC(12, 2) NOT NULL
+      )`);
       // Migración completa de columnas (todas las tablas)
       await db.execute('ALTER TABLE clientes ADD COLUMN IF NOT EXISTS permite_saldo_favor BOOLEAN DEFAULT FALSE;');
       await db.execute('ALTER TABLE clientes DROP CONSTRAINT IF EXISTS clientes_saldo_deudor_check;');
@@ -416,6 +433,32 @@ async function createTables() {
       diferencia_caja REAL,
       estado TEXT NOT NULL DEFAULT 'Abierta',
       FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+    )
+  `);
+
+  // Órdenes de Compra (historial)
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS ordenes_compra (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      metodo_pago TEXT NOT NULL,
+      moneda TEXT NOT NULL,
+      tasa_cambio REAL DEFAULT 1.0,
+      total_cop REAL NOT NULL,
+      sesion_caja_id INTEGER,
+      FOREIGN KEY (sesion_caja_id) REFERENCES sesiones_caja(id) ON DELETE SET NULL
+    )
+  `);
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS ordenes_compra_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      orden_id INTEGER NOT NULL,
+      insumo_id INTEGER NOT NULL,
+      cantidad REAL NOT NULL,
+      costo_unitario REAL NOT NULL,
+      monto_cop REAL NOT NULL,
+      FOREIGN KEY (orden_id) REFERENCES ordenes_compra(id) ON DELETE CASCADE,
+      FOREIGN KEY (insumo_id) REFERENCES insumos(id) ON DELETE RESTRICT
     )
   `);
 

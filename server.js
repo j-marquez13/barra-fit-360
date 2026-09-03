@@ -6,7 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import { processSale, anularVenta } from './controllers/salesController.js';
 import { createClient, getClients, getClientDetails, processAbono, registrarDeuda, deleteAbono, updateClient } from './controllers/creditController.js';
-import { getInsumos, createInsumo, updateInsumo, restockInsumo, getMermas, createMerma, getProductos, createProducto, updateProducto, deleteProducto, deleteInsumo, getValorizacionInventario, getOrdenCompra, confirmarOrdenCompra, getProductoReceta, getRecetasBase, createRecetaBase, updateRecetaBase, deleteRecetaBase, toggleRecetaBaseBatido } from './controllers/inventoryController.js';
+import { getInsumos, createInsumo, updateInsumo, restockInsumo, getMermas, createMerma, getProductos, createProducto, updateProducto, deleteProducto, deleteInsumo, getValorizacionInventario, getOrdenCompra, confirmarOrdenCompra, listarOrdenesCompra, getOrdenCompraDetalle, getProductoReceta, getRecetasBase, createRecetaBase, updateRecetaBase, deleteRecetaBase, toggleRecetaBaseBatido } from './controllers/inventoryController.js';
 import { cierreDiario, cierreSemanal, cierreRango, historialVentas } from './controllers/reportsController.js';
 import { listarGastos, registrarGasto } from './controllers/expensesController.js';
 import { estadoCaja, abrirCaja, cerrarCaja, cierreDia, listarCierresAdmin } from './controllers/cashierController.js';
@@ -124,6 +124,8 @@ app.post('/api/mermas', createMerma);
 app.get('/api/inventario/valorizacion', getValorizacionInventario);
 app.get('/api/inventario/orden-compra', getOrdenCompra);
 app.post('/api/inventario/orden-compra/confirmar', requireAuth, confirmarOrdenCompra);
+app.get('/api/inventario/ordenes-compra', listarOrdenesCompra);
+app.get('/api/inventario/ordenes-compra/:id', getOrdenCompraDetalle);
 // ============================================
 // RUTAS DE VENTAS (POS)
 // ============================================

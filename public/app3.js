@@ -1520,6 +1520,7 @@ window.loadOrdenCompra = async function() {
     // Solo los insumos que faltan (por_comprar > 0); los excedentes no se compran.
     ordenCompraItems = data.items.filter(i => i.por_comprar > 0);
     renderOrdenCompraTable();
+    loadHistorialCompras();
   } catch (err) {
     console.error('Error cargando orden de compra:', err);
     tbody.innerHTML = '<tr><td colspan="7" class="loading-cell" style="color:var(--danger);">Error al generar la orden. Inténtalo de nuevo.</td></tr>';
@@ -1650,6 +1651,51 @@ window.confirmarOrdenCompra = async function() {
       lucide.createIcons();
     }
   });
+};
+
+window.loadHistorialCompras = async function() {
+  const tbody = document.getElementById('tbody-historial-compras');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="5" class="loading-cell">Cargando historial...</td></tr>';
+  try {
+    const res = await fetch('/api/inventario/ordenes-compra');
+    if (!res.ok) throw new Error('Error al cargar el historial');
+    const ordenes = await res.json();
+    if (ordenes.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="loading-cell">No hay órdenes de compra registradas.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = ordenes.map(o => {
+      const fecha = o.fecha ? new Date(o.fecha).toLocaleString() : '—';
+      return `<tr>
+        <td>${fecha}</td>
+        <td>${o.metodo_pago}</td>
+        <td>${o.moneda}</td>
+        <td class="font-outfit" style="color:var(--success);">$${(parseFloat(o.total_cop) || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+        <td style="text-align:right;"><button class="table-btn btn-edit" onclick="verDetalleOrdenCompra(${o.id})">Ver</button></td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="5" class="loading-cell" style="color:var(--danger);">Error al cargar el historial.</td></tr>';
+  }
+};
+
+window.verDetalleOrdenCompra = async function(id) {
+  try {
+    const res = await fetch('/api/inventario/ordenes-compra/' + id);
+    if (!res.ok) throw new Error('Error al obtener la orden');
+    const data = await res.json();
+    const o = data.orden;
+    const items = data.items || [];
+    const lista = items.map(it => `<div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span>${it.nombre} × ${it.cantidad} ${it.unidad_medida || ''}</span><strong>$${(parseFloat(it.monto_cop) || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</strong></div>`).join('');
+    openGenericModal('Detalle de Compra', `
+      <div class="text-muted" style="margin-bottom:10px;">${o.fecha ? new Date(o.fecha).toLocaleString() : ''} — ${o.metodo_pago} (${o.moneda})</div>
+      <div style="max-height:240px; overflow-y:auto;">${lista}</div>
+      <div style="display:flex; justify-content:space-between; border-top:1px solid var(--border-glass); padding-top:10px; margin-top:10px; font-size:1.1em; font-weight:800;"><span>Total</span><span style="color:var(--success);">$${(parseFloat(o.total_cop) || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>
+    `);
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
 };
 
 function renderInsumosTable(insumos) {

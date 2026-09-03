@@ -597,6 +597,30 @@
                 <i data-lucide="check"></i> Confirmar Compra
               </button>
             </div>
+            <div style="margin-top:20px;">
+              <div class="panel-header" style="margin-bottom:10px;">
+                <h4>Historial de Compras</h4>
+                <button class="action-btn secondary" onclick="loadHistorialCompras()">
+                  <i data-lucide="refresh-cw"></i> Actualizar
+                </button>
+              </div>
+              <div class="data-table-wrapper">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Método</th>
+                      <th>Moneda</th>
+                      <th>Total</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-historial-compras">
+                    <tr><td colspan="5" class="loading-cell">Cargando historial...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
 
           <!-- Sub-vista: Recetas Base -->

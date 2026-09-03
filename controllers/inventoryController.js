@@ -337,6 +337,7 @@ export async function confirmarOrdenCompra(req, res) {
   try {
     const tasa = parseFloat(tasa_cambio) || 1;
     const monedaPago = moneda || 'COP';
+    const isPg = !!(process.env.DATABASE_URL || process.env.PGHOST);
     let totalCop = 0;
     const procesados = [];
 
@@ -369,6 +370,21 @@ export async function confirmarOrdenCompra(req, res) {
 
         procesados.push({ insumo_id: insumoId, nombre, cantidad, costo_unitario: costo, monto_cop: montoCop });
       }
+
+      // Cabecera de la orden de compra (historial)
+      const ordenSql = isPg
+        ? 'INSERT INTO ordenes_compra (metodo_pago, moneda, tasa_cambio, total_cop, sesion_caja_id) VALUES ($1, $2, $3, $4, $5) RETURNING id'
+        : 'INSERT INTO ordenes_compra (metodo_pago, moneda, tasa_cambio, total_cop, sesion_caja_id) VALUES ($1, $2, $3, $4, $5)';
+      const ordenRes = await tx.execute(ordenSql, [metodo_pago, monedaPago, tasa, totalCop, sesion_caja_id]);
+      const ordenId = ordenRes[0]?.id;
+
+      // Items de la orden
+      for (const p of procesados) {
+        await tx.execute(
+          'INSERT INTO ordenes_compra_items (orden_id, insumo_id, cantidad, costo_unitario, monto_cop) VALUES ($1, $2, $3, $4, $5)',
+          [ordenId, p.insumo_id, p.cantidad, p.costo_unitario, p.monto_cop]
+        );
+      }
     });
 
     return res.json({
@@ -379,6 +395,42 @@ export async function confirmarOrdenCompra(req, res) {
   } catch (error) {
     console.error('Error al confirmar orden de compra:', error);
     return res.status(500).json({ error: 'Error al confirmar la orden de compra.', detalle: error.message });
+  }
+}
+
+// GET /api/inventario/ordenes-compra — Historial de órdenes de compra
+export async function listarOrdenesCompra(req, res) {
+  try {
+    const ordenes = await db.query(`
+      SELECT id, fecha, metodo_pago, moneda, tasa_cambio, total_cop
+      FROM ordenes_compra
+      ORDER BY id DESC
+      LIMIT 100
+    `);
+    return res.json(ordenes);
+  } catch (error) {
+    console.error('Error al listar órdenes de compra:', error);
+    return res.status(500).json({ error: 'Error al listar las órdenes de compra.' });
+  }
+}
+
+// GET /api/inventario/ordenes-compra/:id — Detalle de una orden de compra
+export async function getOrdenCompraDetalle(req, res) {
+  const { id } = req.params;
+  try {
+    const orden = await db.query('SELECT * FROM ordenes_compra WHERE id = $1', [id]);
+    if (orden.length === 0) return res.status(404).json({ error: 'Orden no encontrada.' });
+    const items = await db.query(`
+      SELECT oci.cantidad, oci.costo_unitario, oci.monto_cop, i.nombre, i.unidad_medida
+      FROM ordenes_compra_items oci
+      JOIN insumos i ON oci.insumo_id = i.id
+      WHERE oci.orden_id = $1
+      ORDER BY oci.id ASC
+    `, [id]);
+    return res.json({ orden: orden[0], items });
+  } catch (error) {
+    console.error('Error al obtener detalle de orden:', error);
+    return res.status(500).json({ error: 'Error al obtener el detalle de la orden.' });
   }
 }
 

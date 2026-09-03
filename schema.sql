@@ -221,6 +221,26 @@ CREATE TABLE sesiones_caja (
 
 CREATE INDEX idx_sesiones_caja_apertura ON sesiones_caja(fecha_apertura);
 
+-- 13.1 Órdenes de Compra (Historial)
+CREATE TABLE ordenes_compra (
+    id SERIAL PRIMARY KEY,
+    fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    metodo_pago VARCHAR(50) NOT NULL,
+    moneda VARCHAR(10) NOT NULL,
+    tasa_cambio NUMERIC(12, 4) DEFAULT 1.0000,
+    total_cop NUMERIC(12, 2) NOT NULL,
+    sesion_caja_id INTEGER REFERENCES sesiones_caja(id) ON DELETE SET NULL
+);
+
+CREATE TABLE ordenes_compra_items (
+    id SERIAL PRIMARY KEY,
+    orden_id INT NOT NULL REFERENCES ordenes_compra(id) ON DELETE CASCADE,
+    insumo_id INT NOT NULL REFERENCES insumos(id) ON DELETE RESTRICT,
+    cantidad NUMERIC(12, 2) NOT NULL,
+    costo_unitario NUMERIC(12, 2) NOT NULL,
+    monto_cop NUMERIC(12, 2) NOT NULL
+);
+
 -- 14. Tesorería - Cuentas Bancarias
 CREATE TABLE cuentas_bancarias (
     id SERIAL PRIMARY KEY,
