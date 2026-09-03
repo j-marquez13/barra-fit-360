@@ -186,6 +186,9 @@ app.post('/api/usuarios', requireAdmin, async (req, res) => {
     const { nombre, turno, password, permisos } = req.body;
     if (!nombre || !turno) return res.status(400).json({ error: 'Nombre y turno son requeridos' });
     const turnoValido = (turno === 'Tarde') ? 'Tarde' : (turno === 'Completo' ? 'Completo' : 'Mañana');
+    if (password && password.trim() && password.trim().length < 6) {
+      return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+    }
     const rawPass = password && password.trim() ? password.trim() : '1234';
     const passwordHash = await bcrypt.hash(rawPass, 10);
     const permisosJson = permisos ? JSON.stringify(permisos) : '["pos","caja"]';
@@ -234,8 +237,8 @@ app.put('/api/usuarios/:id/password', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { password_actual, password_nueva } = req.body;
-    if (!password_nueva || password_nueva.length < 4) {
-      return res.status(400).json({ error: 'La contraseña nueva debe tener al menos 4 caracteres' });
+    if (!password_nueva || password_nueva.length < 6) {
+      return res.status(400).json({ error: 'La contraseña nueva debe tener al menos 6 caracteres' });
     }
     // Verificar contraseña actual
     const rows = await db.query('SELECT password_hash FROM usuarios WHERE id = $1', [id]);
@@ -259,19 +262,39 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Usuario y contraseña son requeridos' });
     }
     const rows = await db.query(
-      'SELECT id, nombre, rol, turno, permisos, password_hash FROM usuarios WHERE id = $1',
+      'SELECT id, nombre, rol, turno, permisos, password_hash, debe_cambiar_password, intentos_fallidos, bloqueado_hasta FROM usuarios WHERE id = $1',
       [usuario_id]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
     const user = rows[0];
+
+    // Bloqueo temporal por demasiados intentos fallidos
+    const bloqueadoHasta = user.bloqueado_hasta ? Number(user.bloqueado_hasta) : 0;
+    if (bloqueadoHasta > Date.now()) {
+      const minutos = Math.ceil((bloqueadoHasta - Date.now()) / 60000);
+      return res.status(423).json({ error: `Cuenta bloqueada temporalmente. Intenta de nuevo en ${minutos} minuto(s).` });
+    }
+
     if (!user.password_hash) {
       return res.status(401).json({ error: 'Este usuario no tiene contraseña configurada' });
     }
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) {
+      const intentos = (parseInt(user.intentos_fallidos) || 0) + 1;
+      if (intentos >= 5) {
+        const bloqueo = Date.now() + 15 * 60 * 1000;
+        await db.execute('UPDATE usuarios SET intentos_fallidos = 0, bloqueado_hasta = $1 WHERE id = $2', [bloqueo, user.id]);
+        console.log(`🔒 Usuario ${user.id} (${user.nombre}) bloqueado por 15 minutos por intentos fallidos.`);
+        return res.status(423).json({ error: 'Demasiados intentos fallidos. Cuenta bloqueada por 15 minutos.' });
+      }
+      await db.execute('UPDATE usuarios SET intentos_fallidos = $1 WHERE id = $2', [intentos, user.id]);
       return res.status(401).json({ error: 'Contraseña incorrecta' });
     }
-    
+
+    // Login exitoso → resetear contador y bloqueo
+    await db.execute('UPDATE usuarios SET intentos_fallidos = 0, bloqueado_hasta = NULL WHERE id = $1', [user.id]);
+    console.log(`✅ Login exitoso: ${user.nombre} (id ${user.id})`);
+
     // Parsear permisos si es string
     let permisosArray = [];
     try {
@@ -280,15 +303,35 @@ app.post('/api/auth/login', async (req, res) => {
       permisosArray = ['pos', 'caja'];
     }
 
+    const debeCambiar = user.debe_cambiar_password === 1 || user.debe_cambiar_password === true || user.debe_cambiar_password === '1' || user.debe_cambiar_password === 't';
+
     // Autenticación exitosa — devolver datos sin el hash
     res.json({
       ok: true,
       token: signToken(user),
+      debe_cambiar_password: !!debeCambiar,
       usuario: { id: user.id, nombre: user.nombre, rol: user.rol, turno: user.turno, permisos: permisosArray }
     });
   } catch (err) {
     console.error('Error en login:', err);
     res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// CAMBIAR CONTRASEÑA (obligatorio en primer login) — requiere token válido
+app.post('/api/auth/cambiar-password', requireAuth, async (req, res) => {
+  try {
+    const { password_nueva } = req.body;
+    if (!password_nueva || password_nueva.length < 6) {
+      return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+    }
+    const userId = req.usuario.usuario_id;
+    const nuevoHash = await bcrypt.hash(password_nueva, 10);
+    await db.execute('UPDATE usuarios SET password_hash = $1, debe_cambiar_password = 0 WHERE id = $2', [nuevoHash, userId]);
+    res.json({ ok: true, mensaje: 'Contraseña actualizada correctamente' });
+  } catch (err) {
+    console.error('Error al cambiar contraseña:', err);
+    res.status(500).json({ error: 'Error al cambiar contraseña' });
   }
 });
 

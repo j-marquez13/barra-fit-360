@@ -4533,6 +4533,17 @@ async function handleQuickLogin(sesion) {
       sesion_id: sesion.id
     }));
     
+    // Forzar cambio de contraseña en el primer login
+    if (dataLogin.debe_cambiar_password) {
+      const cambiada = await pedirCambioPassword();
+      if (!cambiada) {
+        btnQL.disabled = false;
+        btnQL.innerHTML = '<i data-lucide="log-in"></i> Entrar';
+        lucide.createIcons();
+        return;
+      }
+    }
+
     // Unirse a la sesión activa con los permisos del usuario que hizo login
     const sesionConPermisos = { ...sesion, permisos: permisos };
     hideTurnoScreen(sesionConPermisos, dataLogin.usuario.nombre);
@@ -4641,6 +4652,103 @@ function setupTurnoForm() {
 }
 
 /**
+ * Muestra el modal de cambio de contraseña obligatorio (primer login).
+ * Retorna true si cambió la contraseña, false si el usuario canceló/salió.
+ */
+function pedirCambioPassword() {
+  return new Promise((resolve) => {
+    const overlay = document.getElementById('cambiar-password-overlay');
+    const pass1 = document.getElementById('cp-password');
+    const pass2 = document.getElementById('cp-password2');
+    const errorEl = document.getElementById('cp-error');
+    const btnGuardar = document.getElementById('cp-guardar');
+    const btnSalir = document.getElementById('cp-salir');
+
+    pass1.value = '';
+    pass2.value = '';
+    errorEl.classList.remove('visible');
+    pass1.classList.remove('input-error');
+    pass2.classList.remove('input-error');
+    btnGuardar.disabled = false;
+    btnGuardar.innerHTML = '<i data-lucide="check"></i> Guardar y continuar';
+    overlay.classList.add('open');
+    lucide.createIcons();
+
+    // Toggle de ojo para los dos campos
+    overlay.querySelectorAll('.pass-toggle-btn').forEach(btn => {
+      btn.onclick = () => {
+        const input = document.getElementById(btn.dataset.target);
+        if (!input) return;
+        const isPassword = input.type === 'password';
+        input.type = isPassword ? 'text' : 'password';
+        btn.innerHTML = isPassword ? '<i data-lucide="eye-off"></i>' : '<i data-lucide="eye"></i>';
+        lucide.createIcons();
+        input.focus();
+      };
+    });
+
+    const cerrar = () => overlay.classList.remove('open');
+
+    btnSalir.onclick = () => {
+      cerrar();
+      sessionStorage.removeItem('bf360_auth');
+      showTurnoScreen();
+      resolve(false);
+    };
+
+    btnGuardar.onclick = async () => {
+      const p1 = pass1.value;
+      const p2 = pass2.value;
+      errorEl.classList.remove('visible');
+      pass1.classList.remove('input-error');
+      pass2.classList.remove('input-error');
+
+      if (p1.length < 6) {
+        errorEl.textContent = 'La contraseña debe tener al menos 6 caracteres.';
+        errorEl.classList.add('visible');
+        pass1.classList.add('input-error');
+        pass1.focus();
+        return;
+      }
+      if (p1 !== p2) {
+        errorEl.textContent = 'Las contraseñas no coinciden.';
+        errorEl.classList.add('visible');
+        pass2.classList.add('input-error');
+        pass2.focus();
+        return;
+      }
+
+      const auth = JSON.parse(sessionStorage.getItem('bf360_auth') || '{}');
+      btnGuardar.disabled = true;
+      btnGuardar.innerHTML = '<i data-lucide="loader"></i> Guardando...';
+      lucide.createIcons();
+
+      try {
+        const res = await fetch('/api/auth/cambiar-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-auth-token': auth.token || '' },
+          body: JSON.stringify({ password_nueva: p1 })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Error al cambiar la contraseña');
+        cerrar();
+        showToast('Contraseña actualizada correctamente', 'success');
+        resolve(true);
+      } catch (e) {
+        errorEl.textContent = e.message;
+        errorEl.classList.add('visible');
+        btnGuardar.disabled = false;
+        btnGuardar.innerHTML = '<i data-lucide="check"></i> Guardar y continuar';
+        lucide.createIcons();
+      }
+    };
+
+    pass1.addEventListener('keydown', (e) => { if (e.key === 'Enter') btnGuardar.click(); });
+    pass2.addEventListener('keydown', (e) => { if (e.key === 'Enter') btnGuardar.click(); });
+  });
+}
+
+/**
  * Procesa el inicio de turno con validación de contraseña
  */
 async function iniciarTurno() {
@@ -4711,6 +4819,17 @@ async function iniciarTurno() {
       token: dataLogin.token || null,
       sesion_id: null
     }));
+
+    // Forzar cambio de contraseña en el primer login
+    if (dataLogin.debe_cambiar_password) {
+      const cambiada = await pedirCambioPassword();
+      if (!cambiada) {
+        btnIniciar.disabled = false;
+        btnIniciar.innerHTML = '<i data-lucide="play-circle"></i> Iniciar Turno';
+        lucide.createIcons();
+        return;
+      }
+    }
 
     const fondo = parseFloat(fondoInput.value) || 0;
     const fondoUsdInput = document.getElementById('turno-fondo-usd');

@@ -143,6 +143,43 @@
     </div>
   </div>
 
+  <!-- MODAL: CAMBIAR CONTRASEÑA (primer login) -->
+  <div class="modal-overlay" id="cambiar-password-overlay" style="z-index: 10000;">
+    <div class="modal-box modal-sm">
+      <div class="modal-header">
+        <h2><i data-lucide="key-round"></i> Nueva Contraseña</h2>
+      </div>
+      <div class="modal-body-simple">
+        <p class="text-muted" style="font-size: 0.85rem; line-height: 1.4;">
+          Por seguridad, debes crear una nueva contraseña antes de continuar.
+        </p>
+        <div class="form-group">
+          <label for="cp-password">Nueva contraseña</label>
+          <div class="pass-input-wrap">
+            <input type="password" id="cp-password" placeholder="Mínimo 6 caracteres" maxlength="40" autocomplete="new-password">
+            <button type="button" class="pass-toggle-btn" data-target="cp-password" title="Ver contraseña">
+              <i data-lucide="eye"></i>
+            </button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="cp-password2">Confirmar contraseña</label>
+          <div class="pass-input-wrap">
+            <input type="password" id="cp-password2" placeholder="Repite la contraseña" maxlength="40" autocomplete="new-password">
+            <button type="button" class="pass-toggle-btn" data-target="cp-password2" title="Ver contraseña">
+              <i data-lucide="eye"></i>
+            </button>
+          </div>
+        </div>
+        <div class="turno-error" id="cp-error"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="action-btn secondary" id="cp-salir">Salir</button>
+        <button class="action-btn" id="cp-guardar"><i data-lucide="check"></i> Guardar y continuar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Contenedor Principal de la App -->
   <div class="app-container">
     

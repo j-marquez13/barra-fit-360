@@ -53,6 +53,9 @@ export async function initializeDatabase() {
       await db.execute('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS password_hash TEXT;');
       await db.execute("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS permisos TEXT NOT NULL DEFAULT '[\"pos\",\"caja\"]';");
       await db.execute("UPDATE usuarios SET permisos = '[\"all\"]' WHERE rol = 'Administrador';");
+      await db.execute('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS debe_cambiar_password INTEGER DEFAULT 1;');
+      await db.execute('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS intentos_fallidos INTEGER DEFAULT 0;');
+      await db.execute('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS bloqueado_hasta BIGINT;');
       await db.execute('ALTER TABLE insumos ADD COLUMN IF NOT EXISTS stock_fijo DOUBLE PRECISION NOT NULL DEFAULT 0.0;');
       await db.execute('ALTER TABLE insumos ADD COLUMN IF NOT EXISTS es_base_liquida BOOLEAN DEFAULT FALSE;');
       await db.execute('ALTER TABLE insumos ADD COLUMN IF NOT EXISTS cantidad_sola DOUBLE PRECISION NOT NULL DEFAULT 0.0;');
@@ -140,6 +143,9 @@ async function createTables() {
       nombre TEXT NOT NULL,
       rol TEXT NOT NULL DEFAULT 'Cajero',
       turno TEXT NOT NULL DEFAULT 'Mañana',
+      debe_cambiar_password INTEGER DEFAULT 1,
+      intentos_fallidos INTEGER DEFAULT 0,
+      bloqueado_hasta BIGINT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -506,6 +512,11 @@ async function runMigrations() {
     await db.execute("ALTER TABLE sesiones_caja ADD COLUMN declarado_cop REAL DEFAULT 0.0");
     console.log('   🔄 Migración: columna declarado_cop agregada a sesiones_caja.');
   } catch(e) {}
+
+  // Seguridad de login: cambio de contraseña obligatorio + bloqueo por intentos fallidos
+  try { await db.execute("ALTER TABLE usuarios ADD COLUMN debe_cambiar_password INTEGER DEFAULT 1"); } catch(e) {}
+  try { await db.execute("ALTER TABLE usuarios ADD COLUMN intentos_fallidos INTEGER DEFAULT 0"); } catch(e) {}
+  try { await db.execute("ALTER TABLE usuarios ADD COLUMN bloqueado_hasta BIGINT"); } catch(e) {}
 }
 
 async function ensureDefaultUsers() {

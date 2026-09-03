@@ -22,6 +22,9 @@ async function run() {
         turno TEXT NOT NULL DEFAULT 'Mañana',
         password_hash TEXT,
         permisos TEXT NOT NULL DEFAULT '["pos","caja"]',
+        debe_cambiar_password INTEGER DEFAULT 1,
+        intentos_fallidos INTEGER DEFAULT 0,
+        bloqueado_hasta BIGINT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
       
