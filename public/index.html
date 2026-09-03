@@ -3,7 +3,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Barra Fit 360 — Sistema de Control & Punto de Venta</title>
   <meta name="description" content="Sistema integral de gestión para Barra Fit 360: Punto de Venta multimoneda, inventario automático, cuentas por cobrar y reportes de cierre.">
   <!-- Google Fonts: Inter para texto general, Outfit para títulos y números -->
@@ -55,12 +55,10 @@
         </label>
       </div>
 
-      <!-- Selección de cajero -->
+      <!-- Selección de usuario -->
       <div class="turno-field">
-        <label>Cajero</label>
-        <div class="usuario-grid" id="turno-usuarios-grid">
-          <div class="loading-cell">Cargando usuarios...</div>
-        </div>
+        <label for="turno-usuario-input">Usuario</label>
+        <input type="text" id="turno-usuario-input" placeholder="Ingresa tu nombre de usuario" autocomplete="username">
       </div>
 
       <!-- Contraseña para cajero EXISTENTE -->
@@ -113,12 +111,10 @@
       <h2><i data-lucide="log-in"></i> Identificarse para continuar</h2>
       <p class="ql-subtitle">Hay un turno abierto. Ingresa tus credenciales para unirte.</p>
 
-      <!-- Selector de cajero -->
+      <!-- Selector de usuario -->
       <div class="turno-field">
-        <label>Cajero</label>
-        <div class="usuario-grid" id="ql-usuarios-grid">
-          <div class="loading-cell">Cargando usuarios...</div>
-        </div>
+        <label for="ql-usuario-input">Usuario</label>
+        <input type="text" id="ql-usuario-input" placeholder="Ingresa tu nombre de usuario" autocomplete="username">
       </div>
 
       <!-- Contraseña -->

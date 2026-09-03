@@ -4469,14 +4469,10 @@ function setupQuickLoginForm(sesion) {
     if (e.key === 'Enter') handleQuickLogin(sesion);
   });
 
-  // Selección de cajero por tarjeta
-  const qlGrid = document.getElementById('ql-usuarios-grid');
-  qlGrid?.addEventListener('click', (e) => {
-    const card = e.target.closest('.usuario-card');
-    if (!card) return;
-    qlGrid.querySelectorAll('.usuario-card').forEach(c => c.classList.remove('selected'));
-    card.classList.add('selected');
-    if (qlPass) { qlPass.value = ''; qlPass.classList.remove('input-error'); }
+  // Enter en el campo de usuario pasa al de contraseña
+  const qlUser = document.getElementById('ql-usuario-input');
+  qlUser?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { qlPass?.focus(); }
   });
   
   // Reutilizar los toggle de ojo existentes
@@ -4511,10 +4507,17 @@ async function handleQuickLogin(sesion) {
   lucide.createIcons();
   
   try {
-    const cardQL = document.querySelector('#ql-usuarios-grid .usuario-card.selected');
-    const usuarioId = cardQL ? parseInt(cardQL.dataset.id) : (TURNO_STATE.usuarios[0]?.id);
+    const qlUser = document.getElementById('ql-usuario-input');
+    const nombreUsuario = (qlUser?.value || '').trim();
     const password = qlPass?.value || '';
     
+    if (!nombreUsuario) {
+      if (qlUser) {
+        qlUser.classList.add('input-error');
+        qlUser.focus();
+      }
+      throw new Error('Por favor ingresa tu usuario.');
+    }
     if (!password) {
       if (qlPass) {
         qlPass.classList.add('input-error');
@@ -4530,7 +4533,7 @@ async function handleQuickLogin(sesion) {
     const resLogin = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ usuario_id: usuarioId, password })
+      body: JSON.stringify({ usuario: nombreUsuario, password })
     });
     const dataLogin = await resLogin.json();
     
@@ -4549,7 +4552,7 @@ async function handleQuickLogin(sesion) {
     // Guardar autenticación del dispositivo
     const permisos = dataLogin.usuario.permisos || ['pos', 'caja'];
     sessionStorage.setItem('bf360_auth', JSON.stringify({
-      usuario_id: usuarioId,
+      usuario_id: dataLogin.usuario.id,
       nombre: dataLogin.usuario.nombre,
       permisos: permisos,
       token: dataLogin.token || null,
@@ -4637,20 +4640,13 @@ function syncTurnoRadioFromUser(turno) {
  * Configura todos los listeners del formulario de turno (con contraseña)
  */
 function setupTurnoForm() {
-  const grid = document.getElementById('turno-usuarios-grid');
-  const passField = document.getElementById('turno-pass-field');
   const passInput = document.getElementById('turno-password');
   const btnIniciar = document.getElementById('btn-iniciar-turno');
 
-  // Selección de cajero por tarjeta
-  grid?.addEventListener('click', (e) => {
-    const card = e.target.closest('.usuario-card');
-    if (!card) return;
-    grid.querySelectorAll('.usuario-card').forEach(c => c.classList.remove('selected'));
-    card.classList.add('selected');
-    if (passField) passField.style.display = 'block';
-    if (passInput) { passInput.value = ''; passInput.classList.remove('input-error'); }
-    syncTurnoRadioFromUser(card.dataset.turno);
+  // Enter en el campo de usuario pasa al de contraseña
+  const usuarioInput = document.getElementById('turno-usuario-input');
+  usuarioInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { passInput?.focus(); }
   });
 
   // Botón iniciar turno
@@ -4785,25 +4781,26 @@ async function iniciarTurno() {
   const errorEl = document.getElementById('turno-error');
   const fondoInput = document.getElementById('turno-fondo');
   const passInput = document.getElementById('turno-password');
-  const turnoSeleccionado = document.querySelector('input[name="turno-sel"]:checked')?.value || 'Mañana';
+  const usuarioInput = document.getElementById('turno-usuario-input');
 
   errorEl.classList.remove('visible');
   if (passInput) passInput.classList.remove('input-error');
+  if (usuarioInput) usuarioInput.classList.remove('input-error');
   btnIniciar.disabled = true;
   btnIniciar.innerHTML = '<i data-lucide="loader"></i> Verificando...';
   lucide.createIcons();
 
   try {
-    let usuarioId;
-    let nombreCajero;
-
-    // ── CAJERO EXISTENTE — validar contraseña ─────────
-    const cardSeleccionada = document.querySelector('#turno-usuarios-grid .usuario-card.selected');
-    usuarioId = cardSeleccionada ? parseInt(cardSeleccionada.dataset.id) : (TURNO_STATE.usuarios[0]?.id);
-    const user = TURNO_STATE.usuarios.find(u => u.id === usuarioId);
-    nombreCajero = user?.nombre || 'Cajero';
-
+    const nombreUsuario = usuarioInput?.value?.trim() || '';
     const password = passInput?.value || '';
+
+    if (!nombreUsuario) {
+      if (usuarioInput) {
+        usuarioInput.classList.add('input-error');
+        usuarioInput.focus();
+      }
+      throw new Error('Por favor ingresa tu usuario.');
+    }
     if (!password) {
       // Hacer shake en el campo de contraseña
       if (passInput) {
@@ -4816,11 +4813,11 @@ async function iniciarTurno() {
       throw new Error('Por favor ingresa tu contraseña.');
     }
 
-    // Llamar al endpoint de login
+    // Llamar al endpoint de login (por nombre de usuario)
     const resLogin = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ usuario_id: usuarioId, password })
+      body: JSON.stringify({ usuario: nombreUsuario, password })
     });
     const dataLogin = await resLogin.json();
 
@@ -4838,6 +4835,11 @@ async function iniciarTurno() {
     }
 
     // ── ABRIR SESIÓN DE CAJA ──────────────────────────
+    const usuarioId = dataLogin.usuario.id;
+    const nombreCajero = dataLogin.usuario.nombre;
+    const turnoUsuario = dataLogin.usuario.turno || 'Mañana';
+    syncTurnoRadioFromUser(turnoUsuario);
+
     // Guardar el token de autenticación ANTES de llamar a /api/caja/abrir
     // porque ese endpoint ahora está protegido.
     const permisosLogin = dataLogin.usuario.permisos || ['pos', 'caja'];
@@ -4871,7 +4873,7 @@ async function iniciarTurno() {
         usuario_id: usuarioId,
         fondo_inicial_cop: fondo,
         fondo_inicial_usd: fondoUsd,
-        turno: turnoSeleccionado,
+        turno: turnoUsuario,
         nombre_cajero: nombreCajero
       })
     });

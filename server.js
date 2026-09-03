@@ -257,13 +257,13 @@ app.put('/api/usuarios/:id/password', requireAdmin, async (req, res) => {
 // LOGIN — Validar usuario + contraseña (no abre caja, solo autentica)
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { usuario_id, password } = req.body;
-    if (!usuario_id || !password) {
+    const { usuario, password } = req.body;
+    if (!usuario || !password) {
       return res.status(400).json({ error: 'Usuario y contraseña son requeridos' });
     }
     const rows = await db.query(
-      'SELECT id, nombre, rol, turno, permisos, password_hash, debe_cambiar_password, intentos_fallidos, bloqueado_hasta FROM usuarios WHERE id = $1',
-      [usuario_id]
+      'SELECT id, nombre, rol, turno, permisos, password_hash, debe_cambiar_password, intentos_fallidos, bloqueado_hasta FROM usuarios WHERE LOWER(TRIM(nombre)) = LOWER(TRIM($1))',
+      [usuario]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
     const user = rows[0];
