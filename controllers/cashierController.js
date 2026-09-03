@@ -169,6 +169,7 @@ export async function listarCierresAdmin(req, res) {
         COALESCE(SUM(costo_produccion), 0) as costo_produccion,
         COALESCE(SUM(utilidad_neta), 0) as utilidad_neta,
         COALESCE(SUM(declarado_cop), 0) as declarado_cop,
+        COALESCE(SUM(declarado_pago_movil), 0) as declarado_pago_movil,
         COALESCE(SUM(diferencia_caja), 0) as diferencia_caja
       FROM sesiones_caja
       ${where}
@@ -199,6 +200,7 @@ export async function listarCierresAdmin(req, res) {
       reposicion: reposicionPorFecha[r.fecha] || 0,
       utilidad_neta: parseFloat(r.utilidad_neta || 0),
       declarado_cop: parseFloat(r.declarado_cop || 0),
+      declarado_pago_movil: parseFloat(r.declarado_pago_movil || 0),
       diferencia_caja: parseFloat(r.diferencia_caja || 0)
     }));
 
@@ -221,6 +223,7 @@ export async function cierreDia(req, res) {
         COALESCE(SUM(costo_produccion), 0) as costo_produccion,
         COALESCE(SUM(utilidad_neta), 0) as utilidad_neta,
         COALESCE(SUM(declarado_cop), 0) as declarado_cop,
+        COALESCE(SUM(declarado_pago_movil), 0) as declarado_pago_movil,
         COALESCE(SUM(diferencia_caja), 0) as diferencia_caja
       FROM sesiones_caja
       WHERE ${dateExpr('fecha_apertura')} = $1 AND estado = 'Cerrada'
@@ -236,6 +239,7 @@ export async function cierreDia(req, res) {
         costo_produccion: parseFloat(r.costo_produccion || 0),
         utilidad_neta: parseFloat(r.utilidad_neta || 0),
         declarado_cop: parseFloat(r.declarado_cop || 0),
+        declarado_pago_movil: parseFloat(r.declarado_pago_movil || 0),
         diferencia_caja: parseFloat(r.diferencia_caja || 0)
       }
     });
@@ -250,7 +254,7 @@ export async function cerrarCaja(req, res) {
   try {
     const { 
       monto_declarado_cop,
-      declarado_efectivo_bs,
+      declarado_pago_movil,
       declarado_zelle,
       declarado_binance,
       declarado_efectivo_pesos,
@@ -366,7 +370,7 @@ export async function cerrarCaja(req, res) {
     const diferencia = declarado - saldoTeorico;
 
     // Obtener montos por separado
-    const decBs = parseFloat(declarado_efectivo_bs) || 0;
+    const decPagoMovil = parseFloat(declarado_pago_movil) || 0;
     const decZelle = parseFloat(declarado_zelle) || 0;
     const decBinance = parseFloat(declarado_binance) || 0;
     const decPesos = parseFloat(declarado_efectivo_pesos) || 0;
@@ -375,10 +379,10 @@ export async function cerrarCaja(req, res) {
     // Cerrar la sesión
     const now = localNow();
     const sqlUpdate = isPg
-      ? `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_efectivo_bs = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9, costo_produccion = $10, utilidad_neta = $11, declarado_cop = $12 WHERE id = $13 RETURNING *`
-      : `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_efectivo_bs = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9, costo_produccion = $10, utilidad_neta = $11, declarado_cop = $12 WHERE id = $13`;
+      ? `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_pago_movil = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9, costo_produccion = $10, utilidad_neta = $11, declarado_cop = $12 WHERE id = $13 RETURNING *`
+      : `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_pago_movil = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9, costo_produccion = $10, utilidad_neta = $11, declarado_cop = $12 WHERE id = $13`;
       
-    const result = await db.execute(sqlUpdate, [now, totalIngresosCop, totalGastos, diferencia, decBs, decZelle, decBinance, decPesos, decBancolombia, costoProduccion, utilidadNeta, declarado, currentSession.id]);
+    const result = await db.execute(sqlUpdate, [now, totalIngresosCop, totalGastos, diferencia, decPagoMovil, decZelle, decBinance, decPesos, decBancolombia, costoProduccion, utilidadNeta, declarado, currentSession.id]);
     
     let sessionRes = result;
     if (!isPg) {
@@ -401,6 +405,7 @@ export async function cerrarCaja(req, res) {
         utilidad_neta: utilidadNeta,
         saldo_teorico: saldoTeorico,
         monto_declarado: declarado,
+        declarado_pago_movil: decPagoMovil,
         diferencia: diferencia
       },
       sesion: sessionRes[0]

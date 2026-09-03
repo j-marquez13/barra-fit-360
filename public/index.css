@@ -476,7 +476,7 @@ input, button, textarea, select {
   border-radius: 14px;
   padding: 1px;
   background: linear-gradient(135deg, transparent, transparent);
-  sabes que quiero como que el cierre sume los pagomoviles que entrar in: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
@@ -2737,25 +2737,76 @@ select.receta-insumo option {
   text-shadow: 0 0 10px rgba(127, 0, 255, 0.5);
 }
 
-.cierre-inputs-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+.cierre-methods-grid {
+  display: flex;
+  flex-direction: column;
   gap: 10px;
 }
 
-.cierre-inputs-grid .form-group {
-  margin-bottom: 0;
+.cierre-method-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-glass);
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
 }
 
-.cierre-inputs-grid .form-group label {
-  font-size: 0.75rem;
-  margin-bottom: 4px;
+.cierre-method-card:focus-within {
+  border-color: var(--cyan-neon);
+  background: rgba(56, 189, 248, 0.04);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.08);
 }
 
-.cierre-inputs-grid .form-group input {
+.cierre-method-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.cierre-method-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.cierre-method-label i {
+  width: 16px;
+  height: 16px;
+  color: var(--cyan-neon);
+  flex-shrink: 0;
+}
+
+.cierre-method-expected {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  white-space: nowrap;
+  font-family: var(--font-title);
+}
+
+.cierre-method-card input.cierre-input {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-glass);
+  border-radius: 8px;
+  padding: 9px 11px;
+  outline: none;
   font-size: 0.95rem;
   font-family: var(--font-title);
-  padding: 8px 10px;
+  color: var(--color-text);
+  transition: all 0.2s;
+}
+
+.cierre-method-card input.cierre-input:focus {
+  border-color: var(--cyan-neon);
+  box-shadow: 0 0 8px var(--cyan-glow);
 }
 
 .cierre-bottom-panel {

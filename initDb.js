@@ -49,6 +49,7 @@ export async function initializeDatabase() {
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_binance DOUBLE PRECISION DEFAULT 0.0;');
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_efectivo_pesos DOUBLE PRECISION DEFAULT 0.0;');
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_bancolombia DOUBLE PRECISION DEFAULT 0.0;');
+      await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_pago_movil DOUBLE PRECISION DEFAULT 0.0;');
       await db.execute('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS password_hash TEXT;');
       await db.execute("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS permisos TEXT NOT NULL DEFAULT '[\"pos\",\"caja\"]';");
       await db.execute("UPDATE usuarios SET permisos = '[\"all\"]' WHERE rol = 'Administrador';");
@@ -477,6 +478,11 @@ async function runMigrations() {
   } catch(e) {}
   try { 
     await db.execute("ALTER TABLE sesiones_caja ADD COLUMN declarado_bancolombia REAL DEFAULT 0.0"); 
+  } catch(e) {}
+
+  // Pago Móvil declarado en el cierre de caja
+  try { 
+    await db.execute("ALTER TABLE sesiones_caja ADD COLUMN declarado_pago_movil REAL DEFAULT 0.0"); 
   } catch(e) {}
 
   // Migraciones para Batido Combinado

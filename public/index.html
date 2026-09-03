@@ -1459,30 +1459,48 @@
             <h3><i data-lucide="wallet"></i> Efectivo Contado en Caja</h3>
             <p class="text-muted" style="margin-bottom: 15px; font-size: 0.85rem;">Ingresa los montos que tienes físicamente.</p>
             
-            <div class="cierre-inputs-grid">
-              <div class="form-group">
-                <label>Pago Móvil / Bs (VES)</label>
-                <input type="number" id="cc-dec-bs" value="0" min="0" step="any">
+            <div class="cierre-methods-grid">
+              <div class="cierre-method-card">
+                <div class="cierre-method-head">
+                  <span class="cierre-method-label"><i data-lucide="smartphone"></i> Pago Móvil (VES)</span>
+                  <span class="cierre-method-expected" id="cc-esp-pago-movil">Esperado: Bs 0</span>
+                </div>
+                <input type="number" class="cierre-input" id="cc-dec-pago-movil" value="0" min="0" step="any" placeholder="0.00">
               </div>
-              <div class="form-group">
-                <label>Zelle (USD)</label>
-                <input type="number" id="cc-dec-zelle" value="0" min="0" step="any">
+              <div class="cierre-method-card">
+                <div class="cierre-method-head">
+                  <span class="cierre-method-label"><i data-lucide="landmark"></i> Zelle (USD)</span>
+                  <span class="cierre-method-expected" id="cc-esp-zelle">Esperado: $0</span>
+                </div>
+                <input type="number" class="cierre-input" id="cc-dec-zelle" value="0" min="0" step="any" placeholder="0.00">
               </div>
-              <div class="form-group">
-                <label>Binance (USD)</label>
-                <input type="number" id="cc-dec-binance" value="0" min="0" step="any">
+              <div class="cierre-method-card">
+                <div class="cierre-method-head">
+                  <span class="cierre-method-label"><i data-lucide="bitcoin"></i> Binance (USD)</span>
+                  <span class="cierre-method-expected" id="cc-esp-binance">Esperado: $0</span>
+                </div>
+                <input type="number" class="cierre-input" id="cc-dec-binance" value="0" min="0" step="any" placeholder="0.00">
               </div>
-              <div class="form-group">
-                <label>Pesos Efectivo (COP)</label>
-                <input type="number" id="cc-dec-pesos" value="0" min="0" step="any">
+              <div class="cierre-method-card">
+                <div class="cierre-method-head">
+                  <span class="cierre-method-label"><i data-lucide="banknote"></i> Pesos Efectivo (COP)</span>
+                  <span class="cierre-method-expected" id="cc-esp-pesos">Esperado: $0</span>
+                </div>
+                <input type="number" class="cierre-input" id="cc-dec-pesos" value="0" min="0" step="any" placeholder="0.00">
               </div>
-              <div class="form-group">
-                <label>Bancolombia (COP)</label>
-                <input type="number" id="cc-dec-bancolombia" value="0" min="0" step="any">
+              <div class="cierre-method-card">
+                <div class="cierre-method-head">
+                  <span class="cierre-method-label"><i data-lucide="building-2"></i> Bancolombia (COP)</span>
+                  <span class="cierre-method-expected" id="cc-esp-bancolombia">Esperado: $0</span>
+                </div>
+                <input type="number" class="cierre-input" id="cc-dec-bancolombia" value="0" min="0" step="any" placeholder="0.00">
               </div>
-              <div class="form-group">
-                <label>Efectivo (USD)</label>
-                <input type="number" id="cc-dec-usd" value="0" min="0" step="any">
+              <div class="cierre-method-card">
+                <div class="cierre-method-head">
+                  <span class="cierre-method-label"><i data-lucide="dollar-sign"></i> Efectivo (USD)</span>
+                  <span class="cierre-method-expected" id="cc-esp-usd">Esperado: $0</span>
+                </div>
+                <input type="number" class="cierre-input" id="cc-dec-usd" value="0" min="0" step="any" placeholder="0.00">
               </div>
             </div>
           </div>
@@ -1564,6 +1582,7 @@
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Total Gastos:</span><strong id="dia-gastos">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Reposición de Stock:</span><strong id="dia-reposicion">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 15px; padding-top: 10px; border-top: 1px solid var(--border-glass); font-size: 1.05em;"><span>Utilidad Neta:</span><strong id="dia-utilidad">$0</strong></div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Pago Móvil Declarado (VES):</span><strong id="dia-pago-movil">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Declarado:</span><strong id="dia-declarado">$0</strong></div>
           <div style="display: flex; justify-content: space-between; border-top: 1px solid var(--border-glass); padding-top: 10px; font-size: 1.1em; color: var(--success);" id="dia-diff-row">
             <span>Diferencia:</span><strong id="dia-diferencia">$0</strong>

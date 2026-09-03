@@ -899,45 +899,66 @@ const basesActivas = (STATE.recetasBase || []).filter(r => r.activa_batido);
       // Si es combinado, siempre mostrar insumos manuales
       // Si no, mostrar recetas base si hay activas
       // Si no hay nada, mostrar insumos si hay disponibles
-      const opcionesHtml = esCombinado
-        ? `<div style="margin-bottom:10px; padding:10px 12px; background:rgba(34,197,94,0.06); border:1px solid rgba(34,197,94,0.25); border-radius:8px;">
-            <span style="font-weight:600; font-size:0.85rem; color:var(--color-muted); display:block; margin-bottom:4px;">🍓 Elige las frutas/insumos para este batido (1 porción c/u, descuenta stock):</span>
-            <ul style="list-style:none;margin:0;padding:0;">
-              ${insumosBatido.map(ins =>
-                `<li style="padding:6px 0;">
-                  <label style="cursor:pointer; display:flex; align-items:center; gap:8px; font-size:0.85rem;">
-                    <input type="checkbox" class="ins-manual-cb" data-id="${ins.id}" style="width:16px;height:16px;">
-                    <span><strong>${ins.nombre}</strong> <small style="color:var(--color-muted);">(${ins.unidad_medida}) — Stock: ${parseFloat(ins.stock_actual).toLocaleString(undefined,{maximumFractionDigits:2})}</small></span>
-                  </label>
-                </li>`).join('')}
-            </ul>
-          </div>`
-        : (!prod.receta_base_id && tieneRecetasBase)
-        ? `<div style="margin-bottom:10px; padding:10px 12px; background:rgba(88,86,214,0.08); border:1px solid var(--border-glass); border-radius:8px;">
-            <span style="font-weight:600; font-size:0.85rem; color:var(--color-muted); display:block; margin-bottom:4px;">🧩 Elige las recetas base para este batido (descuentan stock y suman costo):</span>
-            <ul style="list-style:none;margin:0;padding:0;">
-              ${basesActivas.map(b =>
-                `<li style="padding:6px 0;">
-                  <label style="cursor:pointer; display:flex; align-items:center; gap:8px; font-size:0.85rem;">
-                    <input type="checkbox" class="rb-opcion-cb" data-id="${b.id}" data-costo="${parseFloat(b.costo_total) || 0}" checked style="width:16px;height:16px;" onchange="updateBatidoCost()">
-                    <span><strong>${b.nombre}</strong> <small style="color:var(--color-muted);">(${(b.insumos || []).map(i => i.nombre).join(', ') || 'sin insumos'})</small></span>
-                  </label>
-                </li>`).join('')}
-            </ul>
-          </div>`
-        : (!prod.receta_base_id && !tieneRecetasBase && tieneInsumosBatido)
-        ? `<div style="margin-bottom:10px; padding:10px 12px; background:rgba(34,197,94,0.06); border:1px solid rgba(34,197,94,0.25); border-radius:8px;">
-            <span style="font-weight:600; font-size:0.85rem; color:var(--color-muted); display:block; margin-bottom:4px;">🍓 Elige las frutas/insumos para este batido (1 porción c/u, descuenta stock):</span>
-            <ul style="list-style:none;margin:0;padding:0;">
-              ${insumosBatido.map(ins =>
-                `<li style="padding:6px 0;">
-                  <label style="cursor:pointer; display:flex; align-items:center; gap:8px; font-size:0.85rem;">
-                    <input type="checkbox" class="ins-manual-cb" data-id="${ins.id}" style="width:16px;height:16px;">
-                    <span><strong>${ins.nombre}</strong> <small style="color:var(--color-muted);">(${ins.unidad_medida}) — Stock: ${parseFloat(ins.stock_actual).toLocaleString(undefined,{maximumFractionDigits:2})}</small></span>
-                  </label>
-                </li>`).join('')}
-            </ul>
-          </div>`
+      // --- Selector de batidos: tarjetas agrupadas por categoría + buscador ---
+      const cardInsumo = (ins) => {
+        const stock = parseFloat(ins.stock_actual) || 0;
+        const stockMin = parseFloat(ins.stock_minimo) || 0;
+        const agotado = stock <= 0;
+        const bajo = !agotado && stockMin > 0 && stock < stockMin;
+        const badgeClass = agotado ? 'out' : (bajo ? 'low' : 'ok');
+        const badgeText = agotado ? 'Agotado' : ('Stock ' + stock.toLocaleString(undefined, { maximumFractionDigits: 2 }));
+        return `
+          <label class="batido-option ${agotado ? 'batido-option-disabled' : ''}">
+            <input type="checkbox" class="ins-manual-cb" data-id="${ins.id}" ${agotado ? 'disabled' : ''}>
+            <span class="batido-check"><i data-lucide="check"></i></span>
+            <span class="batido-option-body">
+              <span class="batido-option-name">${ins.nombre}</span>
+              <span class="batido-option-sub">${ins.unidad_medida || ''}</span>
+            </span>
+            <span class="batido-badge ${badgeClass}">${badgeText}</span>
+          </label>`;
+      };
+
+      const cardRecetaBase = (b) => {
+        const insumosTxt = (b.insumos || []).map(i => i.nombre).join(', ') || 'sin insumos';
+        const costo = parseFloat(b.costo_total) || 0;
+        return `
+          <label class="batido-option">
+            <input type="checkbox" class="rb-opcion-cb" data-id="${b.id}" data-costo="${costo}" checked onchange="updateBatidoCost()">
+            <span class="batido-check"><i data-lucide="check"></i></span>
+            <span class="batido-option-body">
+              <span class="batido-option-name">${b.nombre}</span>
+              <span class="batido-option-sub">${insumosTxt}</span>
+            </span>
+            <span class="batido-badge neutral">$${costo.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+          </label>`;
+      };
+
+      const grupoBatido = (titulo, icono, items) => items.length > 0
+        ? `
+        <div class="batido-group">
+          <div class="batido-group-title">${icono} ${titulo} <span class="batido-count">${items.length}</span></div>
+          <div class="batido-grid">${items.join('')}</div>
+        </div>`
+        : '';
+
+      let opcionesHtml = '';
+      if (esCombinado || (!prod.receta_base_id && !tieneRecetasBase && tieneInsumosBatido)) {
+        const gruposInsumos = [
+          { titulo: 'Sabor / Fruta', icono: '🍓', items: insumosBatido.filter(i => i.es_sabor_batido) },
+          { titulo: 'Base líquida', icono: '🥛', items: insumosBatido.filter(i => i.es_base_liquida && !i.es_sabor_batido) },
+          { titulo: 'Otros insumos', icono: '🧊', items: insumosBatido.filter(i => !i.es_sabor_batido && !i.es_base_liquida) }
+        ];
+        opcionesHtml = gruposInsumos.map(g => grupoBatido(g.titulo, g.icono, g.items.map(cardInsumo))).join('');
+      } else if (!prod.receta_base_id && tieneRecetasBase) {
+        opcionesHtml = grupoBatido('Recetas base', '🧩', basesActivas.map(cardRecetaBase));
+      }
+
+      const searchHtml = opcionesHtml
+        ? `
+        <div class="batido-toolbar">
+          <input type="text" id="batido-search" class="batido-search" placeholder="🔍 Buscar por nombre o ingrediente..." oninput="filtrarBatidoOpciones(this.value)">
+        </div>`
         : '';
 
       window.updateBatidoCost = () => {
@@ -947,6 +968,18 @@ const basesActivas = (STATE.recetasBase || []).filter(r => r.activa_batido);
         });
         const el = document.getElementById('bati-costo-el');
         if (el) el.textContent = '$' + newCost.toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:2});
+      };
+
+      window.filtrarBatidoOpciones = (q) => {
+        const query = (q || '').toLowerCase().trim();
+        document.querySelectorAll('.batido-option').forEach(card => {
+          const texto = (card.textContent || '').toLowerCase();
+          card.style.display = (!query || texto.includes(query)) ? '' : 'none';
+        });
+        document.querySelectorAll('.batido-group').forEach(group => {
+          const visible = Array.from(group.querySelectorAll('.batido-option')).some(c => c.style.display !== 'none');
+          group.style.display = visible ? '' : 'none';
+        });
       };
 
       const esNormalConRecetas = (!prod.receta_base_id && tieneRecetasBase && !esCombinado);
@@ -960,6 +993,7 @@ const basesActivas = (STATE.recetasBase || []).filter(r => r.activa_batido);
       openGenericModal(`Opciones para ${prod.nombre}`, `
         ${baseHtml}
         ${propiosHtml}
+        ${searchHtml}
         ${opcionesHtml}
         <div style="margin-top:12px; padding:12px 15px; background:linear-gradient(135deg, rgba(34,197,94,0.08), rgba(34,197,94,0.04)); border:1px solid rgba(34,197,94,0.25); border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
           <span style="font-weight:600; font-size:0.9rem; color:var(--color-muted);">💰 ${esNormalConRecetas ? 'Costo calculado (Recetas Base):' : 'Costo fijo del producto:'}</span>
@@ -3722,6 +3756,29 @@ async function cerrarTurnoActual() {
 
     totalEsperado = fondoBaseCop + ventasCop + abonosCop - gastosCop;
 
+    // Totales esperados por método de pago (para conciliación visual del cajero)
+    const ventasMetodo = arqueo.ventas_detalle || {};
+    const abonosMetodo = arqueo.abonos_detalle || {};
+    const esperadoMetodo = (metodo, moneda) =>
+      (parseFloat(ventasMetodo[moneda]?.[metodo]) || 0) + (parseFloat(abonosMetodo[moneda]?.[metodo]) || 0);
+
+    const espPagoMovil = esperadoMetodo('Pago Móvil', 'VES');
+    const espZelle = esperadoMetodo('Zelle', 'USD');
+    const espBinance = esperadoMetodo('Binance', 'USD');
+    const espPesos = esperadoMetodo('Efectivo COP', 'COP');
+    const espBancolombia = esperadoMetodo('Bancolombia', 'COP');
+    const espUsd = esperadoMetodo('Efectivo USD', 'USD');
+
+    const fmtEsperado = (v, simbolo) =>
+      `${Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} ${simbolo}`;
+
+    document.getElementById('cc-esp-pago-movil').textContent = `Esperado: ${fmtEsperado(espPagoMovil, 'Bs')}`;
+    document.getElementById('cc-esp-zelle').textContent = `Esperado: ${fmtEsperado(espZelle, 'USD')}`;
+    document.getElementById('cc-esp-binance').textContent = `Esperado: ${fmtEsperado(espBinance, 'USD')}`;
+    document.getElementById('cc-esp-pesos').textContent = `Esperado: ${fmtEsperado(espPesos, 'COP')}`;
+    document.getElementById('cc-esp-bancolombia').textContent = `Esperado: ${fmtEsperado(espBancolombia, 'COP')}`;
+    document.getElementById('cc-esp-usd').textContent = `Esperado: ${fmtEsperado(espUsd, 'USD')}`;
+
     // Actualizar UI - Valores Teóricos
     document.getElementById('cc-fondo-inicial').textContent = `$${fondoBaseCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
     document.getElementById('cc-total-ventas').textContent = `$${ventasCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
@@ -3737,7 +3794,7 @@ async function cerrarTurnoActual() {
   }
 
   // 2. Setup de inputs y cálculos en tiempo real
-  const inputs = ['cc-dec-bs', 'cc-dec-zelle', 'cc-dec-binance', 'cc-dec-pesos', 'cc-dec-bancolombia', 'cc-dec-usd'];
+  const inputs = ['cc-dec-pago-movil', 'cc-dec-zelle', 'cc-dec-binance', 'cc-dec-pesos', 'cc-dec-bancolombia', 'cc-dec-usd'];
   const diffBox = document.getElementById('cc-diff-box');
   const diffValue = document.getElementById('cc-diferencia');
   const diffStatus = document.getElementById('cc-diff-status');
@@ -3749,7 +3806,7 @@ async function cerrarTurnoActual() {
   });
 
   const calcularDiferenciaReal = () => {
-    const decBs = parseFloat(document.getElementById('cc-dec-bs').value) || 0;
+    const decPagoMovil = parseFloat(document.getElementById('cc-dec-pago-movil').value) || 0;
     const decZelle = parseFloat(document.getElementById('cc-dec-zelle').value) || 0;
     const decBinance = parseFloat(document.getElementById('cc-dec-binance').value) || 0;
     const decUsd = parseFloat(document.getElementById('cc-dec-usd').value) || 0;
@@ -3761,7 +3818,7 @@ async function cerrarTurnoActual() {
 
     // USD total declarado = Zelle + Binance + Efectivo USD
     const totalUsd = decZelle + decBinance + decUsd;
-    const declaradoCop = decPesos + decBanco + (totalUsd * rateUsd) + (decBs * rateVes);
+    const declaradoCop = decPesos + decBanco + (totalUsd * rateUsd) + (decPagoMovil * rateVes);
     
     const diferencia = declaradoCop - totalEsperado;
 
@@ -3811,7 +3868,7 @@ async function cerrarTurnoActual() {
     lucide.createIcons();
     
     try {
-      const decBs = parseFloat(document.getElementById('cc-dec-bs').value) || 0;
+      const decPagoMovil = parseFloat(document.getElementById('cc-dec-pago-movil').value) || 0;
       const decZelle = parseFloat(document.getElementById('cc-dec-zelle').value) || 0;
       const decBinance = parseFloat(document.getElementById('cc-dec-binance').value) || 0;
       const decUsd = parseFloat(document.getElementById('cc-dec-usd').value) || 0;
@@ -3822,14 +3879,14 @@ async function cerrarTurnoActual() {
       const rateVes = STATE.tasas.VES || 1;
       
       const totalUsd = decZelle + decBinance + decUsd;
-      const monto_declarado_cop = decPesos + decBanco + (totalUsd * rateUsd) + (decBs * rateVes);
+      const monto_declarado_cop = decPesos + decBanco + (totalUsd * rateUsd) + (decPagoMovil * rateVes);
 
       const res = await fetch('/api/caja/cerrar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           monto_declarado_cop,
-          declarado_efectivo_bs: decBs,
+          declarado_pago_movil: decPagoMovil,
           declarado_zelle: decZelle,
           declarado_binance: decBinance,
           declarado_efectivo_pesos: decPesos,
@@ -3915,6 +3972,7 @@ window.loadCierreDia = async function() {
     document.getElementById('dia-costo').textContent = `$${(r.costo_produccion || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     document.getElementById('dia-gastos').textContent = `$${(r.total_gastos_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     document.getElementById('dia-declarado').textContent = `$${(r.declarado_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+    document.getElementById('dia-pago-movil').textContent = `Bs ${(r.declarado_pago_movil || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
 
     const utilidad = r.utilidad_neta || 0;
     const utilEl = document.getElementById('dia-utilidad');
@@ -4023,6 +4081,7 @@ window.verTicketCierre = function(idx) {
   document.getElementById('dia-gastos').textContent = `-$${fmt(c.total_gastos_cop)}`;
   document.getElementById('dia-reposicion').textContent = `-$${fmt(c.reposicion)}`;
   document.getElementById('dia-declarado').textContent = `$${fmt(c.declarado_cop)}`;
+  document.getElementById('dia-pago-movil').textContent = `Bs ${fmt(c.declarado_pago_movil)}`;
 
   const utilEl = document.getElementById('dia-utilidad');
   utilEl.textContent = `$${fmt(c.utilidad_neta)}`;

@@ -215,6 +215,7 @@ CREATE TABLE sesiones_caja (
     declarado_binance REAL DEFAULT 0.0,
     declarado_efectivo_pesos REAL DEFAULT 0.0,
     declarado_bancolombia REAL DEFAULT 0.0,
+    declarado_pago_movil REAL DEFAULT 0.0,
     CONSTRAINT fk_sesiones_caja_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
 );
 

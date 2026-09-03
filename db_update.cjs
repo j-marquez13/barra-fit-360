@@ -7,7 +7,8 @@ db.serialize(() => {
     'declarado_zelle NUMERIC(12, 2) DEFAULT 0.00',
     'declarado_binance NUMERIC(12, 2) DEFAULT 0.00',
     'declarado_efectivo_pesos NUMERIC(12, 2) DEFAULT 0.00',
-    'declarado_bancolombia NUMERIC(12, 2) DEFAULT 0.00'
+    'declarado_bancolombia NUMERIC(12, 2) DEFAULT 0.00',
+    'declarado_pago_movil NUMERIC(12, 2) DEFAULT 0.00'
   ];
   cols.forEach(col => {
     db.run(`ALTER TABLE sesiones_caja ADD COLUMN ${col}`, (err) => {

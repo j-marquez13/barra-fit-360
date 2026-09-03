@@ -65,6 +65,7 @@ async function run() {
       ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_binance REAL DEFAULT 0.0;
       ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_efectivo_pesos REAL DEFAULT 0.0;
       ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_bancolombia REAL DEFAULT 0.0;
+      ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_pago_movil REAL DEFAULT 0.0;
 
       -- Add missing columns to insumos
       ALTER TABLE insumos ADD COLUMN IF NOT EXISTS stock_fijo REAL NOT NULL DEFAULT 0.0;
