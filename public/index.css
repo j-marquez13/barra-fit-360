@@ -3431,3 +3431,11 @@ select.receta-insumo option {
   word-break: break-word;
 }
 
+/* ============================================
+   CIERRE DIARIO CONSOLIDADO — SCROLL INTERNO
+   ============================================ */
+#cierre-dia-overlay .cierre-caja-box {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
