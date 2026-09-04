@@ -40,7 +40,8 @@ export async function initializeDatabase() {
         moneda VARCHAR(10) NOT NULL,
         tasa_cambio NUMERIC(12, 4) DEFAULT 1.0000,
         total_cop NUMERIC(12, 2) NOT NULL,
-        sesion_caja_id INTEGER REFERENCES sesiones_caja(id) ON DELETE SET NULL
+        sesion_caja_id INTEGER REFERENCES sesiones_caja(id) ON DELETE SET NULL,
+        afecta_inventario BOOLEAN DEFAULT TRUE
       )`);
       await db.execute(`CREATE TABLE IF NOT EXISTS ordenes_compra_items (
         id SERIAL PRIMARY KEY,
@@ -83,6 +84,8 @@ export async function initializeDatabase() {
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS costo_produccion DOUBLE PRECISION DEFAULT 0.0;');
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS utilidad_neta DOUBLE PRECISION DEFAULT 0.0;');
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_cop DOUBLE PRECISION DEFAULT 0.0;');
+      await db.execute('ALTER TABLE ordenes_compra ADD COLUMN IF NOT EXISTS afecta_inventario BOOLEAN DEFAULT TRUE;');
+      await db.execute('ALTER TABLE gastos ADD COLUMN IF NOT EXISTS orden_compra_id INTEGER;');
 
       // El sistema permite stock negativo al facturar (emite advertencia y procesa la venta),
       // por lo que hay que eliminar cualquier CHECK que impida stock_actual < 0.
@@ -366,6 +369,7 @@ async function createTables() {
     CREATE TABLE IF NOT EXISTS gastos (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       sesion_caja_id INTEGER,
+      orden_compra_id INTEGER,
       categoria TEXT NOT NULL,
       descripcion TEXT NOT NULL,
       monto REAL NOT NULL CHECK (monto > 0.0),
@@ -446,6 +450,7 @@ async function createTables() {
       tasa_cambio REAL DEFAULT 1.0,
       total_cop REAL NOT NULL,
       sesion_caja_id INTEGER,
+      afecta_inventario INTEGER DEFAULT 1,
       FOREIGN KEY (sesion_caja_id) REFERENCES sesiones_caja(id) ON DELETE SET NULL
     )
   `);
@@ -560,6 +565,10 @@ async function runMigrations() {
   try { await db.execute("ALTER TABLE usuarios ADD COLUMN debe_cambiar_password INTEGER DEFAULT 1"); } catch(e) {}
   try { await db.execute("ALTER TABLE usuarios ADD COLUMN intentos_fallidos INTEGER DEFAULT 0"); } catch(e) {}
   try { await db.execute("ALTER TABLE usuarios ADD COLUMN bloqueado_hasta BIGINT"); } catch(e) {}
+  // La orden de compra ya no suma stock: columna para saber si una orden antigua sí lo hizo.
+  try { await db.execute("ALTER TABLE ordenes_compra ADD COLUMN afecta_inventario INTEGER DEFAULT 1"); console.log('   🔄 Migración: columna afecta_inventario agregada a ordenes_compra.'); } catch(e) {}
+  // Enlace entre el gasto (reposición) y su orden de compra para poder devolver la plata al borrar.
+  try { await db.execute("ALTER TABLE gastos ADD COLUMN orden_compra_id INTEGER"); console.log('   🔄 Migración: columna orden_compra_id agregada a gastos.'); } catch(e) {}
 }
 
 async function ensureDefaultUsers() {

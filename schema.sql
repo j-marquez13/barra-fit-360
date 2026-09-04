@@ -190,6 +190,7 @@ CREATE TABLE gastos (
     monto_cop NUMERIC(12, 2) NOT NULL CHECK (monto_cop > 0.00),
     fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     sesion_caja_id INTEGER,
+    orden_compra_id INTEGER,
     metodo_pago VARCHAR(50) NOT NULL DEFAULT 'Efectivo COP',
     CONSTRAINT fk_gastos_sesion FOREIGN KEY (sesion_caja_id) REFERENCES sesiones_caja(id) ON DELETE SET NULL
 );
@@ -229,7 +230,8 @@ CREATE TABLE ordenes_compra (
     moneda VARCHAR(10) NOT NULL,
     tasa_cambio NUMERIC(12, 4) DEFAULT 1.0000,
     total_cop NUMERIC(12, 2) NOT NULL,
-    sesion_caja_id INTEGER REFERENCES sesiones_caja(id) ON DELETE SET NULL
+    sesion_caja_id INTEGER REFERENCES sesiones_caja(id) ON DELETE SET NULL,
+    afecta_inventario BOOLEAN DEFAULT TRUE
 );
 
 CREATE TABLE ordenes_compra_items (

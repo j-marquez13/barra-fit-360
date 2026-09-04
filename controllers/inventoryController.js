@@ -345,6 +345,7 @@ export async function confirmarOrdenCompra(req, res) {
       const openSession = await tx.query("SELECT id FROM sesiones_caja WHERE fecha_cierre IS NULL AND estado = 'Abierta' ORDER BY id DESC LIMIT 1");
       const sesion_caja_id = openSession.length > 0 ? openSession[0].id : null;
 
+      // 1. Validar y calcular los items seleccionados (sin escribir aún).
       for (const item of items) {
         const insumoId = item.insumo_id;
         const cantidad = parseFloat(item.cantidad);
@@ -352,34 +353,33 @@ export async function confirmarOrdenCompra(req, res) {
 
         if (!insumoId || !cantidad || cantidad <= 0) continue;
 
-        const existing = await tx.query('SELECT id, nombre, stock_actual FROM insumos WHERE id = $1', [insumoId]);
+        const existing = await tx.query('SELECT id, nombre FROM insumos WHERE id = $1', [insumoId]);
         if (existing.length === 0) continue;
 
         const nombre = existing[0].nombre;
-        const newStock = parseFloat(existing[0].stock_actual) + cantidad;
         const montoCop = cantidad * costo;
         totalCop += montoCop;
-
-        await tx.execute('UPDATE insumos SET stock_actual = $1, costo_unitario = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3', [newStock, costo, insumoId]);
-
-        const montoOriginal = monedaPago === 'COP' ? montoCop : montoCop / tasa;
-        await tx.execute(
-          'INSERT INTO gastos (sesion_caja_id, categoria, descripcion, monto, moneda, tasa_cambio, monto_cop, metodo_pago) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-          [sesion_caja_id, 'REPOSICION', `Reposición de ${cantidad} ${nombre}`, montoOriginal, monedaPago, tasa, montoCop, metodo_pago]
-        );
 
         procesados.push({ insumo_id: insumoId, nombre, cantidad, costo_unitario: costo, monto_cop: montoCop });
       }
 
-      // Cabecera de la orden de compra (historial)
+      // 2. Cabecera de la orden de compra (historial).
+      // afecta_inventario = false: la orden ya no modifica el stock.
       const ordenSql = isPg
-        ? 'INSERT INTO ordenes_compra (metodo_pago, moneda, tasa_cambio, total_cop, sesion_caja_id) VALUES ($1, $2, $3, $4, $5) RETURNING id'
-        : 'INSERT INTO ordenes_compra (metodo_pago, moneda, tasa_cambio, total_cop, sesion_caja_id) VALUES ($1, $2, $3, $4, $5)';
-      const ordenRes = await tx.execute(ordenSql, [metodo_pago, monedaPago, tasa, totalCop, sesion_caja_id]);
+        ? 'INSERT INTO ordenes_compra (metodo_pago, moneda, tasa_cambio, total_cop, sesion_caja_id, afecta_inventario) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id'
+        : 'INSERT INTO ordenes_compra (metodo_pago, moneda, tasa_cambio, total_cop, sesion_caja_id, afecta_inventario) VALUES ($1, $2, $3, $4, $5, $6)';
+      const ordenRes = await tx.execute(ordenSql, [metodo_pago, monedaPago, tasa, totalCop, sesion_caja_id, false]);
       const ordenId = ordenRes[0]?.id;
 
-      // Items de la orden
+      // 3. Registrar el gasto (plata que sale) y los items de la orden.
+      //    La orden NO suma stock al inventario: solo registra el gasto y el historial.
       for (const p of procesados) {
+        const montoOriginal = monedaPago === 'COP' ? p.monto_cop : p.monto_cop / tasa;
+        await tx.execute(
+          'INSERT INTO gastos (sesion_caja_id, orden_compra_id, categoria, descripcion, monto, moneda, tasa_cambio, monto_cop, metodo_pago) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+          [sesion_caja_id, ordenId, 'REPOSICION', `Reposición de ${p.cantidad} ${p.nombre}`, montoOriginal, monedaPago, tasa, p.monto_cop, metodo_pago]
+        );
+
         await tx.execute(
           'INSERT INTO ordenes_compra_items (orden_id, insumo_id, cantidad, costo_unitario, monto_cop) VALUES ($1, $2, $3, $4, $5)',
           [ordenId, p.insumo_id, p.cantidad, p.costo_unitario, p.monto_cop]
@@ -431,6 +431,79 @@ export async function getOrdenCompraDetalle(req, res) {
   } catch (error) {
     console.error('Error al obtener detalle de orden:', error);
     return res.status(500).json({ error: 'Error al obtener el detalle de la orden.' });
+  }
+}
+
+// DELETE /api/inventario/ordenes-compra/:id — Elimina una orden de compra,
+// revierte el stock que había sumado al inventario y devuelve la plata (gasto).
+export async function borrarOrdenCompra(req, res) {
+  const { id } = req.params;
+  try {
+    const orden = await db.query('SELECT * FROM ordenes_compra WHERE id = $1', [id]);
+    if (orden.length === 0) return res.status(404).json({ error: 'Orden no encontrada.' });
+
+    const o = orden[0];
+    const afecta = o.afecta_inventario;
+    const afectaInventario = afecta === true || afecta === 1 || afecta === '1' || afecta === 't' || afecta === 'true' || afecta === 'TRUE';
+
+    const items = await db.query(
+      'SELECT oci.insumo_id, oci.cantidad, oci.monto_cop, i.nombre FROM ordenes_compra_items oci JOIN insumos i ON oci.insumo_id = i.id WHERE oci.orden_id = $1',
+      [id]
+    );
+
+    // Gastos asociados a esta orden (la plata que salió).
+    let gastos = await db.query('SELECT id, metodo_pago, monto FROM gastos WHERE orden_compra_id = $1', [id]);
+
+    // Fallback para órdenes antiguas (creadas antes de existir orden_compra_id):
+    // busca los gastos de reposición de la misma sesión y método de pago cuyo
+    // monto_cop coincida con el de cada item de la orden.
+    if (gastos.length === 0 && o.sesion_caja_id) {
+      const candidatos = await db.query(
+        "SELECT id, metodo_pago, monto, monto_cop FROM gastos WHERE sesion_caja_id = $1 AND categoria = 'REPOSICION' AND metodo_pago = $2",
+        [o.sesion_caja_id, o.metodo_pago]
+      );
+      const usados = new Set();
+      gastos = [];
+      for (const it of items) {
+        const objetivo = Math.round((parseFloat(it.monto_cop) || 0) * 100) / 100;
+        const g = candidatos.find(c => !usados.has(c.id) && (Math.round((parseFloat(c.monto_cop) || 0) * 100) / 100) === objetivo);
+        if (g) {
+          usados.add(g.id);
+          gastos.push(g);
+        }
+      }
+    }
+
+    await db.transaction(async (tx) => {
+      // 1. Revertir el stock SOLO si esta orden lo había sumado (órdenes antiguas).
+      if (afectaInventario) {
+        for (const it of items) {
+          const ins = await tx.query('SELECT stock_actual FROM insumos WHERE id = $1', [it.insumo_id]);
+          if (ins.length === 0) continue;
+          const actual = parseFloat(ins[0].stock_actual) || 0;
+          const nuevo = Math.max(0, actual - parseFloat(it.cantidad));
+          await tx.execute('UPDATE insumos SET stock_actual = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [nuevo, it.insumo_id]);
+        }
+      }
+
+      // 2. Devolver la plata: restaurar el saldo de tesorería y eliminar el gasto.
+      for (const g of gastos) {
+        const monto = parseFloat(g.monto) || 0;
+        if (g.metodo_pago && monto > 0) {
+          await tx.execute('UPDATE cuentas_bancarias SET saldo = saldo + $1 WHERE nombre = $2', [monto, g.metodo_pago]);
+        }
+        await tx.execute('DELETE FROM gastos WHERE id = $1', [g.id]);
+      }
+
+      // 3. Eliminar la orden y sus items.
+      await tx.execute('DELETE FROM ordenes_compra_items WHERE orden_id = $1', [id]);
+      await tx.execute('DELETE FROM ordenes_compra WHERE id = $1', [id]);
+    });
+
+    return res.json({ mensaje: 'Orden de compra eliminada. Se revirtió el stock y se devolvió la plata.' });
+  } catch (error) {
+    console.error('Error al eliminar orden de compra:', error);
+    return res.status(500).json({ error: 'Error al eliminar la orden de compra.', detalle: error.message });
   }
 }
 

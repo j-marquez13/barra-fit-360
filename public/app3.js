@@ -1682,7 +1682,10 @@ window.loadHistorialCompras = async function() {
         <td>${o.metodo_pago}</td>
         <td>${o.moneda}</td>
         <td class="font-outfit" style="color:var(--success);">$${(parseFloat(o.total_cop) || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
-        <td style="text-align:right;"><button class="table-btn btn-edit" onclick="verDetalleOrdenCompra(${o.id})">Ver</button></td>
+        <td style="text-align:right; white-space:nowrap;">
+          <button class="table-btn btn-edit" onclick="verDetalleOrdenCompra(${o.id})">Ver</button>
+          <button class="table-btn btn-danger" onclick="borrarOrdenCompra(${o.id})" style="background:var(--danger); color:#fff; border:none; margin-left:6px;">Borrar</button>
+        </td>
       </tr>`;
     }).join('');
   } catch (e) {
@@ -1703,6 +1706,20 @@ window.verDetalleOrdenCompra = async function(id) {
       <div style="max-height:240px; overflow-y:auto;">${lista}</div>
       <div style="display:flex; justify-content:space-between; border-top:1px solid var(--border-glass); padding-top:10px; margin-top:10px; font-size:1.1em; font-weight:800;"><span>Total</span><span style="color:var(--success);">$${(parseFloat(o.total_cop) || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>
     `);
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+};
+
+window.borrarOrdenCompra = async function(id) {
+  if (!confirm('¿Seguro que deseas eliminar esta orden de compra? Se revertirá el stock que sumó al inventario y se devolverá la plata (gasto) registrada.')) return;
+  try {
+    const res = await fetch('/api/inventario/ordenes-compra/' + id, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al eliminar la orden');
+    showToast(data.mensaje || 'Orden de compra eliminada.', 'success');
+    await loadHistorialCompras();
+    await loadInventarioData();
   } catch (e) {
     alert('Error: ' + e.message);
   }
