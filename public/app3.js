@@ -1697,6 +1697,7 @@ window.loadHistorialCompras = async function() {
         </td>
       </tr>`;
     }).join('');
+    window.filtrarTabla('search-historial-input', 'tbody-historial-compras');
   } catch (e) {
     tbody.innerHTML = '<tr><td colspan="6" class="loading-cell" style="color:var(--danger);">Error al cargar el historial.</td></tr>';
   }
@@ -1788,6 +1789,18 @@ window.borrarOrdenCompra = async function(id) {
   }
 };
 
+// Buscador genérico para tablas: oculta las filas que no coinciden con el texto.
+window.filtrarTabla = function(inputId, tbodyId) {
+  const input = document.getElementById(inputId);
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody) return;
+  const query = (input && input.value ? input.value : '').toLowerCase().trim();
+  tbody.querySelectorAll('tr').forEach(tr => {
+    const texto = (tr.textContent || '').toLowerCase();
+    tr.style.display = (!query || texto.includes(query)) ? '' : 'none';
+  });
+};
+
 function renderInsumosTable(insumos) {
   const tbody = document.getElementById('tbody-insumos');
   if (!insumos || insumos.length === 0) {
@@ -1861,6 +1874,7 @@ function renderMermasTable(mermas) {
       <td>${m.motivo}</td>
     </tr>
   `).join('');
+  window.filtrarTabla('search-mermas-input', 'tbody-mermas');
 }
 
 function renderProductosTable(productos) {
@@ -1896,6 +1910,7 @@ function renderProductosTable(productos) {
       </tr>
     `;
   }).join('');
+  window.filtrarTabla('search-productos-input', 'tbody-productos');
 }
 
 window.viewProductRecipe = function(productName) {
@@ -1985,6 +2000,7 @@ return `
         </tr>
       `;
     }).join('');
+    window.filtrarTabla('search-recetas-input', 'tbody-recetas-base');
   } catch (err) {
     console.error('Error cargando recetas base:', err);
     tbody.innerHTML = '<tr><td colspan="6" class="loading-cell">Error al cargar recetas base.</td></tr>';
@@ -2572,6 +2588,7 @@ function renderClientesTable(clientes) {
       </tr>
     `;
   }).join('');
+  window.filtrarTabla('search-clientes-input', 'tbody-clientes');
 }
 
 window.loadClientDetail = async function(clientId) {
@@ -4390,6 +4407,7 @@ async function loadGastos() {
         <td class="font-outfit" style="color:var(--danger)">-$${parseFloat(g.monto_cop).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
       </tr>
     `).join('');
+    window.filtrarTabla('search-gastos-input', 'tbody-gastos');
   } catch (err) {
     console.error('Error cargando gastos', err);
   }

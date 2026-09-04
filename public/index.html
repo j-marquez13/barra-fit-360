@@ -488,9 +488,12 @@
           <div class="inv-panel" id="inv-mermas">
             <div class="panel-header">
               <h3>Registro de Mermas (Pérdidas)</h3>
-              <button class="action-btn" id="btn-add-merma">
-                <i data-lucide="plus"></i> Registrar Merma
-              </button>
+              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                <input type="text" id="search-mermas-input" placeholder="🔍 Buscar merma..." oninput="filtrarTabla('search-mermas-input','tbody-mermas')" style="background:rgba(0,0,0,0.25); border:1px solid var(--border-glass); border-radius:8px; padding:8px 12px; color:var(--color-text); font-size:0.85rem; min-width:160px; outline:none;">
+                <button class="action-btn" id="btn-add-merma">
+                  <i data-lucide="plus"></i> Registrar Merma
+                </button>
+              </div>
             </div>
             <div class="data-table-wrapper">
               <table class="data-table" id="table-mermas">
@@ -514,9 +517,12 @@
           <div class="inv-panel" id="inv-productos">
             <div class="panel-header">
               <h3>Catálogo de Productos</h3>
-              <button class="action-btn" id="btn-add-producto">
-                <i data-lucide="plus"></i> Nuevo Producto
-              </button>
+              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                <input type="text" id="search-productos-input" placeholder="🔍 Buscar producto..." oninput="filtrarTabla('search-productos-input','tbody-productos')" style="background:rgba(0,0,0,0.25); border:1px solid var(--border-glass); border-radius:8px; padding:8px 12px; color:var(--color-text); font-size:0.85rem; min-width:160px; outline:none;">
+                <button class="action-btn" id="btn-add-producto">
+                  <i data-lucide="plus"></i> Nuevo Producto
+                </button>
+              </div>
             </div>
             <div class="data-table-wrapper">
               <table class="data-table" id="table-productos">
@@ -604,9 +610,12 @@
             <div style="margin-top:20px;">
               <div class="panel-header" style="margin-bottom:10px;">
                 <h4>Historial de Compras</h4>
-                <button class="action-btn secondary" onclick="loadHistorialCompras()">
-                  <i data-lucide="refresh-cw"></i> Actualizar
-                </button>
+                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                  <input type="text" id="search-historial-input" placeholder="🔍 Buscar orden..." oninput="filtrarTabla('search-historial-input','tbody-historial-compras')" style="background:rgba(0,0,0,0.25); border:1px solid var(--border-glass); border-radius:8px; padding:8px 12px; color:var(--color-text); font-size:0.85rem; min-width:160px; outline:none;">
+                  <button class="action-btn secondary" onclick="loadHistorialCompras()">
+                    <i data-lucide="refresh-cw"></i> Actualizar
+                  </button>
+                </div>
               </div>
               <div class="data-table-wrapper">
                 <table class="data-table">
@@ -632,7 +641,8 @@
           <div class="inv-panel" id="inv-recetas-base">
             <div class="panel-header">
               <h3><i data-lucide="layers" style="width:18px;height:18px;"></i> Recetas Base (Plantillas)</h3>
-              <div style="display:flex; gap:10px;">
+              <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                <input type="text" id="search-recetas-input" placeholder="🔍 Buscar receta..." oninput="filtrarTabla('search-recetas-input','tbody-recetas-base')" style="background:rgba(0,0,0,0.25); border:1px solid var(--border-glass); border-radius:8px; padding:8px 12px; color:var(--color-text); font-size:0.85rem; min-width:160px; outline:none;">
                 <button class="action-btn" onclick="window.loadRecetasBasePanel()">
                   <i data-lucide="refresh-cw"></i> Actualizar
                 </button>
@@ -705,9 +715,12 @@
         <div class="module-content">
           <div class="panel-header">
             <h3>Clientes con Línea de Crédito</h3>
-            <button class="action-btn" id="btn-add-cliente">
-              <i data-lucide="user-plus"></i> Nuevo Cliente
-            </button>
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+              <input type="text" id="search-clientes-input" placeholder="🔍 Buscar cliente..." oninput="filtrarTabla('search-clientes-input','tbody-clientes')" style="background:rgba(0,0,0,0.25); border:1px solid var(--border-glass); border-radius:8px; padding:8px 12px; color:var(--color-text); font-size:0.85rem; min-width:160px; outline:none;">
+              <button class="action-btn" id="btn-add-cliente">
+                <i data-lucide="user-plus"></i> Nuevo Cliente
+              </button>
+            </div>
           </div>
           
           <div class="data-table-wrapper">
@@ -808,9 +821,12 @@
           <div class="caja-panel" id="caja-gastos" style="display:none;">
             <div class="panel-header">
               <h3>Registro de Gastos Operacionales</h3>
-              <button class="action-btn" id="btn-add-gasto">
-                <i data-lucide="plus"></i> Nuevo Gasto
-              </button>
+              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                <input type="text" id="search-gastos-input" placeholder="🔍 Buscar gasto..." oninput="filtrarTabla('search-gastos-input','tbody-gastos')" style="background:rgba(0,0,0,0.25); border:1px solid var(--border-glass); border-radius:8px; padding:8px 12px; color:var(--color-text); font-size:0.85rem; min-width:160px; outline:none;">
+                <button class="action-btn" id="btn-add-gasto">
+                  <i data-lucide="plus"></i> Nuevo Gasto
+                </button>
+              </div>
             </div>
             <div class="data-table-wrapper">
               <table class="data-table">
