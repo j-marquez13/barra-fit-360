@@ -170,6 +170,11 @@ export async function listarCierresAdmin(req, res) {
         COALESCE(SUM(utilidad_neta), 0) as utilidad_neta,
         COALESCE(SUM(declarado_cop), 0) as declarado_cop,
         COALESCE(SUM(declarado_pago_movil), 0) as declarado_pago_movil,
+        COALESCE(SUM(declarado_zelle), 0) as declarado_zelle,
+        COALESCE(SUM(declarado_binance), 0) as declarado_binance,
+        COALESCE(SUM(declarado_efectivo_pesos), 0) as declarado_efectivo_pesos,
+        COALESCE(SUM(declarado_bancolombia), 0) as declarado_bancolombia,
+        COALESCE(SUM(declarado_efectivo_usd), 0) as declarado_efectivo_usd,
         COALESCE(SUM(diferencia_caja), 0) as diferencia_caja
       FROM sesiones_caja
       ${where}
@@ -201,6 +206,11 @@ export async function listarCierresAdmin(req, res) {
       utilidad_neta: parseFloat(r.utilidad_neta || 0),
       declarado_cop: parseFloat(r.declarado_cop || 0),
       declarado_pago_movil: parseFloat(r.declarado_pago_movil || 0),
+      declarado_zelle: parseFloat(r.declarado_zelle || 0),
+      declarado_binance: parseFloat(r.declarado_binance || 0),
+      declarado_efectivo_pesos: parseFloat(r.declarado_efectivo_pesos || 0),
+      declarado_bancolombia: parseFloat(r.declarado_bancolombia || 0),
+      declarado_efectivo_usd: parseFloat(r.declarado_efectivo_usd || 0),
       diferencia_caja: parseFloat(r.diferencia_caja || 0)
     }));
 
@@ -224,6 +234,11 @@ export async function cierreDia(req, res) {
         COALESCE(SUM(utilidad_neta), 0) as utilidad_neta,
         COALESCE(SUM(declarado_cop), 0) as declarado_cop,
         COALESCE(SUM(declarado_pago_movil), 0) as declarado_pago_movil,
+        COALESCE(SUM(declarado_zelle), 0) as declarado_zelle,
+        COALESCE(SUM(declarado_binance), 0) as declarado_binance,
+        COALESCE(SUM(declarado_efectivo_pesos), 0) as declarado_efectivo_pesos,
+        COALESCE(SUM(declarado_bancolombia), 0) as declarado_bancolombia,
+        COALESCE(SUM(declarado_efectivo_usd), 0) as declarado_efectivo_usd,
         COALESCE(SUM(diferencia_caja), 0) as diferencia_caja
       FROM sesiones_caja
       WHERE ${dateExpr('fecha_apertura')} = $1 AND estado = 'Cerrada'
@@ -240,6 +255,11 @@ export async function cierreDia(req, res) {
         utilidad_neta: parseFloat(r.utilidad_neta || 0),
         declarado_cop: parseFloat(r.declarado_cop || 0),
         declarado_pago_movil: parseFloat(r.declarado_pago_movil || 0),
+        declarado_zelle: parseFloat(r.declarado_zelle || 0),
+        declarado_binance: parseFloat(r.declarado_binance || 0),
+        declarado_efectivo_pesos: parseFloat(r.declarado_efectivo_pesos || 0),
+        declarado_bancolombia: parseFloat(r.declarado_bancolombia || 0),
+        declarado_efectivo_usd: parseFloat(r.declarado_efectivo_usd || 0),
         diferencia_caja: parseFloat(r.diferencia_caja || 0)
       }
     });
@@ -258,7 +278,8 @@ export async function cerrarCaja(req, res) {
       declarado_zelle,
       declarado_binance,
       declarado_efectivo_pesos,
-      declarado_bancolombia 
+      declarado_bancolombia,
+      declarado_efectivo_usd 
     } = req.body; // Lo que cuenta el cajero físicamente
 
     const session = await db.query('SELECT * FROM sesiones_caja WHERE fecha_cierre IS NULL ORDER BY id DESC LIMIT 1');
@@ -375,14 +396,15 @@ export async function cerrarCaja(req, res) {
     const decBinance = parseFloat(declarado_binance) || 0;
     const decPesos = parseFloat(declarado_efectivo_pesos) || 0;
     const decBancolombia = parseFloat(declarado_bancolombia) || 0;
+    const decUsd = parseFloat(declarado_efectivo_usd) || 0;
 
     // Cerrar la sesión
     const now = localNow();
     const sqlUpdate = isPg
-      ? `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_pago_movil = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9, costo_produccion = $10, utilidad_neta = $11, declarado_cop = $12 WHERE id = $13 RETURNING *`
-      : `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_pago_movil = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9, costo_produccion = $10, utilidad_neta = $11, declarado_cop = $12 WHERE id = $13`;
+      ? `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_pago_movil = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9, declarado_efectivo_usd = $10, costo_produccion = $11, utilidad_neta = $12, declarado_cop = $13 WHERE id = $14 RETURNING *`
+      : `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_pago_movil = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9, declarado_efectivo_usd = $10, costo_produccion = $11, utilidad_neta = $12, declarado_cop = $13 WHERE id = $14`;
       
-    const result = await db.execute(sqlUpdate, [now, totalIngresosCop, totalGastos, diferencia, decPagoMovil, decZelle, decBinance, decPesos, decBancolombia, costoProduccion, utilidadNeta, declarado, currentSession.id]);
+    const result = await db.execute(sqlUpdate, [now, totalIngresosCop, totalGastos, diferencia, decPagoMovil, decZelle, decBinance, decPesos, decBancolombia, decUsd, costoProduccion, utilidadNeta, declarado, currentSession.id]);
     
     let sessionRes = result;
     if (!isPg) {
@@ -406,6 +428,11 @@ export async function cerrarCaja(req, res) {
         saldo_teorico: saldoTeorico,
         monto_declarado: declarado,
         declarado_pago_movil: decPagoMovil,
+        declarado_zelle: decZelle,
+        declarado_binance: decBinance,
+        declarado_efectivo_pesos: decPesos,
+        declarado_bancolombia: decBancolombia,
+        declarado_efectivo_usd: decUsd,
         diferencia: diferencia
       },
       sesion: sessionRes[0]

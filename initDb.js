@@ -65,6 +65,7 @@ export async function initializeDatabase() {
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS nombre_cajero TEXT;');
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS fondo_inicial_usd DOUBLE PRECISION NOT NULL DEFAULT 0.0;');
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_efectivo_bs DOUBLE PRECISION DEFAULT 0.0;');
+      await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_efectivo_usd DOUBLE PRECISION DEFAULT 0.0;');
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_zelle DOUBLE PRECISION DEFAULT 0.0;');
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_binance DOUBLE PRECISION DEFAULT 0.0;');
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_efectivo_pesos DOUBLE PRECISION DEFAULT 0.0;');
@@ -543,6 +544,11 @@ async function runMigrations() {
   // Pago Móvil declarado en el cierre de caja
   try { 
     await db.execute("ALTER TABLE sesiones_caja ADD COLUMN declarado_pago_movil REAL DEFAULT 0.0"); 
+  } catch(e) {}
+
+  // Efectivo USD declarado en el cierre de caja
+  try { 
+    await db.execute("ALTER TABLE sesiones_caja ADD COLUMN declarado_efectivo_usd REAL DEFAULT 0.0"); 
   } catch(e) {}
 
   // Migraciones para Batido Combinado

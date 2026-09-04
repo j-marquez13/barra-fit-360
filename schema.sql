@@ -212,6 +212,7 @@ CREATE TABLE sesiones_caja (
     turno TEXT NOT NULL DEFAULT 'Mañana',
     nombre_cajero TEXT,
     declarado_efectivo_bs REAL DEFAULT 0.0,
+    declarado_efectivo_usd REAL DEFAULT 0.0,
     declarado_zelle REAL DEFAULT 0.0,
     declarado_binance REAL DEFAULT 0.0,
     declarado_efectivo_pesos REAL DEFAULT 0.0,

@@ -86,6 +86,7 @@ async function run() {
       ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS estado TEXT NOT NULL DEFAULT 'Abierta';
       ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS usuario_id INTEGER;
       ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_efectivo_bs REAL DEFAULT 0.0;
+      ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_efectivo_usd REAL DEFAULT 0.0;
       ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_zelle REAL DEFAULT 0.0;
       ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_binance REAL DEFAULT 0.0;
       ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_efectivo_pesos REAL DEFAULT 0.0;

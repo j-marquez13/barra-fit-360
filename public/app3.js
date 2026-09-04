@@ -158,6 +158,10 @@ checkApiHealth();
   // ⭐ Inicializar sistema de turnos
   initTurnoSystem();
 
+  // ⭐ Aviso automático de cierre según el horario del turno
+  verificarHorarioCierre();
+  setInterval(verificarHorarioCierre, 30000);
+
   // Búsqueda en catálogo POS
   DOM.searchInput.addEventListener('input', (e) => {
     STATE.searchQuery = e.target.value;
@@ -4137,11 +4141,16 @@ async function cerrarTurnoActual() {
           declarado_binance: decBinance,
           declarado_efectivo_pesos: decPesos,
           declarado_bancolombia: decBanco,
+          declarado_efectivo_usd: decUsd,
           tasas: { USD: rateUsd, VES: rateVes }
         }) // Backend no guarda Efectivo USD separado ahora mismo, lo suma en monto_declarado_cop
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error);
+
+      // Caja cerrada: limpiar la sesión activa para detener los avisos de cierre
+      TURNO_STATE.sesionActiva = null;
+      currentSessionId = null;
       
       // Mostrar Ticket de Éxito
       viewArqueo.style.display = 'none';
@@ -4158,6 +4167,12 @@ async function cerrarTurnoActual() {
       utilEl.style.color = utilidad >= 0 ? 'var(--success)' : 'var(--danger)';
       document.getElementById('ticket-esperado').textContent = `$${d.resumen.saldo_teorico.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       document.getElementById('ticket-declarado').textContent = `$${d.resumen.monto_declarado.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      document.getElementById('ticket-pago-movil').textContent = `Bs ${(d.resumen.declarado_pago_movil || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      document.getElementById('ticket-zelle').textContent = `$${(d.resumen.declarado_zelle || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      document.getElementById('ticket-binance').textContent = `$${(d.resumen.declarado_binance || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      document.getElementById('ticket-efectivo-usd').textContent = `$${(d.resumen.declarado_efectivo_usd || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      document.getElementById('ticket-efectivo-pesos').textContent = `$${(d.resumen.declarado_efectivo_pesos || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      document.getElementById('ticket-bancolombia').textContent = `$${(d.resumen.declarado_bancolombia || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       
       const diff = d.resumen.diferencia;
       const diffEl = document.getElementById('ticket-diferencia');
@@ -4219,6 +4234,11 @@ window.loadCierreDia = async function() {
     document.getElementById('dia-gastos').textContent = `$${(r.total_gastos_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     document.getElementById('dia-declarado').textContent = `$${(r.declarado_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     document.getElementById('dia-pago-movil').textContent = `Bs ${(r.declarado_pago_movil || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+    document.getElementById('dia-zelle').textContent = `$${(r.declarado_zelle || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+    document.getElementById('dia-binance').textContent = `$${(r.declarado_binance || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+    document.getElementById('dia-efectivo-usd').textContent = `$${(r.declarado_efectivo_usd || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+    document.getElementById('dia-efectivo-pesos').textContent = `$${(r.declarado_efectivo_pesos || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+    document.getElementById('dia-bancolombia').textContent = `$${(r.declarado_bancolombia || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
 
     const utilidad = r.utilidad_neta || 0;
     const utilEl = document.getElementById('dia-utilidad');
@@ -4328,6 +4348,11 @@ window.verTicketCierre = function(idx) {
   document.getElementById('dia-reposicion').textContent = `-$${fmt(c.reposicion)}`;
   document.getElementById('dia-declarado').textContent = `$${fmt(c.declarado_cop)}`;
   document.getElementById('dia-pago-movil').textContent = `Bs ${fmt(c.declarado_pago_movil)}`;
+  document.getElementById('dia-zelle').textContent = `$${fmt(c.declarado_zelle)}`;
+  document.getElementById('dia-binance').textContent = `$${fmt(c.declarado_binance)}`;
+  document.getElementById('dia-efectivo-usd').textContent = `$${fmt(c.declarado_efectivo_usd)}`;
+  document.getElementById('dia-efectivo-pesos').textContent = `$${fmt(c.declarado_efectivo_pesos)}`;
+  document.getElementById('dia-bancolombia').textContent = `$${fmt(c.declarado_bancolombia)}`;
 
   const utilEl = document.getElementById('dia-utilidad');
   utilEl.textContent = `$${fmt(c.utilidad_neta)}`;
@@ -4604,6 +4629,59 @@ const TURNO_STATE = {
   usuarios: [],
   sesionActiva: null
 };
+
+// ============================================
+// AVISO DE CIERRE SEGÚN HORARIO DE TURNO
+// Mañana: 7:00 AM – 2:00 PM | Tarde: 2:00 PM – 10:00 PM | Completo: 7:00 AM – 10:00 PM
+// Avisa cuando pasan 15 minutos de la hora de cierre y la caja sigue abierta.
+// ============================================
+const HORARIOS_TURNO = {
+  'Mañana':   { cierre: '2:00 PM',  aviso: '14:15', nombre: 'Turno de la mañana' },
+  'Tarde':    { cierre: '10:00 PM', aviso: '22:15', nombre: 'Turno de la tarde' },
+  'Completo': { cierre: '10:00 PM', aviso: '22:15', nombre: 'Día completo' }
+};
+
+let _avisoSesionId = null;
+let _ultimoAvisoCierre = 0;
+
+// Minutos transcurridos desde la medianoche en hora local Venezuela (UTC-4)
+function minutosLocalVenezuela() {
+  const now = new Date();
+  const local = new Date(now.getTime() - 4 * 60 * 60 * 1000);
+  return local.getUTCHours() * 60 + local.getUTCMinutes();
+}
+
+// Verifica si la caja abierta ya pasó su hora de cierre y lanza un aviso
+function verificarHorarioCierre() {
+  const sesion = TURNO_STATE.sesionActiva;
+  if (!sesion) {
+    _avisoSesionId = null;
+    return;
+  }
+
+  // Reiniciar el contador de avisos si cambió la sesión
+  if (sesion.id !== _avisoSesionId) {
+    _avisoSesionId = sesion.id;
+    _ultimoAvisoCierre = 0;
+  }
+
+  const turno = sesion.turno || 'Mañana';
+  const horario = HORARIOS_TURNO[turno];
+  if (!horario) return;
+
+  const [hh, mm] = horario.aviso.split(':').map(Number);
+  const avisoMin = hh * 60 + mm;
+  const ahoraMin = minutosLocalVenezuela();
+
+  if (ahoraMin < avisoMin) return;
+
+  // Reaviso cada 5 minutos para no saturar la pantalla
+  const marca = Math.floor(ahoraMin / 5);
+  if (marca === _ultimoAvisoCierre) return;
+  _ultimoAvisoCierre = marca;
+
+  showToast(`⏰ ${horario.nombre} ya terminó (cierre ${horario.cierre}). Debes cerrar la caja.`, 'warning');
+}
 
 /**
  * Cierra la sesión del dispositivo y vuelve a la pantalla de turno.
@@ -5106,7 +5184,7 @@ async function iniciarTurno() {
     }
     
     hideTurnoScreen(dataCaja.sesion, nombreCajero);
-    showToast(`✅ Bienvenido/a ${nombreCajero}! Turno ${turnoSeleccionado} iniciado.`, 'success');
+    showToast(`✅ Bienvenido/a ${nombreCajero}! Turno ${turnoUsuario} iniciado.`, 'success');
 
   } catch (err) {
     errorEl.textContent = err.message;
