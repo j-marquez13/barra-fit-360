@@ -924,7 +924,7 @@ const basesActivas = (STATE.recetasBase || []).filter(r => r.activa_batido);
         const costo = parseFloat(b.costo_total) || 0;
         return `
           <label class="batido-option">
-            <input type="checkbox" class="rb-opcion-cb" data-id="${b.id}" data-costo="${costo}" checked onchange="updateBatidoCost()">
+            <input type="checkbox" class="rb-opcion-cb" data-id="${b.id}" data-costo="${costo}" onchange="updateBatidoCost()">
             <span class="batido-check"><i data-lucide="check"></i></span>
             <span class="batido-option-body">
               <span class="batido-option-name">${b.nombre}</span>
@@ -984,10 +984,11 @@ const basesActivas = (STATE.recetasBase || []).filter(r => r.activa_batido);
 
       const esNormalConRecetas = (!prod.receta_base_id && tieneRecetasBase && !esCombinado);
       
-      // Calcular costo inicial para batidos normales
+      // Calcular costo inicial para batidos normales.
+      // Las recetas base NO vienen marcadas: el costo arranca en 0 y sube al elegirlas.
       let initialCost = costoReceta;
       if (esNormalConRecetas) {
-        initialCost = basesActivas.reduce((sum, b) => sum + (parseFloat(b.costo_total) || 0), 0);
+        initialCost = 0;
       }
 
       openGenericModal(`Opciones para ${prod.nombre}`, `
