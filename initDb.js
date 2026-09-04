@@ -41,7 +41,8 @@ export async function initializeDatabase() {
         tasa_cambio NUMERIC(12, 4) DEFAULT 1.0000,
         total_cop NUMERIC(12, 2) NOT NULL,
         sesion_caja_id INTEGER REFERENCES sesiones_caja(id) ON DELETE SET NULL,
-        afecta_inventario BOOLEAN DEFAULT TRUE
+        afecta_inventario BOOLEAN DEFAULT TRUE,
+        recibida BOOLEAN DEFAULT FALSE
       )`);
       await db.execute(`CREATE TABLE IF NOT EXISTS ordenes_compra_items (
         id SERIAL PRIMARY KEY,
@@ -49,7 +50,8 @@ export async function initializeDatabase() {
         insumo_id INT NOT NULL REFERENCES insumos(id) ON DELETE RESTRICT,
         cantidad NUMERIC(12, 2) NOT NULL,
         costo_unitario NUMERIC(12, 2) NOT NULL,
-        monto_cop NUMERIC(12, 2) NOT NULL
+        monto_cop NUMERIC(12, 2) NOT NULL,
+        cantidad_recibida NUMERIC(12, 2)
       )`);
       // Migración completa de columnas (todas las tablas)
       await db.execute('ALTER TABLE clientes ADD COLUMN IF NOT EXISTS permite_saldo_favor BOOLEAN DEFAULT FALSE;');
@@ -85,6 +87,8 @@ export async function initializeDatabase() {
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS utilidad_neta DOUBLE PRECISION DEFAULT 0.0;');
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_cop DOUBLE PRECISION DEFAULT 0.0;');
       await db.execute('ALTER TABLE ordenes_compra ADD COLUMN IF NOT EXISTS afecta_inventario BOOLEAN DEFAULT TRUE;');
+      await db.execute('ALTER TABLE ordenes_compra ADD COLUMN IF NOT EXISTS recibida BOOLEAN DEFAULT FALSE;');
+      await db.execute('ALTER TABLE ordenes_compra_items ADD COLUMN IF NOT EXISTS cantidad_recibida NUMERIC(12, 2);');
       await db.execute('ALTER TABLE gastos ADD COLUMN IF NOT EXISTS orden_compra_id INTEGER;');
 
       // El sistema permite stock negativo al facturar (emite advertencia y procesa la venta),
@@ -451,6 +455,7 @@ async function createTables() {
       total_cop REAL NOT NULL,
       sesion_caja_id INTEGER,
       afecta_inventario INTEGER DEFAULT 1,
+      recibida INTEGER DEFAULT 0,
       FOREIGN KEY (sesion_caja_id) REFERENCES sesiones_caja(id) ON DELETE SET NULL
     )
   `);
@@ -462,6 +467,7 @@ async function createTables() {
       cantidad REAL NOT NULL,
       costo_unitario REAL NOT NULL,
       monto_cop REAL NOT NULL,
+      cantidad_recibida REAL,
       FOREIGN KEY (orden_id) REFERENCES ordenes_compra(id) ON DELETE CASCADE,
       FOREIGN KEY (insumo_id) REFERENCES insumos(id) ON DELETE RESTRICT
     )
@@ -569,6 +575,9 @@ async function runMigrations() {
   try { await db.execute("ALTER TABLE ordenes_compra ADD COLUMN afecta_inventario INTEGER DEFAULT 1"); console.log('   🔄 Migración: columna afecta_inventario agregada a ordenes_compra.'); } catch(e) {}
   // Enlace entre el gasto (reposición) y su orden de compra para poder devolver la plata al borrar.
   try { await db.execute("ALTER TABLE gastos ADD COLUMN orden_compra_id INTEGER"); console.log('   🔄 Migración: columna orden_compra_id agregada a gastos.'); } catch(e) {}
+  // Recepción de mercancía: marca la orden como recibida y guarda lo que en verdad llegó.
+  try { await db.execute("ALTER TABLE ordenes_compra ADD COLUMN recibida INTEGER DEFAULT 0"); console.log('   🔄 Migración: columna recibida agregada a ordenes_compra.'); } catch(e) {}
+  try { await db.execute("ALTER TABLE ordenes_compra_items ADD COLUMN cantidad_recibida REAL"); console.log('   🔄 Migración: columna cantidad_recibida agregada a ordenes_compra_items.'); } catch(e) {}
 }
 
 async function ensureDefaultUsers() {

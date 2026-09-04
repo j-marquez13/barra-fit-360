@@ -62,7 +62,8 @@ async function run() {
         tasa_cambio NUMERIC(12, 4) DEFAULT 1.0000,
         total_cop NUMERIC(12, 2) NOT NULL,
         sesion_caja_id INTEGER REFERENCES sesiones_caja(id) ON DELETE SET NULL,
-        afecta_inventario BOOLEAN DEFAULT TRUE
+        afecta_inventario BOOLEAN DEFAULT TRUE,
+        recibida BOOLEAN DEFAULT FALSE
       );
 
       CREATE TABLE IF NOT EXISTS ordenes_compra_items (
@@ -71,7 +72,8 @@ async function run() {
         insumo_id INT NOT NULL REFERENCES insumos(id) ON DELETE RESTRICT,
         cantidad NUMERIC(12, 2) NOT NULL,
         costo_unitario NUMERIC(12, 2) NOT NULL,
-        monto_cop NUMERIC(12, 2) NOT NULL
+        monto_cop NUMERIC(12, 2) NOT NULL,
+        cantidad_recibida NUMERIC(12, 2)
       );
 
       -- Add missing columns to sesiones_caja
@@ -97,6 +99,8 @@ async function run() {
       ALTER TABLE gastos ADD COLUMN IF NOT EXISTS sesion_caja_id INTEGER REFERENCES sesiones_caja(id);
       ALTER TABLE gastos ADD COLUMN IF NOT EXISTS metodo_pago TEXT NOT NULL DEFAULT 'Efectivo COP';
       ALTER TABLE gastos ADD COLUMN IF NOT EXISTS orden_compra_id INTEGER;
+      ALTER TABLE ordenes_compra ADD COLUMN IF NOT EXISTS recibida BOOLEAN DEFAULT FALSE;
+      ALTER TABLE ordenes_compra_items ADD COLUMN IF NOT EXISTS cantidad_recibida NUMERIC(12, 2);
     `);
     
     console.log("✅ Schema applied successfully");

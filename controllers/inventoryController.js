@@ -353,35 +353,27 @@ export async function confirmarOrdenCompra(req, res) {
 
         if (!insumoId || !cantidad || cantidad <= 0) continue;
 
-        const existing = await tx.query('SELECT id, nombre, stock_actual FROM insumos WHERE id = $1', [insumoId]);
+        const existing = await tx.query('SELECT id, nombre FROM insumos WHERE id = $1', [insumoId]);
         if (existing.length === 0) continue;
 
         const nombre = existing[0].nombre;
-        const stockAnterior = parseFloat(existing[0].stock_actual) || 0;
         const montoCop = cantidad * costo;
         totalCop += montoCop;
 
-        procesados.push({ insumo_id: insumoId, nombre, cantidad, costo_unitario: costo, monto_cop: montoCop, stock_anterior: stockAnterior });
+        procesados.push({ insumo_id: insumoId, nombre, cantidad, costo_unitario: costo, monto_cop: montoCop });
       }
 
       // 2. Cabecera de la orden de compra (historial).
-      // afecta_inventario = true: la orden suma stock al inventario.
+      // La orden se crea SIN tocar el inventario: el stock se suma al "recibir".
       const ordenSql = isPg
-        ? 'INSERT INTO ordenes_compra (metodo_pago, moneda, tasa_cambio, total_cop, sesion_caja_id, afecta_inventario) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id'
-        : 'INSERT INTO ordenes_compra (metodo_pago, moneda, tasa_cambio, total_cop, sesion_caja_id, afecta_inventario) VALUES ($1, $2, $3, $4, $5, $6)';
-      const ordenRes = await tx.execute(ordenSql, [metodo_pago, monedaPago, tasa, totalCop, sesion_caja_id, true]);
+        ? 'INSERT INTO ordenes_compra (metodo_pago, moneda, tasa_cambio, total_cop, sesion_caja_id, afecta_inventario, recibida) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id'
+        : 'INSERT INTO ordenes_compra (metodo_pago, moneda, tasa_cambio, total_cop, sesion_caja_id, afecta_inventario, recibida) VALUES ($1, $2, $3, $4, $5, $6, $7)';
+      const ordenRes = await tx.execute(ordenSql, [metodo_pago, monedaPago, tasa, totalCop, sesion_caja_id, false, false]);
       const ordenId = ordenRes[0]?.id;
 
-      // 3. Sumar lo confirmado al inventario, registrar el gasto (plata que sale)
-      //    y guardar los items de la orden.
+      // 3. Registrar el gasto (plata que sale) y los items de la orden.
+      //    AQUÍ NO se suma stock: el stock se sumará al "recibir" la orden.
       for (const p of procesados) {
-        // Lo confirmado entra al inventario (stock + cantidad).
-        const nuevoStock = p.stock_anterior + p.cantidad;
-        await tx.execute(
-          'UPDATE insumos SET stock_actual = $1, costo_unitario = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3',
-          [nuevoStock, p.costo_unitario, p.insumo_id]
-        );
-
         const montoOriginal = monedaPago === 'COP' ? p.monto_cop : p.monto_cop / tasa;
         await tx.execute(
           'INSERT INTO gastos (sesion_caja_id, orden_compra_id, categoria, descripcion, monto, moneda, tasa_cambio, monto_cop, metodo_pago) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
@@ -396,7 +388,7 @@ export async function confirmarOrdenCompra(req, res) {
     });
 
     return res.json({
-      mensaje: 'Orden de compra confirmada correctamente.',
+      mensaje: 'Orden de compra registrada correctamente. Recíbela cuando llegue la mercancía.',
       total_cop: totalCop,
       items: procesados
     });
@@ -410,7 +402,7 @@ export async function confirmarOrdenCompra(req, res) {
 export async function listarOrdenesCompra(req, res) {
   try {
     const ordenes = await db.query(`
-      SELECT id, fecha, metodo_pago, moneda, tasa_cambio, total_cop
+      SELECT id, fecha, metodo_pago, moneda, tasa_cambio, total_cop, recibida
       FROM ordenes_compra
       ORDER BY id DESC
       LIMIT 100
@@ -429,7 +421,7 @@ export async function getOrdenCompraDetalle(req, res) {
     const orden = await db.query('SELECT * FROM ordenes_compra WHERE id = $1', [id]);
     if (orden.length === 0) return res.status(404).json({ error: 'Orden no encontrada.' });
     const items = await db.query(`
-      SELECT oci.cantidad, oci.costo_unitario, oci.monto_cop, i.nombre, i.unidad_medida
+      SELECT oci.id AS item_id, oci.insumo_id, oci.cantidad, oci.cantidad_recibida, oci.costo_unitario, oci.monto_cop, i.nombre, i.unidad_medida
       FROM ordenes_compra_items oci
       JOIN insumos i ON oci.insumo_id = i.id
       WHERE oci.orden_id = $1
@@ -439,6 +431,59 @@ export async function getOrdenCompraDetalle(req, res) {
   } catch (error) {
     console.error('Error al obtener detalle de orden:', error);
     return res.status(500).json({ error: 'Error al obtener el detalle de la orden.' });
+  }
+}
+
+// POST /api/inventario/ordenes-compra/:id/recibir — Registra lo que en verdad llegó
+// y suma esas cantidades al inventario.
+export async function recibirOrdenCompra(req, res) {
+  const { id } = req.params;
+  const { items } = req.body;
+
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'Debes indicar las cantidades recibidas.' });
+  }
+
+  try {
+    const orden = await db.query('SELECT * FROM ordenes_compra WHERE id = $1', [id]);
+    if (orden.length === 0) return res.status(404).json({ error: 'Orden no encontrada.' });
+
+    const r = orden[0].recibida;
+    const yaRecibida = r === true || r === 1 || r === '1' || r === 't' || r === 'true' || r === 'TRUE';
+    if (yaRecibida) {
+      return res.status(400).json({ error: 'Esta orden ya fue recibida.' });
+    }
+
+    await db.transaction(async (tx) => {
+      for (const it of items) {
+        const itemId = it.item_id;
+        const cantidadRecibida = parseFloat(it.cantidad_recibida);
+        if (!itemId || !cantidadRecibida || cantidadRecibida <= 0) continue;
+
+        const item = await tx.query('SELECT insumo_id, costo_unitario FROM ordenes_compra_items WHERE id = $1 AND orden_id = $2', [itemId, id]);
+        if (item.length === 0) continue;
+
+        const insumoId = item[0].insumo_id;
+        const costo = parseFloat(item[0].costo_unitario) || 0;
+
+        // Sumar lo que en verdad llegó al inventario.
+        await tx.execute(
+          'UPDATE insumos SET stock_actual = stock_actual + $1, costo_unitario = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3',
+          [cantidadRecibida, costo, insumoId]
+        );
+
+        // Guardar la cantidad recibida en el item de la orden.
+        await tx.execute('UPDATE ordenes_compra_items SET cantidad_recibida = $1 WHERE id = $2', [cantidadRecibida, itemId]);
+      }
+
+      // Marcar la orden como recibida.
+      await tx.execute('UPDATE ordenes_compra SET recibida = $1 WHERE id = $2', [true, id]);
+    });
+
+    return res.json({ mensaje: 'Recepción guardada. Lo recibido se sumó al inventario.' });
+  } catch (error) {
+    console.error('Error al recibir orden de compra:', error);
+    return res.status(500).json({ error: 'Error al recibir la orden de compra.', detalle: error.message });
   }
 }
 
@@ -455,7 +500,7 @@ export async function borrarOrdenCompra(req, res) {
     const afectaInventario = afecta === true || afecta === 1 || afecta === '1' || afecta === 't' || afecta === 'true' || afecta === 'TRUE';
 
     const items = await db.query(
-      'SELECT oci.insumo_id, oci.cantidad, oci.monto_cop, i.nombre FROM ordenes_compra_items oci JOIN insumos i ON oci.insumo_id = i.id WHERE oci.orden_id = $1',
+      'SELECT oci.insumo_id, oci.cantidad, oci.cantidad_recibida, oci.monto_cop, i.nombre FROM ordenes_compra_items oci JOIN insumos i ON oci.insumo_id = i.id WHERE oci.orden_id = $1',
       [id]
     );
 
@@ -483,15 +528,19 @@ export async function borrarOrdenCompra(req, res) {
     }
 
     await db.transaction(async (tx) => {
-      // 1. Revertir el stock SOLO si esta orden lo había sumado (órdenes antiguas).
-      if (afectaInventario) {
-        for (const it of items) {
-          const ins = await tx.query('SELECT stock_actual FROM insumos WHERE id = $1', [it.insumo_id]);
-          if (ins.length === 0) continue;
-          const actual = parseFloat(ins[0].stock_actual) || 0;
-          const nuevo = Math.max(0, actual - parseFloat(it.cantidad));
-          await tx.execute('UPDATE insumos SET stock_actual = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [nuevo, it.insumo_id]);
-        }
+      // 1. Revertir el stock que se haya sumado (por recepción o por órdenes antiguas).
+      for (const it of items) {
+        const recibida = it.cantidad_recibida;
+        const aRevertir = (recibida !== null && recibida !== undefined && parseFloat(recibida) > 0)
+          ? parseFloat(recibida)
+          : (afectaInventario ? parseFloat(it.cantidad) : 0);
+        if (!aRevertir || aRevertir <= 0) continue;
+
+        const ins = await tx.query('SELECT stock_actual FROM insumos WHERE id = $1', [it.insumo_id]);
+        if (ins.length === 0) continue;
+        const actual = parseFloat(ins[0].stock_actual) || 0;
+        const nuevo = Math.max(0, actual - aRevertir);
+        await tx.execute('UPDATE insumos SET stock_actual = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [nuevo, it.insumo_id]);
       }
 
       // 2. Devolver la plata: restaurar el saldo de tesorería y eliminar el gasto.

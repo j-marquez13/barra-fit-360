@@ -231,7 +231,8 @@ CREATE TABLE ordenes_compra (
     tasa_cambio NUMERIC(12, 4) DEFAULT 1.0000,
     total_cop NUMERIC(12, 2) NOT NULL,
     sesion_caja_id INTEGER REFERENCES sesiones_caja(id) ON DELETE SET NULL,
-    afecta_inventario BOOLEAN DEFAULT TRUE
+    afecta_inventario BOOLEAN DEFAULT TRUE,
+    recibida BOOLEAN DEFAULT FALSE
 );
 
 CREATE TABLE ordenes_compra_items (
@@ -240,7 +241,8 @@ CREATE TABLE ordenes_compra_items (
     insumo_id INT NOT NULL REFERENCES insumos(id) ON DELETE RESTRICT,
     cantidad NUMERIC(12, 2) NOT NULL,
     costo_unitario NUMERIC(12, 2) NOT NULL,
-    monto_cop NUMERIC(12, 2) NOT NULL
+    monto_cop NUMERIC(12, 2) NOT NULL,
+    cantidad_recibida NUMERIC(12, 2)
 );
 
 -- 14. Tesorería - Cuentas Bancarias

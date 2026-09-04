@@ -1631,7 +1631,7 @@ window.confirmarOrdenCompra = async function() {
   }).join('');
 
   openGenericModal('Confirmar Compra', `
-    <p class="text-muted" style="margin-bottom:12px;">¿Confirmas esta orden de compra? Los insumos confirmados se sumarán al inventario.</p>
+    <p class="text-muted" style="margin-bottom:12px;">¿Confirmas esta orden de compra? Se registrará la compra; la mercancía se sumará al inventario cuando la recibas.</p>
     <div style="max-height:240px; overflow-y:auto;">${lista}</div>
     <div style="display:flex; justify-content:space-between; border-top:1px solid var(--border-glass); padding-top:10px; margin-top:10px; font-size:1.15em; font-weight:800;">
       <span>Total</span><span style="color:var(--success);">$${total.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span>
@@ -1651,7 +1651,7 @@ window.confirmarOrdenCompra = async function() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al confirmar la compra');
       closeGenericModal();
-      showToast('Orden de compra confirmada correctamente.', 'success');
+      showToast(data.mensaje || 'Orden de compra registrada correctamente.', 'success');
       await loadOrdenCompra();
       await loadInventarioData();
     } catch (e) {
@@ -1666,30 +1666,38 @@ window.confirmarOrdenCompra = async function() {
 window.loadHistorialCompras = async function() {
   const tbody = document.getElementById('tbody-historial-compras');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="5" class="loading-cell">Cargando historial...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="6" class="loading-cell">Cargando historial...</td></tr>';
   try {
     const res = await fetch('/api/inventario/ordenes-compra');
     if (!res.ok) throw new Error('Error al cargar el historial');
     const ordenes = await res.json();
     if (ordenes.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" class="loading-cell">No hay órdenes de compra registradas.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="loading-cell">No hay órdenes de compra registradas.</td></tr>';
       return;
     }
     tbody.innerHTML = ordenes.map(o => {
       const fecha = o.fecha ? new Date(o.fecha).toLocaleString() : '—';
+      const r = o.recibida;
+      const recibida = r === true || r === 1 || r === '1' || r === 't' || r === 'true' || r === 'TRUE';
+      const estado = recibida
+        ? '<span class="status-pill status-ok">Recibida</span>'
+        : '<span class="status-pill status-warn">Pendiente</span>';
+      const btnRecibir = recibida ? '' : `<button class="table-btn btn-restock" onclick="recibirOrdenCompra(${o.id})" style="margin-left:6px;">Recibir</button>`;
       return `<tr>
         <td>${fecha}</td>
         <td>${o.metodo_pago}</td>
         <td>${o.moneda}</td>
         <td class="font-outfit" style="color:var(--success);">$${(parseFloat(o.total_cop) || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+        <td>${estado}</td>
         <td style="text-align:right; white-space:nowrap;">
           <button class="table-btn btn-edit" onclick="verDetalleOrdenCompra(${o.id})">Ver</button>
+          ${btnRecibir}
           <button class="table-btn btn-danger" onclick="borrarOrdenCompra(${o.id})" style="background:var(--danger); color:#fff; border:none; margin-left:6px;">Borrar</button>
         </td>
       </tr>`;
     }).join('');
   } catch (e) {
-    tbody.innerHTML = '<tr><td colspan="5" class="loading-cell" style="color:var(--danger);">Error al cargar el historial.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="loading-cell" style="color:var(--danger);">Error al cargar el historial.</td></tr>';
   }
 };
 
@@ -1706,6 +1714,60 @@ window.verDetalleOrdenCompra = async function(id) {
       <div style="max-height:240px; overflow-y:auto;">${lista}</div>
       <div style="display:flex; justify-content:space-between; border-top:1px solid var(--border-glass); padding-top:10px; margin-top:10px; font-size:1.1em; font-weight:800;"><span>Total</span><span style="color:var(--success);">$${(parseFloat(o.total_cop) || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>
     `);
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+};
+
+window.recibirOrdenCompra = async function(id) {
+  try {
+    const res = await fetch('/api/inventario/ordenes-compra/' + id);
+    if (!res.ok) throw new Error('Error al obtener la orden');
+    const data = await res.json();
+    const items = data.items || [];
+
+    const filas = items.map(it => `
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+        <span style="flex:1; min-width:140px;">${it.nombre} <span class="text-muted">(pedido: ${it.cantidad} ${it.unidad_medida || ''})</span></span>
+        <input type="number" class="recibir-qty" data-item-id="${it.item_id}" value="${it.cantidad}" min="0" step="any" style="width:110px; background:rgba(0,0,0,0.25); border:1px solid var(--border-glass); border-radius:6px; padding:6px 8px; color:var(--color-text); font-family:var(--font-title);">
+      </div>`).join('');
+
+    openGenericModal('Recibir Mercancía', `
+      <p class="text-muted" style="margin-bottom:12px;">Coloca la cantidad que <strong>en verdad llegó</strong> de cada insumo. Eso se sumará al inventario.</p>
+      <div style="max-height:260px; overflow-y:auto;">${filas}</div>
+    `, async () => {
+      const btn = DOM.btnSubmitGeneric;
+      btn.disabled = true;
+      btn.innerHTML = '<i data-lucide="loader" class="spin"></i> Guardando...';
+      lucide.createIcons();
+      try {
+        const recibidos = [];
+        document.querySelectorAll('.recibir-qty').forEach(inp => {
+          const qty = parseFloat(inp.value);
+          if (!isNaN(qty) && qty > 0) {
+            recibidos.push({ item_id: inp.dataset.itemId, cantidad_recibida: qty });
+          }
+        });
+        if (recibidos.length === 0) throw new Error('Coloca al menos una cantidad recibida.');
+
+        const r = await fetch('/api/inventario/ordenes-compra/' + id + '/recibir', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: recibidos })
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || 'Error al recibir la orden');
+        closeGenericModal();
+        showToast(d.mensaje || 'Recepción guardada.', 'success');
+        await loadHistorialCompras();
+        await loadInventarioData();
+      } catch (e) {
+        alert('Error: ' + e.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i data-lucide="check"></i> Guardar';
+        lucide.createIcons();
+      }
+    });
   } catch (e) {
     alert('Error: ' + e.message);
   }
