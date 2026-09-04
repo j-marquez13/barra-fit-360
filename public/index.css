@@ -3415,3 +3415,19 @@ select.receta-insumo option {
   }
 }
 
+/* ============================================
+   TICKET DE CIERRE — EVITAR DESBORDE DE MARGEN
+   ============================================ */
+.cierre-ticket-preview > div {
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 12px;
+}
+.cierre-ticket-preview > div > strong {
+  min-width: 0;
+  margin-left: auto;
+  text-align: right;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
