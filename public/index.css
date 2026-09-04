@@ -3304,3 +3304,114 @@ select.receta-insumo option {
     gap: 10px;
   }
 }
+
+/* ============================================
+   MEJORAS RESPONSIVE — TABLET Y TELÉFONO
+   ============================================ */
+
+/* 1. Pantalla de turno (login): permitir scroll si no cabe en pantalla */
+@media (max-width: 768px) {
+  #turno-screen {
+    overflow-y: auto;
+    justify-content: flex-start;
+    padding: 20px 12px calc(20px + env(safe-area-inset-bottom, 0px));
+    padding-top: calc(20px + env(safe-area-inset-top, 0px));
+  }
+  .turno-card {
+    margin: auto 0; /* centra cuando cabe, permite scroll cuando no */
+  }
+}
+
+/* 2. Tickets de cierre: ancho completo y filas que se adaptan en teléfonos */
+@media (max-width: 600px) {
+  .cierre-ticket-preview {
+    max-width: 100% !important;
+    padding: 14px !important;
+    font-size: 0.85rem;
+  }
+  .cierre-ticket-preview div {
+    flex-wrap: wrap;
+    gap: 4px 10px;
+  }
+}
+
+/* 3. Modales en teléfono: altura contenida y botones que fluyen */
+@media (max-width: 600px) {
+  .modal-box {
+    max-height: 92vh;
+  }
+  .modal-footer {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .cierre-bottom-panel {
+    padding: 12px;
+  }
+  .cierre-caja-grid {
+    padding: 12px;
+  }
+}
+
+
+/* ============================================
+   RESPONSIVE AUTOMÁTICO — TODOS LOS DISPOSITIVOS
+   ============================================ */
+
+/* --- TABLET (769px - 1024px) --- */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .products-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  }
+  .catalog-section {
+    padding: 12px 14px;
+  }
+  .module-content {
+    padding: 14px;
+  }
+  .modal-box {
+    width: 92%;
+  }
+}
+
+/* --- TELÉFONO (hasta 480px) --- */
+@media (max-width: 480px) {
+  .products-grid {
+    grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+    gap: 10px;
+  }
+  .product-card {
+    padding: 10px;
+  }
+  .kpi-grid {
+    grid-template-columns: 1fr;
+  }
+  .data-table th,
+  .data-table td {
+    padding: 8px 10px;
+    font-size: 0.72rem;
+  }
+  .cart-section {
+    height: 260px;
+  }
+  .cierre-method-head {
+    flex-wrap: wrap;
+  }
+  .turno-options {
+    grid-template-columns: 1fr;
+  }
+  .modal-footer .action-btn {
+    flex: 1 1 auto;
+    font-size: 0.8rem;
+  }
+}
+
+/* --- PANTALLAS MUY PEQUEÑAS (hasta 360px) --- */
+@media (max-width: 360px) {
+  .products-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .view-title {
+    font-size: 0.9rem;
+  }
+}
+
