@@ -371,15 +371,9 @@ export async function confirmarOrdenCompra(req, res) {
       const ordenRes = await tx.execute(ordenSql, [metodo_pago, monedaPago, tasa, totalCop, sesion_caja_id, false, false]);
       const ordenId = ordenRes[0]?.id;
 
-      // 3. Registrar el gasto (plata que sale) y los items de la orden.
-      //    AQUÍ NO se suma stock: el stock se sumará al "recibir" la orden.
+      // 3. Guardar los items de la orden.
+      //    AQUÍ NO se registra plata ni stock: ambos se hacen al "recibir" la orden.
       for (const p of procesados) {
-        const montoOriginal = monedaPago === 'COP' ? p.monto_cop : p.monto_cop / tasa;
-        await tx.execute(
-          'INSERT INTO gastos (sesion_caja_id, orden_compra_id, categoria, descripcion, monto, moneda, tasa_cambio, monto_cop, metodo_pago) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-          [sesion_caja_id, ordenId, 'REPOSICION', `Reposición de ${p.cantidad} ${p.nombre}`, montoOriginal, monedaPago, tasa, p.monto_cop, metodo_pago]
-        );
-
         await tx.execute(
           'INSERT INTO ordenes_compra_items (orden_id, insumo_id, cantidad, costo_unitario, monto_cop) VALUES ($1, $2, $3, $4, $5)',
           [ordenId, p.insumo_id, p.cantidad, p.costo_unitario, p.monto_cop]
@@ -388,7 +382,7 @@ export async function confirmarOrdenCompra(req, res) {
     });
 
     return res.json({
-      mensaje: 'Orden de compra registrada correctamente. Recíbela cuando llegue la mercancía.',
+      mensaje: 'Orden de compra registrada. La plata se descontará cuando la recibas.',
       total_cop: totalCop,
       items: procesados
     });
@@ -448,23 +442,36 @@ export async function recibirOrdenCompra(req, res) {
     const orden = await db.query('SELECT * FROM ordenes_compra WHERE id = $1', [id]);
     if (orden.length === 0) return res.status(404).json({ error: 'Orden no encontrada.' });
 
-    const r = orden[0].recibida;
+    const o = orden[0];
+    const r = o.recibida;
     const yaRecibida = r === true || r === 1 || r === '1' || r === 't' || r === 'true' || r === 'TRUE';
     if (yaRecibida) {
       return res.status(400).json({ error: 'Esta orden ya fue recibida.' });
     }
 
+    const tasa = parseFloat(o.tasa_cambio) || 1;
+    const monedaPago = o.moneda || 'COP';
+    const metodoPago = o.metodo_pago;
+
     await db.transaction(async (tx) => {
+      const openSession = await tx.query("SELECT id FROM sesiones_caja WHERE fecha_cierre IS NULL AND estado = 'Abierta' ORDER BY id DESC LIMIT 1");
+      const sesion_caja_id = openSession.length > 0 ? openSession[0].id : null;
+      let totalRecibidoCop = 0;
+
       for (const it of items) {
         const itemId = it.item_id;
         const cantidadRecibida = parseFloat(it.cantidad_recibida);
         if (!itemId || !cantidadRecibida || cantidadRecibida <= 0) continue;
 
-        const item = await tx.query('SELECT insumo_id, costo_unitario FROM ordenes_compra_items WHERE id = $1 AND orden_id = $2', [itemId, id]);
+        const item = await tx.query('SELECT oci.insumo_id, oci.costo_unitario, i.nombre FROM ordenes_compra_items oci JOIN insumos i ON oci.insumo_id = i.id WHERE oci.id = $1 AND oci.orden_id = $2', [itemId, id]);
         if (item.length === 0) continue;
 
         const insumoId = item[0].insumo_id;
         const costo = parseFloat(item[0].costo_unitario) || 0;
+        const nombre = item[0].nombre;
+        const montoCop = cantidadRecibida * costo;
+        totalRecibidoCop += montoCop;
+        const montoOriginal = monedaPago === 'COP' ? montoCop : montoCop / tasa;
 
         // Sumar lo que en verdad llegó al inventario.
         await tx.execute(
@@ -474,13 +481,19 @@ export async function recibirOrdenCompra(req, res) {
 
         // Guardar la cantidad recibida en el item de la orden.
         await tx.execute('UPDATE ordenes_compra_items SET cantidad_recibida = $1 WHERE id = $2', [cantidadRecibida, itemId]);
+
+        // Descontar la plata por lo que en verdad llegó.
+        await tx.execute(
+          'INSERT INTO gastos (sesion_caja_id, orden_compra_id, categoria, descripcion, monto, moneda, tasa_cambio, monto_cop, metodo_pago) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+          [sesion_caja_id, id, 'REPOSICION', `Reposición de ${cantidadRecibida} ${nombre}`, montoOriginal, monedaPago, tasa, montoCop, metodoPago]
+        );
       }
 
-      // Marcar la orden como recibida.
-      await tx.execute('UPDATE ordenes_compra SET recibida = $1 WHERE id = $2', [true, id]);
+      // Marcar la orden como recibida y actualizar el total real.
+      await tx.execute('UPDATE ordenes_compra SET recibida = $1, total_cop = $2 WHERE id = $3', [true, totalRecibidoCop, id]);
     });
 
-    return res.json({ mensaje: 'Recepción guardada. Lo recibido se sumó al inventario.' });
+    return res.json({ mensaje: 'Recepción guardada. Se sumó lo recibido al inventario y se descontó la plata.' });
   } catch (error) {
     console.error('Error al recibir orden de compra:', error);
     return res.status(500).json({ error: 'Error al recibir la orden de compra.', detalle: error.message });

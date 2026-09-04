@@ -1631,7 +1631,7 @@ window.confirmarOrdenCompra = async function() {
   }).join('');
 
   openGenericModal('Confirmar Compra', `
-    <p class="text-muted" style="margin-bottom:12px;">¿Confirmas esta orden de compra? Se registrará la compra; la mercancía se sumará al inventario cuando la recibas.</p>
+    <p class="text-muted" style="margin-bottom:12px;">¿Confirmas esta orden de compra? Se registrará la compra; la plata se descontará y la mercancía se sumará al inventario cuando la recibas.</p>
     <div style="max-height:240px; overflow-y:auto;">${lista}</div>
     <div style="display:flex; justify-content:space-between; border-top:1px solid var(--border-glass); padding-top:10px; margin-top:10px; font-size:1.15em; font-weight:800;">
       <span>Total</span><span style="color:var(--success);">$${total.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span>
@@ -1733,7 +1733,7 @@ window.recibirOrdenCompra = async function(id) {
       </div>`).join('');
 
     openGenericModal('Recibir Mercancía', `
-      <p class="text-muted" style="margin-bottom:12px;">Coloca la cantidad que <strong>en verdad llegó</strong> de cada insumo. Eso se sumará al inventario.</p>
+      <p class="text-muted" style="margin-bottom:12px;">Coloca la cantidad que <strong>en verdad llegó</strong> de cada insumo. Eso se sumará al inventario y se descontará la plata.</p>
       <div style="max-height:260px; overflow-y:auto;">${filas}</div>
     `, async () => {
       const btn = DOM.btnSubmitGeneric;
@@ -3085,6 +3085,9 @@ function openGenericModal(title, formHtml, onSubmit) {
   DOM.genericModalTitle.textContent = title;
   DOM.genericModalBody.innerHTML = formHtml;
   DOM.btnSubmitGeneric.onclick = onSubmit;
+  // Resetear el botón de envío para que no quede pegado ("Guardando...") del modal anterior.
+  DOM.btnSubmitGeneric.disabled = false;
+  DOM.btnSubmitGeneric.innerHTML = '<i data-lucide="check"></i> Guardar';
   DOM.genericModal.classList.add('open');
   lucide.createIcons();
 }
