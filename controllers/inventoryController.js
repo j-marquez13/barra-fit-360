@@ -353,27 +353,35 @@ export async function confirmarOrdenCompra(req, res) {
 
         if (!insumoId || !cantidad || cantidad <= 0) continue;
 
-        const existing = await tx.query('SELECT id, nombre FROM insumos WHERE id = $1', [insumoId]);
+        const existing = await tx.query('SELECT id, nombre, stock_actual FROM insumos WHERE id = $1', [insumoId]);
         if (existing.length === 0) continue;
 
         const nombre = existing[0].nombre;
+        const stockAnterior = parseFloat(existing[0].stock_actual) || 0;
         const montoCop = cantidad * costo;
         totalCop += montoCop;
 
-        procesados.push({ insumo_id: insumoId, nombre, cantidad, costo_unitario: costo, monto_cop: montoCop });
+        procesados.push({ insumo_id: insumoId, nombre, cantidad, costo_unitario: costo, monto_cop: montoCop, stock_anterior: stockAnterior });
       }
 
       // 2. Cabecera de la orden de compra (historial).
-      // afecta_inventario = false: la orden ya no modifica el stock.
+      // afecta_inventario = true: la orden suma stock al inventario.
       const ordenSql = isPg
         ? 'INSERT INTO ordenes_compra (metodo_pago, moneda, tasa_cambio, total_cop, sesion_caja_id, afecta_inventario) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id'
         : 'INSERT INTO ordenes_compra (metodo_pago, moneda, tasa_cambio, total_cop, sesion_caja_id, afecta_inventario) VALUES ($1, $2, $3, $4, $5, $6)';
-      const ordenRes = await tx.execute(ordenSql, [metodo_pago, monedaPago, tasa, totalCop, sesion_caja_id, false]);
+      const ordenRes = await tx.execute(ordenSql, [metodo_pago, monedaPago, tasa, totalCop, sesion_caja_id, true]);
       const ordenId = ordenRes[0]?.id;
 
-      // 3. Registrar el gasto (plata que sale) y los items de la orden.
-      //    La orden NO suma stock al inventario: solo registra el gasto y el historial.
+      // 3. Sumar lo confirmado al inventario, registrar el gasto (plata que sale)
+      //    y guardar los items de la orden.
       for (const p of procesados) {
+        // Lo confirmado entra al inventario (stock + cantidad).
+        const nuevoStock = p.stock_anterior + p.cantidad;
+        await tx.execute(
+          'UPDATE insumos SET stock_actual = $1, costo_unitario = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3',
+          [nuevoStock, p.costo_unitario, p.insumo_id]
+        );
+
         const montoOriginal = monedaPago === 'COP' ? p.monto_cop : p.monto_cop / tasa;
         await tx.execute(
           'INSERT INTO gastos (sesion_caja_id, orden_compra_id, categoria, descripcion, monto, moneda, tasa_cambio, monto_cop, metodo_pago) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',

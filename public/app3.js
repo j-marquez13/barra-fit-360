@@ -1631,7 +1631,7 @@ window.confirmarOrdenCompra = async function() {
   }).join('');
 
   openGenericModal('Confirmar Compra', `
-    <p class="text-muted" style="margin-bottom:12px;">¿Confirmas esta orden de compra?</p>
+    <p class="text-muted" style="margin-bottom:12px;">¿Confirmas esta orden de compra? Los insumos confirmados se sumarán al inventario.</p>
     <div style="max-height:240px; overflow-y:auto;">${lista}</div>
     <div style="display:flex; justify-content:space-between; border-top:1px solid var(--border-glass); padding-top:10px; margin-top:10px; font-size:1.15em; font-weight:800;">
       <span>Total</span><span style="color:var(--success);">$${total.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span>
