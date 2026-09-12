@@ -128,8 +128,10 @@ async function persistSession(data) {
 
 async function hasStoredSession() {
   try {
-    const rows = await db.query('SELECT session_name FROM whatsapp_sessions WHERE session_name = $1', [SESSION_NAME]);
-    return rows.length > 0;
+    const rows = await db.query('SELECT session_data FROM whatsapp_sessions WHERE session_name = $1', [SESSION_NAME]);
+    if (!rows.length) return false;
+    const data = revive(rows[0].session_data);
+    return !!(data && data.creds && data.creds.me && data.creds.me.id);
   } catch (e) {
     return false;
   }
@@ -137,7 +139,7 @@ async function hasStoredSession() {
 
 async function useNeonAuthState() {
   const stored = await loadSessionData();
-  let creds = (stored && stored.creds && stored.creds.signedIdentityKey) ? stored.creds : initAuthCreds();
+  let creds = (stored && stored.creds && stored.creds.me && stored.creds.me.id) ? stored.creds : initAuthCreds();
   const keys = (stored && stored.keys) ? stored.keys : {};
 
   let saveTimer = null;
