@@ -3505,3 +3505,84 @@ select.receta-insumo option {
   margin: 0;
 }
 
+/* ============================================
+   CRÉDITO + FACTURACIÓN — ESTILOS PROFESIONALES
+   ============================================ */
+
+/* --- KPIs de Crédito --- */
+.credito-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.cred-kpi-cobrar .kpi-icon { background: rgba(0, 242, 254, 0.1); color: var(--cyan-neon); }
+.cred-kpi-clientes .kpi-icon { background: rgba(139, 92, 246, 0.12); color: #a78bfa; }
+.cred-kpi-limite .kpi-icon { background: rgba(0, 230, 118, 0.1); color: var(--success); }
+
+/* --- Avatar de cliente --- */
+.client-avatar {
+  width: 36px; height: 36px; min-width: 36px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 0.78rem; font-family: var(--font-title);
+  background: linear-gradient(135deg, var(--primary), var(--cyan-neon));
+  color: #fff; letter-spacing: 0.5px;
+}
+.client-avatar.av-big { width: 48px; height: 48px; font-size: 1rem; }
+.client-name-cell { display: flex; align-items: center; gap: 10px; }
+
+/* --- Punto de estado --- */
+.status-pill { position: relative; padding-left: 20px; }
+.status-pill::before {
+  content: ''; position: absolute; left: 8px; top: 50%;
+  transform: translateY(-50%); width: 7px; height: 7px;
+  border-radius: 50%; background: currentColor;
+}
+
+/* --- Barra de uso de crédito --- */
+.credit-bar {
+  height: 5px; border-radius: 3px; overflow: hidden;
+  background: rgba(255,255,255,0.08); margin-top: 6px; min-width: 70px;
+}
+.credit-bar-fill {
+  height: 100%; border-radius: 3px;
+  background: linear-gradient(90deg, var(--success), var(--cyan-neon));
+  transition: width 0.3s ease;
+}
+.credit-bar-fill.warn { background: linear-gradient(90deg, var(--warning), #ffb300); }
+.credit-bar-fill.danger { background: linear-gradient(90deg, var(--danger), #ff5252); }
+
+/* --- Cabecera detalle de cliente --- */
+.detail-client-header { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.detail-client-header .dc-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.detail-client-header .dc-name { font-family: var(--font-title); font-size: 1.15rem; font-weight: 700; color: var(--color-text); }
+.detail-client-header .dc-sub { font-size: 0.78rem; color: var(--color-muted); display: flex; gap: 12px; flex-wrap: wrap; }
+.detail-client-header .dc-sub span { display: inline-flex; align-items: center; gap: 5px; }
+.detail-client-header .dc-sub i { width: 13px; height: 13px; }
+
+/* --- Tarjetas de estadísticas con icono --- */
+.stat-card .stat-icon { width: 34px; height: 34px; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
+.stat-card .stat-icon i { width: 17px; height: 17px; }
+.stat-card.stat-deuda .stat-icon { background: rgba(255, 23, 68, 0.1); color: var(--danger); }
+.stat-card.stat-limite .stat-icon { background: rgba(139, 92, 246, 0.12); color: #a78bfa; }
+.stat-card.stat-disponible .stat-icon { background: rgba(0, 242, 254, 0.1); color: var(--cyan-neon); }
+.stat-card.stat-compras .stat-icon { background: rgba(0, 230, 118, 0.1); color: var(--success); }
+
+/* --- Recibo / Factura --- */
+.ticket-brand { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 2px; }
+.ticket-brand .brand-mark {
+  width: 26px; height: 26px; border-radius: 7px;
+  background: linear-gradient(135deg, var(--primary), var(--cyan-neon));
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-family: var(--font-title); font-size: 0.72rem;
+  color: #fff; box-shadow: 0 0 12px var(--cyan-glow);
+}
+.ticket-total-row {
+  background: rgba(0, 242, 254, 0.06);
+  border: 1px solid rgba(0, 242, 254, 0.18);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.ticket-footer { text-align: center; color: var(--color-muted); font-size: 0.72rem; padding-top: 2px; }
+

@@ -2551,11 +2551,40 @@ window.showEditProductoModal = async function(prod_id) {
 // 10. MÓDULO CRÉDITO
 // ============================================
 
+function getInitials(nombre) {
+  const p = String(nombre || '?').trim().split(/\s+/).slice(0, 2);
+  return p.map(w => (w[0] || '').toUpperCase()).join('') || '?';
+}
+
+function renderCreditoKPIs(clientes) {
+  const list = clientes || [];
+  const total = list.reduce((s, c) => s + (parseFloat(c.saldo_deudor) || 0), 0);
+  const conDeuda = list.filter(c => (parseFloat(c.saldo_deudor) || 0) > 0).length;
+  const alDia = list.length - conDeuda;
+  const limiteTotal = list.reduce((s, c) => s + (parseFloat(c.limite_credito) || 0), 0);
+  const disponibleTotal = Math.max(0, limiteTotal - total);
+
+  const elTotal = document.getElementById('cred-kpi-total');
+  const elTotalSub = document.getElementById('cred-kpi-total-sub');
+  const elClientes = document.getElementById('cred-kpi-clientes');
+  const elAlDia = document.getElementById('cred-kpi-al-dia');
+  const elLimite = document.getElementById('cred-kpi-limite');
+  const elDisp = document.getElementById('cred-kpi-disponible');
+
+  if (elTotal) elTotal.textContent = '$' + total.toLocaleString('es-VE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  if (elTotalSub) elTotalSub.textContent = conDeuda + ' clientes con deuda';
+  if (elClientes) elClientes.textContent = list.length;
+  if (elAlDia) elAlDia.textContent = alDia + ' al día';
+  if (elLimite) elLimite.textContent = '$' + limiteTotal.toLocaleString('es-VE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  if (elDisp) elDisp.textContent = '$' + disponibleTotal.toLocaleString('es-VE', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' disponible';
+}
+
 async function loadClientesData() {
   try {
     const clientes = await fetch('/api/clientes').then(r => { if (!r.ok) throw new Error(); return r.json() });
     STATE.clientes = clientes;
     renderClientesTable(clientes);
+    renderCreditoKPIs(clientes);
   } catch (err) {
     console.error('Error cargando clientes:', err);
     showOfflineMessage('tbody-clientes', 8);
@@ -2588,18 +2617,21 @@ function renderClientesTable(clientes) {
       ? `<span style="color:var(--success)">$${Math.abs(saldo).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} (A favor)</span>` 
       : `$${saldo.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
 
+    const pct = limite > 0 ? Math.min(100, (saldo / limite) * 100) : (saldo > 0 ? 100 : 0);
+    const barClass = pct >= 100 ? 'danger' : (pct >= 70 ? 'warn' : '');
+
     return `
       <tr>
         <td>${c.id}</td>
-        <td><strong>${c.nombre}</strong> ${c.permite_saldo_favor ? '<i data-lucide="award" style="width:12px; height:12px; color:var(--cyan-neon);" title="Permite Saldo a Favor"></i>' : ''}</td>
+        <td><div class="client-name-cell"><div class="client-avatar">${getInitials(c.nombre)}</div><strong>${c.nombre}</strong> ${c.permite_saldo_favor ? '<i data-lucide="award" style="width:12px; height:12px; color:var(--cyan-neon);" title="Permite Saldo a Favor"></i>' : ''}</div></td>
         <td>${c.identificacion}</td>
         <td>${c.telefono || '-'}</td>
-        <td>$${limite.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+        <td><div>$${limite.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</div><div class="credit-bar"><div class="credit-bar-fill ${barClass}" style="width:${pct}%"></div></div></td>
         <td class="font-outfit">${saldoDisplay}</td>
         <td><span class="status-pill ${statusClass}">${statusText}</span></td>
         <td>
           <div class="table-actions">
-            <button class="table-btn btn-detail" onclick="loadClientDetail(${c.id})">Ver</button>
+            <button class="table-btn btn-detail" onclick="loadClientDetail(${c.id})"><i data-lucide="eye" style="width:12px; height:12px;"></i> Ver</button>
             <button class="table-btn" style="background:var(--warning); color:#000;" onclick="showRegistrarDeudaModal(${c.id}, '${c.nombre.replace(/'/g, "\\'")}', ${parseFloat(c.saldo_deudor)}, ${parseFloat(c.limite_credito)})">+ Deuda</button>
           </div>
         </td>
@@ -2607,6 +2639,7 @@ function renderClientesTable(clientes) {
     `;
   }).join('');
   window.filtrarTabla('search-clientes-input', 'tbody-clientes');
+  if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 
 window.loadClientDetail = async function(clientId) {
@@ -2618,7 +2651,14 @@ window.loadClientDetail = async function(clientId) {
     const panel = document.getElementById('client-detail-panel');
     panel.style.display = 'flex';
     
-    document.getElementById('detail-client-name').textContent = `${data.cliente.nombre} — Detalle de Cuenta`;
+    document.getElementById('detail-client-name').textContent = data.cliente.nombre;
+    document.getElementById('dc-avatar').textContent = getInitials(data.cliente.nombre);
+    const dcSub = document.getElementById('dc-sub');
+    if (dcSub) {
+      let subHtml = '<span><i data-lucide="id-card"></i> ' + data.cliente.identificacion + '</span>';
+      if (data.cliente.telefono) subHtml += '<span><i data-lucide="phone"></i> ' + data.cliente.telefono + '</span>';
+      dcSub.innerHTML = subHtml;
+    }
     
     const saldo = parseFloat(data.cliente.saldo_deudor);
     const limite = parseFloat(data.cliente.limite_credito);
@@ -2629,18 +2669,22 @@ window.loadClientDetail = async function(clientId) {
 
     document.getElementById('client-stats').innerHTML = `
       <div class="stat-card">
+        <div class="stat-icon" style="background:rgba(255,23,68,0.1);color:var(--danger);"><i data-lucide="wallet"></i></div>
         <span class="stat-label">${saldoLabel}</span>
         <span class="stat-value" style="color: ${saldo < 0 ? 'var(--cyan-neon)' : (saldo > 0 ? 'var(--danger)' : 'var(--success)')}">${saldoDisplay}</span>
       </div>
       <div class="stat-card">
+        <div class="stat-icon" style="background:rgba(139,92,246,0.12);color:#a78bfa;"><i data-lucide="credit-card"></i></div>
         <span class="stat-label">Límite Crédito</span>
         <span class="stat-value">$${limite.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span>
       </div>
       <div class="stat-card">
+        <div class="stat-icon" style="background:rgba(0,242,254,0.1);color:var(--cyan-neon);"><i data-lucide="piggy-bank"></i></div>
         <span class="stat-label">Disponible</span>
         <span class="stat-value" style="color: var(--cyan-neon)">$${disponible.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span>
       </div>
       <div class="stat-card">
+        <div class="stat-icon" style="background:rgba(0,230,118,0.1);color:var(--success);"><i data-lucide="receipt"></i></div>
         <span class="stat-label">Compras Registradas</span>
         <span class="stat-value">${data.compras ? data.compras.length : 0}</span>
       </div>
@@ -2677,6 +2721,7 @@ window.loadClientDetail = async function(clientId) {
     // Botón registrar abono
     document.getElementById('btn-registrar-abono').onclick = () => showAbonoModal(clientId, data.cliente.nombre, saldo);
     document.getElementById('btn-registrar-deuda').onclick = () => showRegistrarDeudaModal(clientId, data.cliente.nombre, saldo, limite);
+    if (typeof lucide !== 'undefined') lucide.createIcons();
 
   } catch (err) {
     console.error('Error cargando detalle:', err);

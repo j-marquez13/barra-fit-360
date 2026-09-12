@@ -13,7 +13,7 @@
   <!-- Lucide Icons para iconografía limpia y moderna -->
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- Estilos CSS -->
-  <link rel="stylesheet" href="index.css?v=14">
+  <link rel="stylesheet" href="index.css?v=15">
 </head>
 <body>
 
@@ -724,6 +724,36 @@
           </div>
 
           <!-- ============================================ -->
+          <!-- Resumen de Crédito (KPIs)                    -->
+          <!-- ============================================ -->
+          <div class="credito-kpis">
+            <div class="kpi-card cred-kpi-cobrar" style="border-left-color:#32c8ff;">
+              <div class="kpi-icon"><i data-lucide="hand-coins"></i></div>
+              <div class="kpi-data">
+                <span class="kpi-label">Total por Cobrar</span>
+                <span class="kpi-value" id="cred-kpi-total">$0</span>
+                <span class="kpi-sub" id="cred-kpi-total-sub">0 clientes con deuda</span>
+              </div>
+            </div>
+            <div class="kpi-card cred-kpi-clientes" style="border-left-color:#8b5cf6;">
+              <div class="kpi-icon"><i data-lucide="users"></i></div>
+              <div class="kpi-data">
+                <span class="kpi-label">Clientes</span>
+                <span class="kpi-value" id="cred-kpi-clientes">0</span>
+                <span class="kpi-sub" id="cred-kpi-al-dia">0 al día</span>
+              </div>
+            </div>
+            <div class="kpi-card cred-kpi-limite" style="border-left-color:#22c55e;">
+              <div class="kpi-icon"><i data-lucide="credit-card"></i></div>
+              <div class="kpi-data">
+                <span class="kpi-label">Límite Total</span>
+                <span class="kpi-value" id="cred-kpi-limite">$0</span>
+                <span class="kpi-sub" id="cred-kpi-disponible">$0 disponible</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- ============================================ -->
           <!-- Recordatorios WhatsApp                       -->
           <!-- ============================================ -->
           <div class="wa-panel">
@@ -764,7 +794,13 @@
           <!-- Detalle del Cliente Seleccionado -->
           <div class="client-detail-panel" id="client-detail-panel" style="display:none;">
             <div class="panel-header">
-              <h3 id="detail-client-name">Detalle del Cliente</h3>
+              <div class="detail-client-header">
+                <div class="client-avatar av-big" id="dc-avatar">?</div>
+                <div class="dc-info">
+                  <span class="dc-name" id="detail-client-name">Detalle del Cliente</span>
+                  <span class="dc-sub" id="dc-sub"></span>
+                </div>
+              </div>
               <div style="display:flex; gap:10px;">
                 <button class="action-btn" id="btn-edit-client" style="background:var(--cyan-neon); color:#000;" onclick="showEditClienteModal()">
                   <i data-lucide="edit"></i> Editar
@@ -1757,7 +1793,10 @@
         <!-- Detalles del Ticket -->
         <div class="receipt-ticket">
           <div class="ticket-header">
-            <h4>BARRA FIT 360</h4>
+            <div class="ticket-brand">
+              <div class="brand-mark">360</div>
+              <h4>BARRA FIT 360</h4>
+            </div>
             <p>ID Transacción: <span id="receipt-id">#000</span></p>
             <p id="receipt-date">Fecha</p>
           </div>
@@ -1776,7 +1815,7 @@
 
           <!-- Resumen de Dinero -->
           <div class="ticket-section">
-            <div class="ticket-row">
+            <div class="ticket-row ticket-total-row">
               <span>Total Venta:</span>
               <strong id="receipt-total">$0 COP</strong>
             </div>
@@ -1799,6 +1838,9 @@
               <!-- Dinámico -->
             </div>
           </div>
+
+          <div class="ticket-divider"></div>
+          <div class="ticket-footer">¡Gracias por tu compra! 🩵</div>
         </div>
 
         <!-- Alertas de Inventario / Servidor -->
@@ -1921,7 +1963,7 @@
     </div>
   </div>
 
-  <script src="app3.js?v=35"></script>
+  <script src="app3.js?v=36"></script>
   <script src="whatsapp.js?v=2"></script>
 <!-- Script to automatically replace commas with dots in number inputs -->
   <script>
