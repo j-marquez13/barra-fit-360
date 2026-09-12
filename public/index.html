@@ -1881,8 +1881,11 @@
                   <input type="text" id="new-client-id" class="ref-input" placeholder="Ej. 12345678" style="background: var(--bg-app); color: var(--color-text);">
                 </div>
                 <div class="form-group">
-                  <label for="new-client-phone">Teléfono</label>
-                  <input type="text" id="new-client-phone" class="ref-input" placeholder="Opcional" style="background: var(--bg-app); color: var(--color-text);">
+                  <label for="new-client-phone">Teléfono (WhatsApp)</label>
+                  <div style="display:flex; align-items:stretch;">
+                    <span style="display:flex; align-items:center; padding:0 12px; background:var(--bg-app); border:1px solid var(--border-glass); border-right:none; border-radius:8px 0 0 8px; color:var(--color-muted); font-weight:600;">+58</span>
+                    <input type="tel" id="new-client-phone" class="ref-input" placeholder="4141234567" maxlength="10" inputmode="numeric" style="flex:1; border-radius:0 8px 8px 0; background: var(--bg-app); color: var(--color-text);" oninput="this.value = this.value.replace(/[^0-9]/g,'').slice(0,10)">
+                  </div>
                 </div>
               </div>
             </div>
@@ -1918,7 +1921,7 @@
     </div>
   </div>
 
-  <script src="app3.js?v=34"></script>
+  <script src="app3.js?v=35"></script>
   <script src="whatsapp.js?v=2"></script>
 <!-- Script to automatically replace commas with dots in number inputs -->
   <script>

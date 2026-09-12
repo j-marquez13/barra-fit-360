@@ -36,6 +36,20 @@ function localDateStr() {
   };
 })();
 
+// Helpers de teléfono: siempre guardamos 58 + 10 dígitos
+function waBuildPhone(v) {
+  let d = String(v || '').replace(/[^0-9]/g, '');
+  if (!d) return '';
+  if (d.indexOf('58') === 0) return d;
+  d = d.replace(/^0+/, '');
+  return '58' + d;
+}
+function waLocalPhone(raw) {
+  let d = String(raw || '').replace(/[^0-9]/g, '');
+  if (d.indexOf('58') === 0) d = d.slice(2);
+  return d.replace(/^0+/, '');
+}
+
 // 1. ESTADO DE LA APLICACIÓN
 const STATE = {
   // Catálogo (Fallback en caso de que el backend esté offline)
@@ -1265,7 +1279,7 @@ async function submitPayment() {
             body: JSON.stringify({
               nombre: newName,
               identificacion: newId,
-              telefono: newPhone || '',
+              telefono: waBuildPhone(newPhone),
               limite_credito: 0
             })
           });
@@ -2838,7 +2852,7 @@ async function loadCierreSemanal() {
     document.getElementById('kpi-ventas-sem').textContent = `$${ingresos.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
     document.getElementById('kpi-trans-sem').textContent = `${data.resumen.total_transacciones} transacciones`;
     document.getElementById('kpi-costo-sem').textContent = `$${costo.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-    document.getElementById('kpi-gastos-sem-sub').textContent = `Gastos Op.: $${gastos.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    document.getElementById('kpi-gastos-sem-sub').textContent = `Cortesías: $${(data.resumen.costo_cortesias || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
     document.getElementById('kpi-utilidad-sem').textContent = `$${utilidad.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
     document.getElementById('kpi-margen-sem').textContent = `Margen: ${margen}%`;
     document.getElementById('kpi-utilidad-sem').style.color = utilidad >= 0 ? 'var(--success)' : 'var(--danger)';
@@ -2935,7 +2949,7 @@ async function loadCierreMensual() {
     document.getElementById('kpi-cobranza-men').textContent = `$${cobranza.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
     document.getElementById('kpi-reposicion-men').textContent = `Repos. Stock: $${reposicion.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
     document.getElementById('kpi-costo-men').textContent = `$${costo.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-    document.getElementById('kpi-gastos-men-sub').textContent = `Gastos Op.: $${gastos.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} | Cortesías: $${cortesias.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    document.getElementById('kpi-gastos-men-sub').textContent = `Cortesías: $${cortesias.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
     document.getElementById('kpi-utilidad-men').textContent = `$${utilidad.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
     document.getElementById('kpi-margen-men').textContent = `Margen: ${margen}%`;
     document.getElementById('kpi-utilidad-men').style.color = utilidad >= 0 ? 'var(--success)' : 'var(--danger)';
@@ -3507,14 +3521,14 @@ function showAddClienteModal() {
   openGenericModal('Nuevo Cliente', `
     <div class="form-group"><label>Nombre Completo</label><input type="text" id="inp-cli-nombre" placeholder="Ej: Juan Pérez"></div>
     <div class="form-group"><label>Identificación</label><input type="text" id="inp-cli-id" placeholder="Ej: V-12345678"></div>
-    <div class="form-group"><label>Teléfono</label><input type="text" id="inp-cli-tel" placeholder="Ej: +57 300 123 4567"></div>
+    <div class="form-group"><label>Teléfono (WhatsApp)</label><div style="display:flex; align-items:stretch;"><span style="display:flex; align-items:center; padding:0 12px; background:var(--bg-surface); border:1px solid var(--border-glass); border-right:none; border-radius:8px 0 0 8px; color:var(--color-muted); font-weight:600;">+58</span><input type="tel" id="inp-cli-tel" placeholder="4141234567" maxlength="10" inputmode="numeric" style="flex:1; border-radius:0 8px 8px 0;" oninput="this.value = this.value.replace(/[^0-9]/g,'').slice(0,10)"></div></div>
     <div class="form-group"><label>Límite de Crédito (COP)</label><input type="number" step="any" id="inp-cli-limite" placeholder="0" min="0"></div>
     ${adminCheckbox}
   `, async () => {
     const payload = {
       nombre: document.getElementById('inp-cli-nombre').value,
       identificacion: document.getElementById('inp-cli-id').value,
-      telefono: document.getElementById('inp-cli-tel').value,
+      telefono: waBuildPhone(document.getElementById('inp-cli-tel').value),
       limite_credito: document.getElementById('inp-cli-limite').value,
       permite_saldo_favor: document.getElementById('inp-cli-saldo-favor') ? document.getElementById('inp-cli-saldo-favor').checked : false
     };
@@ -3555,14 +3569,14 @@ window.showEditClienteModal = function() {
   openGenericModal('Editar Cliente', `
     <div class="form-group"><label>Nombre Completo</label><input type="text" id="edit-cli-nombre" value="${client.nombre}"></div>
     <div class="form-group"><label>Identificación</label><input type="text" id="edit-cli-id" value="${client.identificacion}"></div>
-    <div class="form-group"><label>Teléfono</label><input type="text" id="edit-cli-tel" value="${client.telefono || ''}"></div>
+    <div class="form-group"><label>Teléfono (WhatsApp)</label><div style="display:flex; align-items:stretch;"><span style="display:flex; align-items:center; padding:0 12px; background:var(--bg-surface); border:1px solid var(--border-glass); border-right:none; border-radius:8px 0 0 8px; color:var(--color-muted); font-weight:600;">+58</span><input type="tel" id="edit-cli-tel" value="${waLocalPhone(client.telefono)}" placeholder="4141234567" maxlength="10" inputmode="numeric" style="flex:1; border-radius:0 8px 8px 0;" oninput="this.value = this.value.replace(/[^0-9]/g,'').slice(0,10)"></div></div>
     <div class="form-group"><label>Límite de Crédito (COP)</label><input type="number" step="any" id="edit-cli-limite" value="${parseFloat(client.limite_credito)}" min="0"></div>
     ${adminCheckbox}
   `, async () => {
     const payload = {
       nombre: document.getElementById('edit-cli-nombre').value,
       identificacion: document.getElementById('edit-cli-id').value,
-      telefono: document.getElementById('edit-cli-tel').value,
+      telefono: waBuildPhone(document.getElementById('edit-cli-tel').value),
       limite_credito: document.getElementById('edit-cli-limite').value,
       permite_saldo_favor: document.getElementById('edit-cli-saldo-favor') ? document.getElementById('edit-cli-saldo-favor').checked : !!client.permite_saldo_favor
     };
