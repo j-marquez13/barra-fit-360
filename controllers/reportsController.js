@@ -109,8 +109,9 @@ export async function cierreDiario(req, res) {
     const totalVentas = parseFloat(ventasResumen[0]?.total_ventas_cop || 0);
     const costoProduccion = topProductos.reduce((sum, p) => sum + parseFloat(p.costo_total || 0), 0);
     
-    // Utilidad Neta = Ingresos Totales - Costos Producción - Gastos Operacionales - Costo Cortesías + Diferencial Cambiario
-    const utilidadNeta = totalVentas - costoProduccion - totalGastos - costoCortesias + diferencialCambiarioTotal;
+    // Utilidad Neta = Ingresos Totales - Costos Producción
+    // Los gastos operacionales se manejan desde tesorería, no restan de la utilidad de ventas
+    const utilidadNeta = totalVentas - costoProduccion;
 
     const insumosAlerta = await db.query(`
       SELECT nombre, stock_actual, stock_minimo, unidad_medida FROM insumos WHERE stock_actual <= stock_minimo ORDER BY stock_actual ASC
@@ -215,8 +216,9 @@ export async function cierreSemanal(req, res) {
     const totalVentas = parseFloat(resumenSemana[0]?.total_ventas_cop || 0);
     const costoProduccion = topProductos.reduce((sum, p) => sum + parseFloat(p.costo_total || 0), 0);
     
-    // No calculamos diferencial cambiario aquí, pero restamos gastos y cortesías
-    const utilidadNeta = totalVentas - costoProduccion - totalGastos - costoCortesias;
+    // Utilidad Neta = Ventas - Costo Producción
+    // Los gastos operacionales se manejan desde tesorería
+    const utilidadNeta = totalVentas - costoProduccion;
 
     return res.json({
       periodo: 'Últimos 7 días',
@@ -356,7 +358,8 @@ export async function cierreRango(req, res) {
     // 7. Calcular totales financieros
     const totalVentas = parseFloat(resumenRango[0]?.total_ventas_cop || 0);
     const costoProduccion = topProductos.reduce((sum, p) => sum + parseFloat(p.costo_total || 0), 0);
-    const utilidadNeta = totalVentas - costoProduccion - totalGastos - costoCortesias;
+    // Los gastos operacionales se manejan desde tesorería, no restan de la utilidad
+    const utilidadNeta = totalVentas - costoProduccion;
     const margenUtilidad = totalVentas > 0 ? Math.round((utilidadNeta / totalVentas) * 10000) / 100 : 0;
 
     return res.json({

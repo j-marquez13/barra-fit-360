@@ -383,8 +383,9 @@ export async function cerrarCaja(req, res) {
     const cortesiasData = await db.query(cortesiasQuery, [fechaApertura]);
     const costoCortesias = parseFloat(cortesiasData[0]?.costo_cortesias || 0);
 
-    // 3.3 Utilidad Neta = Total Ventas del Turno - Costo de producción - Gastos operacionales - Costo de Cortesías
-    const utilidadNeta = totalVentasReal - costoProduccion - totalGastos - costoCortesias;
+    // 3.3 Utilidad Neta = Total Ventas del Turno - Costo de producción
+    // Las cortesías ya entran en el costo; los gastos se manejan desde tesorería (no restan aquí)
+    const utilidadNeta = totalVentasReal - costoProduccion;
 
     // 4. Diferencia de Caja = Monto Físico Declarado (COP) - Saldo Teórico
     const declarado = parseFloat(monto_declarado_cop) || 0;
@@ -404,7 +405,7 @@ export async function cerrarCaja(req, res) {
       ? `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_pago_movil = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9, declarado_efectivo_usd = $10, costo_produccion = $11, utilidad_neta = $12, declarado_cop = $13 WHERE id = $14 RETURNING *`
       : `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_pago_movil = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9, declarado_efectivo_usd = $10, costo_produccion = $11, utilidad_neta = $12, declarado_cop = $13 WHERE id = $14`;
       
-    const result = await db.execute(sqlUpdate, [now, totalIngresosCop, totalGastos, diferencia, decPagoMovil, decZelle, decBinance, decPesos, decBancolombia, decUsd, costoProduccion, utilidadNeta, declarado, currentSession.id]);
+    const result = await db.execute(sqlUpdate, [now, totalVentasReal, totalGastos, diferencia, decPagoMovil, decZelle, decBinance, decPesos, decBancolombia, decUsd, costoProduccion, utilidadNeta, declarado, currentSession.id]);
     
     let sessionRes = result;
     if (!isPg) {
