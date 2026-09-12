@@ -13,7 +13,7 @@
   <!-- Lucide Icons para iconografía limpia y moderna -->
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- Estilos CSS -->
-  <link rel="stylesheet" href="index.css?v=13">
+  <link rel="stylesheet" href="index.css?v=14">
 </head>
 <body>
 
@@ -721,6 +721,24 @@
                 <i data-lucide="user-plus"></i> Nuevo Cliente
               </button>
             </div>
+          </div>
+
+          <!-- ============================================ -->
+          <!-- Recordatorios WhatsApp                       -->
+          <!-- ============================================ -->
+          <div class="wa-panel">
+            <div class="wa-panel-header">
+              <h4><i data-lucide="message-circle"></i> Recordatorios WhatsApp</h4>
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="action-btn" id="btn-wa-conectar" style="background:linear-gradient(135deg,#25d366,#128c7e);">
+                  <i data-lucide="link"></i> Iniciar sesión con WhatsApp
+                </button>
+                <button class="action-btn" id="btn-wa-enviar" disabled style="background:linear-gradient(135deg,var(--primary),rgba(127,0,255,0.6));">
+                  <i data-lucide="send"></i> Enviar recordatorios WhatsApp
+                </button>
+              </div>
+            </div>
+            <div class="wa-banner wa-warn" id="wa-banner">Cargando estado de WhatsApp...</div>
           </div>
           
           <div class="data-table-wrapper">
@@ -1879,7 +1897,29 @@
     </div>
   </div>
 
-  <script src="app3.js?v=33"></script>
+  <!-- ============================================ -->
+  <!-- MODAL WHATSAPP (QR / Vista previa / Envío)  -->
+  <!-- ============================================ -->
+  <div class="modal-overlay" id="wa-modal">
+    <div class="modal-box" style="width:680px;">
+      <div class="modal-header">
+        <h2><i data-lucide="message-circle"></i> WhatsApp</h2>
+        <button class="close-modal-btn" id="btn-wa-cerrar"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body-simple" id="wa-modal-body" style="max-height:70vh;">
+        <!-- Dinámico -->
+      </div>
+      <div class="modal-footer" id="wa-modal-footer-confirm" style="display:none;">
+        <button class="action-btn secondary" id="btn-wa-cancelar">Cancelar</button>
+        <button class="action-btn" id="btn-wa-confirmar" style="background:linear-gradient(135deg,#25d366,#128c7e);">
+          <i data-lucide="send"></i> Enviar mensajes
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app3.js?v=34"></script>
+  <script src="whatsapp.js?v=1"></script>
 <!-- Script to automatically replace commas with dots in number inputs -->
   <script>
     document.addEventListener('keydown', function(e) {

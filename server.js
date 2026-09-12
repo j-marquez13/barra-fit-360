@@ -14,6 +14,7 @@ import { getSaldos, transferirFondos } from './controllers/treasuryController.js
 import { initializeDatabase } from './initDb.js';
 import * as db from './db.js';
 import { signToken, verifyToken, requireAuth, requireAdmin, revokeToken } from './auth.js';
+import * as whatsapp from './controllers/whatsappController.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -428,6 +429,16 @@ app.post('/api/restore-db', express.raw({ type: '*/*', limit: '100mb' }), async 
 app.post('/api/tesoreria/transferir', transferirFondos);
 
 // ============================================
+// RUTAS DE WHATSAPP (RECORDATORIOS AUTOMÁTICOS)
+// ============================================
+app.get('/api/whatsapp/estado', whatsapp.getEstado);
+app.post('/api/whatsapp/conectar', whatsapp.conectar);
+app.post('/api/whatsapp/desconectar', whatsapp.desconectar);
+app.post('/api/whatsapp/recordatorios/vista-previa', whatsapp.vistaPrevia);
+app.post('/api/whatsapp/recordatorios/enviar', whatsapp.enviar);
+app.get('/api/whatsapp/recordatorios/progreso', whatsapp.progreso);
+
+// ============================================
 // RUTA DE RESET DEL SISTEMA (PONER STOCK EN 0, BORRAR VENTAS, CRÉDITOS, ETC.)
 // ============================================
 app.post('/api/reset-sistema', requireAdmin, async (req, res) => {
@@ -478,6 +489,7 @@ app.post('/api/reset-sistema', requireAdmin, async (req, res) => {
 async function startServer() {
   try {
     await initializeDatabase();
+    whatsapp.initWhatsApp();
     app.listen(PORT, '0.0.0.0', () => {
       
       // Obtener IP local para que el usuario sepa cómo acceder desde su celular

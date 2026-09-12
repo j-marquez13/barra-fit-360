@@ -379,3 +379,21 @@ CREATE TRIGGER trg_tesoreria_transferencia
 AFTER INSERT ON movimientos_tesoreria
 FOR EACH ROW
 EXECUTE FUNCTION func_tesoreria_transferencia();
+
+-- ==========================================
+-- WhatsApp: sesión persistente + logs
+-- ==========================================
+CREATE TABLE IF NOT EXISTS whatsapp_sessions (
+    session_name VARCHAR(255) PRIMARY KEY,
+    session_data JSONB NOT NULL,
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS whatsapp_logs (
+    id SERIAL PRIMARY KEY,
+    telefono VARCHAR(20),
+    mensaje TEXT,
+    estado VARCHAR(20), -- 'enviado' o 'fallido'
+    fecha TIMESTAMP DEFAULT NOW()
+);
+

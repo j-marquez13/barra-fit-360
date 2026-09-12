@@ -111,6 +111,20 @@ export async function initializeDatabase() {
       `);
 
       console.log('   ✅ Esquema PostgreSQL verificado y migrado.');
+
+      // Tablas para WhatsApp (recordatorios automáticos + sesión persistente)
+      await db.execute(`CREATE TABLE IF NOT EXISTS whatsapp_sessions (
+        session_name VARCHAR(255) PRIMARY KEY,
+        session_data JSONB NOT NULL,
+        updated_at TIMESTAMP DEFAULT NOW()
+      )`);
+      await db.execute(`CREATE TABLE IF NOT EXISTS whatsapp_logs (
+        id SERIAL PRIMARY KEY,
+        telefono VARCHAR(20),
+        mensaje TEXT,
+        estado VARCHAR(20),
+        fecha TIMESTAMP DEFAULT NOW()
+      )`);
     } catch(e) {
       console.log('   ⚠️ Migración PostgreSQL ignorada o error:', e.message);
     }
@@ -282,6 +296,24 @@ async function createTables() {
       permite_saldo_favor INTEGER DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // WhatsApp (recordatorios automáticos + sesión persistente)
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS whatsapp_sessions (
+      session_name TEXT PRIMARY KEY,
+      session_data TEXT NOT NULL,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS whatsapp_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      telefono TEXT,
+      mensaje TEXT,
+      estado TEXT,
+      fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
 

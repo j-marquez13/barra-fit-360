@@ -4,6 +4,9 @@
   "description": "Backend de gestión y POS para Barra Fit 360",
   "main": "server.js",
   "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
@@ -11,9 +14,12 @@
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
+    "@whiskeysockets/baileys": "^6.7.7",
     "bcryptjs": "^3.0.3",
     "express": "^4.19.2",
     "pg": "^8.12.0",
+    "pino": "^8.21.0",
+    "qrcode": "^1.5.3",
     "sqlite3": "^5.1.7"
   },
   "overrides": {
