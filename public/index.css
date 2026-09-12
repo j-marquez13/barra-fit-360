@@ -3586,3 +3586,14 @@ select.receta-insumo option {
 }
 .ticket-footer { text-align: center; color: var(--color-muted); font-size: 0.72rem; padding-top: 2px; }
 
+/* --- Modal de Crédito (facturar a crédito) --- */
+.credit-selected-card {
+  background: rgba(0, 230, 118, 0.06);
+  border: 1px solid rgba(0, 230, 118, 0.25);
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+

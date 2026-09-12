@@ -286,8 +286,19 @@ checkApiHealth();
       if (cliente) {
         const saldo = parseFloat(cliente.saldo_deudor) || 0;
         const limite = parseFloat(cliente.limite_credito) || 0;
-        infoBox.style.display = 'block';
-        infoText.innerHTML = '<span style="color:var(--success)">✅ <strong>' + cliente.nombre + '</strong> — Saldo: $' + saldo.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 }) + ' | Límite: $' + limite.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 }) + '</span>';
+        infoBox.style.display = 'flex';
+        const av = document.getElementById('credit-info-avatar');
+        if (av) av.textContent = getInitials(cliente.nombre);
+        const nom = document.getElementById('credit-info-nombre');
+        if (nom) nom.textContent = cliente.nombre;
+        const det = document.getElementById('credit-info-detalle');
+        if (det) det.textContent = 'Saldo: $' + saldo.toLocaleString('es-VE', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + '  •  Límite: $' + limite.toLocaleString('es-VE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+        const bar = document.getElementById('credit-info-bar');
+        if (bar) {
+          const pct2 = limite > 0 ? Math.min(100, (saldo / limite) * 100) : 0;
+          bar.style.width = pct2 + '%';
+          bar.className = 'credit-bar-fill' + (pct2 >= 100 ? ' danger' : (pct2 >= 70 ? ' warn' : ''));
+        }
       }
     } else {
       newFields.style.display = 'none';

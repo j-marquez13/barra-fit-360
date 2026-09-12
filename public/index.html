@@ -13,7 +13,7 @@
   <!-- Lucide Icons para iconografía limpia y moderna -->
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- Estilos CSS -->
-  <link rel="stylesheet" href="index.css?v=15">
+  <link rel="stylesheet" href="index.css?v=16">
 </head>
 <body>
 
@@ -1890,18 +1890,18 @@
       <div class="modal-body">
         <div style="display: flex; flex-direction: column; gap: 20px;">
           
-          <div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 15px; flex-wrap: wrap;">
-            <div class="form-group" style="flex: 1;">
-              <label for="pay-credito">Monto a Fiar (COP)</label>
-              <input type="number" class="payment-input" id="pay-credito" placeholder="0.00" min="0" style="border-color: var(--warning); font-size: 1.2rem; font-weight: bold; background: var(--bg-surface); color: var(--color-text);">
+          <div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 15px; flex-wrap: wrap; background: rgba(255, 179, 0, 0.05); border: 1px solid rgba(255, 179, 0, 0.2); border-radius: 12px; padding: 16px;">
+            <div class="form-group" style="flex: 1; min-width: 200px;">
+              <label for="pay-credito" style="display:flex; align-items:center; gap:6px; color:var(--warning); font-weight:600;"><i data-lucide="banknote" style="width:15px;height:15px;"></i> Monto a Fiar (COP)</label>
+              <input type="number" class="payment-input" id="pay-credito" placeholder="0.00" min="0" style="border-color: var(--warning); font-size: 1.4rem; font-weight: 800; font-family: var(--font-title); background: var(--bg-surface); color: var(--color-text);">
             </div>
-            <button type="button" class="action-btn secondary" id="btn-cobrar-todo-credito" style="border-color: var(--warning); color: var(--warning); height: 42px;">
+            <button type="button" class="action-btn secondary" id="btn-cobrar-todo-credito" style="border-color: var(--warning); color: var(--warning); height: 44px;">
               <i data-lucide="arrow-down-to-line"></i> Todo a Crédito
             </button>
           </div>
 
           <div style="display: flex; flex-direction: column; gap: 12px; background: var(--bg-surface); padding: 15px; border-radius: 8px; border: 1px solid var(--border-glass);">
-            <h3 style="font-size: 0.95rem; color: var(--color-text); border-bottom: 1px solid var(--border-glass); padding-bottom: 8px; margin-bottom: 5px;">Cliente Deudor</h3>
+            <h3 style="font-size: 0.95rem; color: var(--color-text); border-bottom: 1px solid var(--border-glass); padding-bottom: 8px; margin-bottom: 5px; display:flex; align-items:center; gap:8px;"><i data-lucide="user-round" style="width:16px;height:16px;color:var(--cyan-neon);"></i> Cliente Deudor</h3>
             <div class="form-group">
               <label for="credit-client-selector">Seleccionar Cliente Existente</label>
               <select id="credit-client-selector" style="background: var(--bg-app); color: var(--color-text); padding: 10px; border-radius: 8px; border: 1px solid var(--border-glass); font-size: 0.95rem;">
@@ -1909,8 +1909,15 @@
                 <option value="__new__">➕ Crear Nuevo Cliente</option>
               </select>
             </div>
-            <div id="credit-client-info" style="display:none; background: rgba(0,230,118,0.08); border: 1px solid var(--success); border-radius: 8px; padding: 10px;">
-              <span id="credit-client-info-text" style="font-size:0.9rem; color: var(--success);"></span>
+            <div id="credit-client-info" class="credit-selected-card" style="display:none;">
+              <div class="client-name-cell">
+                <div class="client-avatar" id="credit-info-avatar">?</div>
+                <div style="flex:1; min-width:0;">
+                  <div style="font-weight:600;" id="credit-info-nombre"></div>
+                  <div style="font-size:0.72rem; color:var(--color-muted);" id="credit-info-detalle"></div>
+                </div>
+              </div>
+              <div class="credit-bar"><div class="credit-bar-fill" id="credit-info-bar" style="width:0%"></div></div>
             </div>
             <div id="new-client-fields" style="display: none; flex-direction: column; gap: 12px;">
               <div class="form-group">
@@ -1936,8 +1943,8 @@
         </div>
       </div>
       <div class="modal-footer" style="padding: 15px 24px; border-top: 1px solid var(--border-glass); display: flex; justify-content: flex-end; gap: 10px; background: var(--bg-surface); border-radius: 0 0 12px 12px;">
-        <button class="action-btn secondary" id="btn-cancel-credit" style="padding: 8px 20px;">Borrar / Cancelar</button>
-        <button class="action-btn" id="btn-confirm-credit" style="background: var(--warning); color: #fff; border: none; padding: 8px 20px;">Confirmar Monto</button>
+        <button class="action-btn secondary" id="btn-cancel-credit" style="padding: 8px 20px;"><i data-lucide="x"></i> Borrar / Cancelar</button>
+        <button class="action-btn" id="btn-confirm-credit" style="background: var(--warning); color: #000; border: none; padding: 8px 20px; font-weight: 700;"><i data-lucide="check"></i> Confirmar Monto</button>
       </div>
     </div>
   </div>
@@ -1963,7 +1970,7 @@
     </div>
   </div>
 
-  <script src="app3.js?v=36"></script>
+  <script src="app3.js?v=37"></script>
   <script src="whatsapp.js?v=2"></script>
 <!-- Script to automatically replace commas with dots in number inputs -->
   <script>
