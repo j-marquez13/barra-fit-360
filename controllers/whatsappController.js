@@ -28,6 +28,8 @@ let currentQRDataURL = null;
 let waInfo = { nombre: null, telefono: null };
 let connectedAt = null;
 let reconnectTimer = null;
+let connectStartedAt = null;
+let lastDisconnectReason = null;
 
 // Job de envío en curso
 let sendJob = null;
@@ -200,6 +202,7 @@ async function startSocket() {
   sock = null; // abandona cualquier socket previo (su close se ignorará)
 
   status = 'conectando';
+  connectStartedAt = Date.now();
   currentQR = null;
   currentQRDataURL = null;
 
@@ -230,13 +233,17 @@ async function startSocket() {
 
     if (qr) {
       status = 'conectando';
+      connectStartedAt = Date.now();
       currentQR = qr;
-      try { currentQRDataURL = await QRCode.toDataURL(qr, { width: 320, margin: 1 }); }
+      logger.info('📱 QR de WhatsApp generado. Esperando escaneo...');
+      try { currentQRDataURL = await QRCode.toDataURL(qr, { width: 512, margin: 2, errorCorrectionLevel: 'M' }); }
       catch (e) { currentQRDataURL = null; }
     }
 
     if (connection === 'open') {
       status = 'conectado';
+      connectStartedAt = null;
+      lastDisconnectReason = null;
       currentQR = null;
       currentQRDataURL = null;
       connectedAt = new Date();
@@ -250,6 +257,8 @@ async function startSocket() {
       const code = lastDisconnect?.error?.output?.statusCode;
       const wasLoggedOut = code === DisconnectReason.loggedOut;
       status = 'desconectado';
+      connectStartedAt = null;
+      lastDisconnectReason = code;
       currentQR = null;
       currentQRDataURL = null;
       sock = null;
@@ -266,7 +275,17 @@ async function startSocket() {
   });
 }
 
+function startWatchdog() {
+  setInterval(async () => {
+    if (status === 'conectando' && connectStartedAt && (Date.now() - connectStartedAt) > 90000) {
+      logger.warn('⏱️ Conexión de WhatsApp atascada (>90s). Reiniciando...');
+      try { await startSocket(); } catch (e) { logger.error('Error en watchdog:', e.message); }
+    }
+  }, 15000);
+}
+
 export function initWhatsApp() {
+  startWatchdog();
   (async () => {
     try {
       const stored = await hasStoredSession();
@@ -292,7 +311,8 @@ async function getEstadoPayload() {
     nombre: waInfo.nombre,
     telefono: waInfo.telefono,
     limiteDiario: LIMITE_DIARIO,
-    enviadosHoy
+    enviadosHoy,
+    motivoDesconexion: lastDisconnectReason
   };
 }
 
@@ -364,7 +384,15 @@ export async function getEstado(req, res) {
 
 export async function conectar(req, res) {
   try {
-    if (status === 'conectado' || status === 'conectando') {
+    if (status === 'conectado') {
+      return res.json(await getEstadoPayload());
+    }
+    if (status === 'conectando') {
+      // Si lleva demasiado tiempo conectando, reinicia y genera un QR nuevo.
+      if (connectStartedAt && (Date.now() - connectStartedAt) > 60000) {
+        logger.info('Reinicio forzado de conexión solicitado.');
+        await startSocket();
+      }
       return res.json(await getEstadoPayload());
     }
     await startSocket();

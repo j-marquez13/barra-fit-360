@@ -43,11 +43,13 @@ function updateWhatsAppUI(data) {
     banner.innerHTML = '🟢 Conectado' + (data.nombre ? ' como <strong>' + waEscapeHtml(data.nombre) + '</strong>' : '') + '. Enviados hoy: <strong>' + data.enviadosHoy + '/' + data.limiteDiario + '</strong>.';
     banner.className = 'wa-banner wa-ok';
   } else if (data.conectando) {
-    btnConectar.innerHTML = '<i data-lucide="loader-2"></i> Conectando...';
-    btnConectar.disabled = true;
-    btnConectar.style.opacity = '0.7';
+    btnConectar.innerHTML = '<i data-lucide="refresh-cw"></i> Reintentar conexión';
+    btnConectar.disabled = false;
+    btnConectar.style.opacity = '1';
     btnEnviar.disabled = true;
-    banner.innerHTML = '⌛ Generando código QR...';
+    let extra = '';
+    if (data.motivoDesconexion) extra = ' (último error: ' + data.motivoDesconexion + ')';
+    banner.innerHTML = '⌛ Generando código QR...' + extra;
     banner.className = 'wa-banner wa-warn';
   } else {
     btnConectar.innerHTML = '<i data-lucide="link"></i> Iniciar sesión con WhatsApp';
@@ -89,7 +91,10 @@ async function conectarWhatsApp() {
         <div id="wa-qr-area" style="display:flex; justify-content:center;">
           <div style="padding:14px; background:rgba(0,0,0,0.2); border-radius:12px; border:1px solid var(--border-glass); color:var(--color-muted); font-size:0.85rem;">Generando código QR...</div>
         </div>
+        <p style="color:var(--color-muted); font-size:0.75rem; margin-top:12px;">Si el código caduca, se genera uno nuevo automáticamente.</p>
+        <button type="button" class="action-btn secondary" id="btn-wa-retry" style="margin:12px auto 0;">🔄 Generar nuevo código</button>
       </div>`);
+    document.getElementById('btn-wa-retry')?.addEventListener('click', conectarWhatsApp);
     pollWhatsAppQR();
   } catch (e) {
     showToast('Error al conectar WhatsApp', 'danger');
@@ -117,7 +122,7 @@ async function pollWhatsAppQR() {
       return;
     }
     if (data.qr && qrArea) {
-      qrArea.innerHTML = '<img src="' + data.qr + '" alt="QR WhatsApp" style="width:260px; height:260px; border-radius:12px; background:#fff; padding:8px; box-shadow:0 8px 24px rgba(0,0,0,0.4);">';
+      qrArea.innerHTML = '<img src="' + data.qr + '" alt="QR WhatsApp" style="width:300px; max-width:80vw; height:auto; border-radius:12px; background:#fff; padding:10px; box-shadow:0 8px 24px rgba(0,0,0,0.4);">';
     }
   }
   const qrArea = document.getElementById('wa-qr-area');
