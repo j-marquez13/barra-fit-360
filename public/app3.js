@@ -3304,10 +3304,14 @@ function showAddInsumoModal() {
 }
 
 function showAddMermaModal() {
-  const insOptions = STATE.insumos.map(i => `<option value="${i.id}">${i.nombre} (${i.stock_actual} ${i.unidad_medida})</option>`).join('');
+  const insOptions = STATE.insumos.map(i => `<option value="${i.id}" data-costo="${i.costo_unitario || 0}">${i.nombre} (${i.stock_actual} ${i.unidad_medida})</option>`).join('');
   openGenericModal('Registrar Merma', `
     <div class="form-group"><label>Insumo</label><select id="inp-merma-insumo">${insOptions}</select></div>
     <div class="form-group"><label>Cantidad Perdida</label><input type="number" step="any" id="inp-merma-cantidad" placeholder="0" min="0.01" step="0.01"></div>
+    <div class="form-group" style="margin-top: 12px; padding: 12px; border-radius: 8px; background: rgba(0,0,0,0.25); border: 1px solid var(--border-glass);">
+      <span style="font-size:0.85rem; color:var(--color-muted);">Costo estimado de la merma (cantidad × costo unitario):</span>
+      <div style="font-size:1.4rem; font-weight:bold; color:var(--danger);" id="merma-costo-preview">$0</div>
+    </div>
     <div class="form-group"><label>Motivo</label><input type="text" id="inp-merma-motivo" placeholder="Ej: Vencimiento, derrame, rotura"></div>
   `, async () => {
     const payload = {
@@ -3330,6 +3334,21 @@ function showAddMermaModal() {
       showToast('Error de conexión', 'danger');
     }
   });
+
+  // Vista previa del costo en vivo según el insumo seleccionado y la cantidad escrita
+  const selMerma = document.getElementById('inp-merma-insumo');
+  const qtyMerma = document.getElementById('inp-merma-cantidad');
+  const previewMerma = document.getElementById('merma-costo-preview');
+  const updateMermaPreview = () => {
+    const opt = selMerma && selMerma.selectedOptions ? selMerma.selectedOptions[0] : null;
+    const costoUnit = parseFloat(opt?.dataset?.costo) || 0;
+    const cant = parseFloat(qtyMerma?.value) || 0;
+    const total = cant * costoUnit;
+    if (previewMerma) previewMerma.textContent = `$${total.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+  };
+  if (selMerma) selMerma.addEventListener('change', updateMermaPreview);
+  if (qtyMerma) qtyMerma.addEventListener('input', updateMermaPreview);
+  updateMermaPreview();
 }
 
 window.showRestockModal = function(insumoId, nombre) {
