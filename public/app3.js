@@ -1891,20 +1891,61 @@ function renderInsumosTable(insumos) {
 function renderMermasTable(mermas) {
   const tbody = document.getElementById('tbody-mermas');
   if (!mermas || mermas.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="loading-cell">No hay mermas registradas.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="loading-cell">No hay mermas registradas.</td></tr>';
+    updateMermasTotales([]);
     return;
   }
-  tbody.innerHTML = mermas.map(m => `
-    <tr>
-      <td>${new Date(m.fecha).toLocaleString('es-ES')}</td>
-      <td><strong>${m.insumo_nombre}</strong></td>
-      <td>${parseFloat(m.cantidad).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
-      <td>${m.unidad_medida}</td>
-      <td>${m.motivo}</td>
-    </tr>
-  `).join('');
+  tbody.innerHTML = mermas.map(m => {
+    const costo = parseFloat(m.costo) || 0;
+    const descontado = !!m.descontar_ganancia;
+    const btn = descontado
+      ? `<button class="table-btn btn-edit" onclick="toggleMermaGanancia(${m.id})" style="background:var(--success); color:white; border:none; white-space:nowrap;" title="Quitar descuento de la ganancia">✓ Descontado</button>`
+      : `<button class="table-btn btn-danger" onclick="toggleMermaGanancia(${m.id})" style="background:var(--warning); color:#1a1a2e; border:none; white-space:nowrap;" title="Descontar de la ganancia">Descontar</button>`;
+    return `
+      <tr>
+        <td>${new Date(m.fecha).toLocaleString('es-ES')}</td>
+        <td><strong>${m.insumo_nombre}</strong></td>
+        <td>${parseFloat(m.cantidad).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+        <td>${m.unidad_medida}</td>
+        <td class="font-outfit" style="color:var(--danger);">$${costo.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+        <td>${m.motivo}</td>
+        <td>${btn}</td>
+      </tr>
+    `;
+  }).join('');
+  updateMermasTotales(mermas);
   window.filtrarTabla('search-mermas-input', 'tbody-mermas');
 }
+
+function updateMermasTotales(mermas) {
+  const totalCostoEl = document.getElementById('mermas-total-costo');
+  const totalDescEl = document.getElementById('mermas-total-descontado');
+  if (!totalCostoEl || !totalDescEl) return;
+  let total = 0;
+  let descontado = 0;
+  (mermas || []).forEach(m => {
+    const c = parseFloat(m.costo) || 0;
+    total += c;
+    if (m.descontar_ganancia) descontado += c;
+  });
+  totalCostoEl.textContent = `$${total.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+  totalDescEl.textContent = `$${descontado.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+}
+
+window.toggleMermaGanancia = async function(id) {
+  try {
+    const res = await fetch(`/api/mermas/${id}/descontar-ganancia`, { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      showToast(data.mensaje, 'success');
+      await loadInventarioData();
+    } else {
+      showToast(data.error || 'No se pudo actualizar la merma.', 'danger');
+    }
+  } catch (err) {
+    showToast('Error de conexión', 'danger');
+  }
+};
 
 function renderProductosTable(productos) {
   const tbody = document.getElementById('tbody-productos');
@@ -2762,7 +2803,7 @@ async function loadCierreDiario() {
     }
     
     document.getElementById('kpi-costo').textContent = `$${data.resumen.costo_produccion.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-    document.getElementById('kpi-costo-cortesias').textContent = `+ Cortesías: $${data.resumen.costo_cortesias.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+    document.getElementById('kpi-costo-cortesias').textContent = `+ Cortesías: $${data.resumen.costo_cortesias.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} | Mermas: -$${(data.resumen.mermas_descontadas || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     
     document.getElementById('kpi-gastos').textContent = `$${data.resumen.gastos_operacionales.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     document.getElementById('kpi-diferencial').textContent = `Dif. Cambiario: ${data.resumen.diferencial_cambiario > 0 ? '+' : ''}$${data.resumen.diferencial_cambiario.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
@@ -2908,7 +2949,7 @@ async function loadCierreSemanal() {
     document.getElementById('kpi-ventas-sem').textContent = `$${ingresos.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
     document.getElementById('kpi-trans-sem').textContent = `${data.resumen.total_transacciones} transacciones`;
     document.getElementById('kpi-costo-sem').textContent = `$${costo.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-    document.getElementById('kpi-gastos-sem-sub').textContent = `Cortesías: $${(data.resumen.costo_cortesias || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    document.getElementById('kpi-gastos-sem-sub').textContent = `Cortesías: $${(data.resumen.costo_cortesias || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} | Mermas: -$${(data.resumen.mermas_descontadas || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
     document.getElementById('kpi-utilidad-sem').textContent = `$${utilidad.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
     document.getElementById('kpi-margen-sem').textContent = `Margen: ${margen}%`;
     document.getElementById('kpi-utilidad-sem').style.color = utilidad >= 0 ? 'var(--success)' : 'var(--danger)';
@@ -3005,7 +3046,7 @@ async function loadCierreMensual() {
     document.getElementById('kpi-cobranza-men').textContent = `$${cobranza.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
     document.getElementById('kpi-reposicion-men').textContent = `Repos. Stock: $${reposicion.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
     document.getElementById('kpi-costo-men').textContent = `$${costo.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-    document.getElementById('kpi-gastos-men-sub').textContent = `Cortesías: $${cortesias.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    document.getElementById('kpi-gastos-men-sub').textContent = `Cortesías: $${cortesias.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} | Mermas: -$${(data.resumen.mermas_descontadas || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
     document.getElementById('kpi-utilidad-men').textContent = `$${utilidad.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
     document.getElementById('kpi-margen-men').textContent = `Margen: ${margen}%`;
     document.getElementById('kpi-utilidad-men').style.color = utilidad >= 0 ? 'var(--success)' : 'var(--danger)';
@@ -4230,6 +4271,7 @@ async function cerrarTurnoActual() {
       document.getElementById('ticket-costo').textContent = `-$${(d.resumen.costo_produccion || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       document.getElementById('ticket-gastos').textContent = `-$${d.resumen.total_gastos.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       document.getElementById('ticket-reposicion').textContent = `-$${(d.resumen.total_reposicion || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      document.getElementById('ticket-mermas').textContent = `-$${(d.resumen.mermas_descontadas || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       
       const utilidad = d.resumen.utilidad_neta || 0;
       const utilEl = document.getElementById('ticket-utilidad');

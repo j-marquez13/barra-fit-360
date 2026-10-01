@@ -175,13 +175,19 @@ export async function restockInsumo(req, res) {
 export async function getMermas(req, res) {
   try {
     const mermas = await db.query(`
-      SELECT m.id, m.cantidad, m.motivo, m.fecha, i.nombre as insumo_nombre, i.unidad_medida
+      SELECT m.id, m.cantidad, m.motivo, m.fecha, m.costo, m.descontar_ganancia,
+             i.nombre as insumo_nombre, i.unidad_medida, i.costo_unitario
       FROM mermas m
       JOIN insumos i ON m.insumo_id = i.id
       ORDER BY m.fecha DESC
       LIMIT 100
     `);
-    return res.json(mermas);
+    const result = mermas.map(m => {
+      const costoGuardado = parseFloat(m.costo);
+      const costoFinal = costoGuardado > 0 ? costoGuardado : (parseFloat(m.cantidad) * parseFloat(m.costo_unitario));
+      return { ...m, costo: costoFinal, descontar_ganancia: !!m.descontar_ganancia };
+    });
+    return res.json(result);
   } catch (error) {
     console.error('Error al listar mermas:', error);
     return res.status(500).json({ error: 'Error al consultar mermas.' });
@@ -202,19 +208,20 @@ export async function createMerma(req, res) {
   }
 
   try {
-    const insumo = await db.query('SELECT id, nombre, stock_actual FROM insumos WHERE id = $1', [insumo_id]);
+    const insumo = await db.query('SELECT id, nombre, stock_actual, costo_unitario FROM insumos WHERE id = $1', [insumo_id]);
     if (insumo.length === 0) {
       return res.status(404).json({ error: 'Insumo no encontrado.' });
     }
 
     const stockActual = parseFloat(insumo[0].stock_actual);
     const nuevoStock = Math.max(0, stockActual - cantidadNum);
+    const costoMerma = cantidadNum * (parseFloat(insumo[0].costo_unitario) || 0);
 
     // Registrar la merma y actualizar stock en transacción
     await db.transaction(async (tx) => {
       await tx.execute(
-        'INSERT INTO mermas (insumo_id, cantidad, motivo) VALUES ($1, $2, $3)',
-        [insumo_id, cantidadNum, motivo]
+        'INSERT INTO mermas (insumo_id, cantidad, motivo, costo) VALUES ($1, $2, $3, $4)',
+        [insumo_id, cantidadNum, motivo, costoMerma]
       );
       await tx.execute(
         'UPDATE insumos SET stock_actual = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
@@ -226,11 +233,41 @@ export async function createMerma(req, res) {
       mensaje: `Merma registrada para '${insumo[0].nombre}'.`,
       stock_anterior: stockActual,
       cantidad_perdida: cantidadNum,
+      costo: costoMerma,
       stock_nuevo: nuevoStock
     });
   } catch (error) {
     console.error('Error al registrar merma:', error);
     return res.status(500).json({ error: 'Error al registrar la pérdida.', detalle: error.message });
+  }
+}
+
+// POST /api/mermas/:id/descontar-ganancia — Activa/desactiva si la merma resta de la ganancia
+export async function toggleMermaGanancia(req, res) {
+  const { id } = req.params;
+  try {
+    const rows = await db.query('SELECT descontar_ganancia FROM mermas WHERE id = $1', [id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Merma no encontrada.' });
+    }
+
+    const actual = !!rows[0].descontar_ganancia;
+    const nuevo = !actual;
+    const isPg = !!(process.env.DATABASE_URL || process.env.PGHOST);
+    const valor = isPg ? nuevo : (nuevo ? 1 : 0);
+
+    await db.execute('UPDATE mermas SET descontar_ganancia = $1 WHERE id = $2', [valor, id]);
+
+    return res.json({
+      id,
+      descontar_ganancia: nuevo,
+      mensaje: nuevo
+        ? 'La merma ahora se descuenta de la ganancia.'
+        : 'La merma ya no se descuenta de la ganancia.'
+    });
+  } catch (error) {
+    console.error('Error al actualizar merma:', error);
+    return res.status(500).json({ error: 'Error al actualizar la merma.', detalle: error.message });
   }
 }
 

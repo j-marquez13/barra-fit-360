@@ -62,6 +62,15 @@ export async function cierreDiario(req, res) {
     `, [fecha]);
     const totalReposicion = parseFloat(reposicionResumen[0]?.total_reposicion || 0);
 
+    // 3.2 Mermas que el usuario decidió descontar de la ganancia
+    const mermaFlag = isPg ? 'TRUE' : '1';
+    const mermasResumen = await db.query(`
+      SELECT COALESCE(SUM(COALESCE(m.costo, m.cantidad * i.costo_unitario)), 0) as total_mermas
+      FROM mermas m JOIN insumos i ON m.insumo_id = i.id
+      WHERE ${dateExpr('m.fecha')} = $1 AND m.descontar_ganancia = ${mermaFlag}
+    `, [fecha]);
+    const totalMermas = parseFloat(mermasResumen[0]?.total_mermas || 0);
+
     // 3.1 Desglose individual de gastos del día
     const gastosDetalle = await db.query(`
       SELECT id, fecha, categoria, descripcion, monto, moneda, tasa_cambio, monto_cop, metodo_pago
@@ -109,9 +118,9 @@ export async function cierreDiario(req, res) {
     const totalVentas = parseFloat(ventasResumen[0]?.total_ventas_cop || 0);
     const costoProduccion = topProductos.reduce((sum, p) => sum + parseFloat(p.costo_total || 0), 0);
     
-    // Utilidad Neta = Ingresos Totales - Costos Producción
+    // Utilidad Neta = Ingresos Totales - Costos Producción - Mermas descontadas
     // Los gastos operacionales se manejan desde tesorería, no restan de la utilidad de ventas
-    const utilidadNeta = totalVentas - costoProduccion;
+    const utilidadNeta = totalVentas - costoProduccion - totalMermas;
 
     const insumosAlerta = await db.query(`
       SELECT nombre, stock_actual, stock_minimo, unidad_medida FROM insumos WHERE stock_actual <= stock_minimo ORDER BY stock_actual ASC
@@ -135,6 +144,7 @@ export async function cierreDiario(req, res) {
         gastos_operacionales: totalGastos,
         reposicion_stock_cop: totalReposicion,
         costo_cortesias: costoCortesias,
+        mermas_descontadas: totalMermas,
         diferencial_cambiario: diferencialCambiarioTotal,
         utilidad_neta: utilidadNeta
       },
@@ -203,6 +213,15 @@ export async function cierreSemanal(req, res) {
     `);
     const costoCortesias = parseFloat(cortesiasResumen[0]?.costo_cortesias || 0);
 
+    // 5.1 Mermas que el usuario decidió descontar de la ganancia
+    const mermaFlag = isPg ? 'TRUE' : '1';
+    const mermasResumen = await db.query(`
+      SELECT COALESCE(SUM(COALESCE(m.costo, m.cantidad * i.costo_unitario)), 0) as total_mermas
+      FROM mermas m JOIN insumos i ON m.insumo_id = i.id
+      WHERE ${dateExpr('m.fecha')} >= ${dateAgo(7)} AND m.descontar_ganancia = ${mermaFlag}
+    `);
+    const totalMermas = parseFloat(mermasResumen[0]?.total_mermas || 0);
+
     // 6. Top productos de la semana
     const topProductos = await db.query(`
       SELECT p.nombre, p.categoria, SUM(dv.cantidad) as unidades_vendidas,
@@ -216,9 +235,9 @@ export async function cierreSemanal(req, res) {
     const totalVentas = parseFloat(resumenSemana[0]?.total_ventas_cop || 0);
     const costoProduccion = topProductos.reduce((sum, p) => sum + parseFloat(p.costo_total || 0), 0);
     
-    // Utilidad Neta = Ventas - Costo Producción
+    // Utilidad Neta = Ventas - Costo Producción - Mermas descontadas
     // Los gastos operacionales se manejan desde tesorería
-    const utilidadNeta = totalVentas - costoProduccion;
+    const utilidadNeta = totalVentas - costoProduccion - totalMermas;
 
     return res.json({
       periodo: 'Últimos 7 días',
@@ -229,6 +248,7 @@ export async function cierreSemanal(req, res) {
         gastos_operacionales: totalGastos,
         reposicion_stock_cop: totalReposicion,
         costo_cortesias: costoCortesias,
+        mermas_descontadas: totalMermas,
         utilidad_neta: utilidadNeta
       },
       ventas_por_dia: ventasPorDia,
@@ -346,6 +366,15 @@ export async function cierreRango(req, res) {
     `, baseParams);
     const costoCortesias = parseFloat(cortesiasResumen[0]?.costo_cortesias || 0);
 
+    // 5.1 Mermas que el usuario decidió descontar de la ganancia
+    const mermaFlag = isPg ? 'TRUE' : '1';
+    const mermasResumen = await db.query(`
+      SELECT COALESCE(SUM(COALESCE(m.costo, m.cantidad * i.costo_unitario)), 0) as total_mermas
+      FROM mermas m JOIN insumos i ON m.insumo_id = i.id
+      WHERE ${dateExpr('m.fecha')} >= $1 AND ${dateExpr('m.fecha')} <= $2 AND m.descontar_ganancia = ${mermaFlag}
+    `, [desde, hasta]);
+    const totalMermas = parseFloat(mermasResumen[0]?.total_mermas || 0);
+
     // 6. Top productos
     const topProductos = await db.query(`
       SELECT p.nombre, p.categoria, SUM(dv.cantidad) as unidades_vendidas,
@@ -359,7 +388,7 @@ export async function cierreRango(req, res) {
     const totalVentas = parseFloat(resumenRango[0]?.total_ventas_cop || 0);
     const costoProduccion = topProductos.reduce((sum, p) => sum + parseFloat(p.costo_total || 0), 0);
     // Los gastos operacionales se manejan desde tesorería, no restan de la utilidad
-    const utilidadNeta = totalVentas - costoProduccion;
+    const utilidadNeta = totalVentas - costoProduccion - totalMermas;
     const margenUtilidad = totalVentas > 0 ? Math.round((utilidadNeta / totalVentas) * 10000) / 100 : 0;
 
     return res.json({
@@ -372,6 +401,7 @@ export async function cierreRango(req, res) {
         gastos_operacionales: totalGastos,
         reposicion_stock_cop: totalReposicion,
         costo_cortesias: costoCortesias,
+        mermas_descontadas: totalMermas,
         utilidad_neta: utilidadNeta,
         margen_utilidad_pct: margenUtilidad
       },

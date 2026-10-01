@@ -503,13 +503,19 @@
                     <th>Insumo</th>
                     <th>Cantidad</th>
                     <th>Unidad</th>
+                    <th>Costo</th>
                     <th>Motivo</th>
+                    <th>Descontar de Ganancia</th>
                   </tr>
                 </thead>
                 <tbody id="tbody-mermas">
-                  <tr><td colspan="5" class="loading-cell">Cargando mermas...</td></tr>
+                  <tr><td colspan="7" class="loading-cell">Cargando mermas...</td></tr>
                 </tbody>
               </table>
+            </div>
+            <div id="mermas-resumen" style="margin-top:12px; display:flex; gap:20px; flex-wrap:wrap; font-size:0.9rem; align-items:center;">
+              <span>Total mermado: <strong id="mermas-total-costo" style="color:var(--danger);">$0</strong></span>
+              <span>Descontado de ganancia: <strong id="mermas-total-descontado" style="color:var(--warning);">$0</strong></span>
             </div>
           </div>
 
@@ -1702,6 +1708,7 @@
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Costo de Producción:</span><strong id="ticket-costo">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Total Gastos:</span><strong id="ticket-gastos">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Reposición de Stock:</span><strong id="ticket-reposicion">$0</strong></div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Mermas Descontadas:</span><strong id="ticket-mermas">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 15px; padding-top: 10px; border-top: 1px solid var(--border-glass); font-size: 1.05em;"><span>Utilidad Neta:</span><strong id="ticket-utilidad">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Pago Móvil (Bs):</span><strong id="ticket-pago-movil">Bs 0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Zelle (USD):</span><strong id="ticket-zelle">$0</strong></div>

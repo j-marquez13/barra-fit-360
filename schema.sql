@@ -29,6 +29,8 @@ CREATE TABLE mermas (
     insumo_id INT NOT NULL,
     cantidad NUMERIC(12, 4) NOT NULL CHECK (cantidad > 0.0000),
     motivo VARCHAR(255) NOT NULL, -- Ej: 'vencimiento', 'derrame', 'dañado'
+    costo DOUBLE PRECISION NOT NULL DEFAULT 0.00,
+    descontar_ganancia BOOLEAN DEFAULT FALSE,
     fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_mermas_insumo FOREIGN KEY (insumo_id) REFERENCES insumos(id) ON DELETE CASCADE
 );

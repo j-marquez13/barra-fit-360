@@ -383,9 +383,19 @@ export async function cerrarCaja(req, res) {
     const cortesiasData = await db.query(cortesiasQuery, [fechaApertura]);
     const costoCortesias = parseFloat(cortesiasData[0]?.costo_cortesias || 0);
 
-    // 3.3 Utilidad Neta = Total Ventas del Turno - Costo de producción
+    // 3.2.1 Mermas que el usuario decidió descontar de la ganancia (desde apertura)
+    const mermaFlag = isPg ? 'TRUE' : '1';
+    const mermasQuery = `
+      SELECT COALESCE(SUM(COALESCE(m.costo, m.cantidad * i.costo_unitario)), 0) as total_mermas
+      FROM mermas m JOIN insumos i ON m.insumo_id = i.id
+      WHERE m.fecha >= $1 AND m.descontar_ganancia = ${mermaFlag}
+    `;
+    const mermasData = await db.query(mermasQuery, [fechaApertura]);
+    const totalMermas = parseFloat(mermasData[0]?.total_mermas || 0);
+
+    // 3.3 Utilidad Neta = Total Ventas del Turno - Costo de producción - Mermas descontadas
     // Las cortesías ya entran en el costo; los gastos se manejan desde tesorería (no restan aquí)
-    const utilidadNeta = totalVentasReal - costoProduccion;
+    const utilidadNeta = totalVentasReal - costoProduccion - totalMermas;
 
     // 4. Diferencia de Caja = Monto Físico Declarado (COP) - Saldo Teórico
     const declarado = parseFloat(monto_declarado_cop) || 0;
@@ -424,6 +434,7 @@ export async function cerrarCaja(req, res) {
         total_reposicion: totalReposicion,
         costo_produccion: costoProduccion,
         costo_cortesias: costoCortesias,
+        mermas_descontadas: totalMermas,
         total_ventas_real_cop: totalVentasReal,
         utilidad_neta: utilidadNeta,
         saldo_teorico: saldoTeorico,

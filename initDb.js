@@ -91,6 +91,9 @@ export async function initializeDatabase() {
       await db.execute('ALTER TABLE ordenes_compra ADD COLUMN IF NOT EXISTS recibida BOOLEAN DEFAULT FALSE;');
       await db.execute('ALTER TABLE ordenes_compra_items ADD COLUMN IF NOT EXISTS cantidad_recibida NUMERIC(12, 2);');
       await db.execute('ALTER TABLE gastos ADD COLUMN IF NOT EXISTS orden_compra_id INTEGER;');
+      await db.execute('ALTER TABLE mermas ADD COLUMN IF NOT EXISTS costo DOUBLE PRECISION NOT NULL DEFAULT 0.0;');
+      await db.execute('ALTER TABLE mermas ADD COLUMN IF NOT EXISTS descontar_ganancia BOOLEAN DEFAULT FALSE;');
+      await db.execute('UPDATE mermas SET costo = (SELECT i.costo_unitario FROM insumos i WHERE i.id = mermas.insumo_id) WHERE costo = 0;');
 
       // El sistema permite stock negativo al facturar (emite advertencia y procesa la venta),
       // por lo que hay que eliminar cualquier CHECK que impida stock_actual < 0.
@@ -214,6 +217,8 @@ async function createTables() {
       insumo_id INTEGER NOT NULL,
       cantidad REAL NOT NULL CHECK (cantidad > 0.0),
       motivo TEXT NOT NULL,
+      costo REAL NOT NULL DEFAULT 0.0,
+      descontar_ganancia INTEGER DEFAULT 0,
       fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (insumo_id) REFERENCES insumos(id) ON DELETE CASCADE
     )
@@ -616,6 +621,10 @@ async function runMigrations() {
   // Recepción de mercancía: marca la orden como recibida y guarda lo que en verdad llegó.
   try { await db.execute("ALTER TABLE ordenes_compra ADD COLUMN recibida INTEGER DEFAULT 0"); console.log('   🔄 Migración: columna recibida agregada a ordenes_compra.'); } catch(e) {}
   try { await db.execute("ALTER TABLE ordenes_compra_items ADD COLUMN cantidad_recibida REAL"); console.log('   🔄 Migración: columna cantidad_recibida agregada a ordenes_compra_items.'); } catch(e) {}
+  // Mermas: costo de la pérdida + flag para decidir si se descuenta de la ganancia
+  try { await db.execute("ALTER TABLE mermas ADD COLUMN costo REAL NOT NULL DEFAULT 0.0"); console.log('   🔄 Migración: columna costo agregada a mermas.'); } catch(e) {}
+  try { await db.execute("ALTER TABLE mermas ADD COLUMN descontar_ganancia INTEGER DEFAULT 0"); console.log('   🔄 Migración: columna descontar_ganancia agregada a mermas.'); } catch(e) {}
+  try { await db.execute("UPDATE mermas SET costo = (SELECT costo_unitario FROM insumos WHERE insumos.id = mermas.insumo_id) WHERE costo = 0"); } catch(e) {}
 }
 
 async function ensureDefaultUsers() {

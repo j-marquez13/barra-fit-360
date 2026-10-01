@@ -6,7 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import { processSale, anularVenta } from './controllers/salesController.js';
 import { createClient, getClients, getClientDetails, processAbono, registrarDeuda, deleteAbono, updateClient } from './controllers/creditController.js';
-import { getInsumos, createInsumo, updateInsumo, restockInsumo, getMermas, createMerma, getProductos, createProducto, updateProducto, deleteProducto, deleteInsumo, getValorizacionInventario, getOrdenCompra, confirmarOrdenCompra, listarOrdenesCompra, getOrdenCompraDetalle, recibirOrdenCompra, borrarOrdenCompra, getProductoReceta, getRecetasBase, createRecetaBase, updateRecetaBase, deleteRecetaBase, toggleRecetaBaseBatido } from './controllers/inventoryController.js';
+import { getInsumos, createInsumo, updateInsumo, restockInsumo, getMermas, createMerma, toggleMermaGanancia, getProductos, createProducto, updateProducto, deleteProducto, deleteInsumo, getValorizacionInventario, getOrdenCompra, confirmarOrdenCompra, listarOrdenesCompra, getOrdenCompraDetalle, recibirOrdenCompra, borrarOrdenCompra, getProductoReceta, getRecetasBase, createRecetaBase, updateRecetaBase, deleteRecetaBase, toggleRecetaBaseBatido } from './controllers/inventoryController.js';
 import { cierreDiario, cierreSemanal, cierreRango, historialVentas } from './controllers/reportsController.js';
 import { listarGastos, registrarGasto } from './controllers/expensesController.js';
 import { estadoCaja, abrirCaja, cerrarCaja, cierreDia, listarCierresAdmin } from './controllers/cashierController.js';
@@ -121,6 +121,7 @@ app.post('/api/insumos/:id/restock', restockInsumo);
 
 app.get('/api/mermas', getMermas);
 app.post('/api/mermas', createMerma);
+app.post('/api/mermas/:id/descontar-ganancia', toggleMermaGanancia);
 
 app.get('/api/inventario/valorizacion', getValorizacionInventario);
 app.get('/api/inventario/orden-compra', getOrdenCompra);
