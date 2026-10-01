@@ -63,7 +63,7 @@ async function main() {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
   const client = await pool.connect();
   try {
-    const res = await client.query('SELECT id, nombre, costo_unitario, stock_fijo FROM insumos ORDER BY id');
+    const res = await client.query('SELECT id, nombre, costo_unitario, stock_fijo, stock_actual FROM insumos ORDER BY id');
 
     const matched = [];
     const noMatchNeon = [];
@@ -81,34 +81,40 @@ async function main() {
       usedExcel.add(eIdx);
       const costoActual = num(r.costo_unitario);
       const fijoActual = num(r.stock_fijo);
+      const actualActual = num(r.stock_actual);
       const costoExcel = num(e.costo);
       const fijoExcel = num(e.fijo);
+      const actualExcel = num(e.actual);
       const difCosto = costoExcel != null && Math.abs(costoExcel - (costoActual || 0)) > 0.0001;
       const difFijo = fijoExcel != null && Math.abs(fijoExcel - (fijoActual || 0)) > 0.0001;
+      const difActual = actualExcel != null && Math.abs(actualExcel - (actualActual || 0)) > 0.0001;
       matched.push({
         id: r.id,
         nombre: (r.nombre || '').trim(),
         excelNombre: e.nombre,
         costoActual, costoExcel, difCosto,
-        fijoActual, fijoExcel, difFijo
+        fijoActual, fijoExcel, difFijo,
+        actualActual, actualExcel, difActual
       });
     }
 
     const noMatchExcel = excel.filter((_, i) => !usedExcel.has(i));
 
     console.log('=== COMPARACIÓN (Neon vs Excel) ===');
-    console.log('ID\tINSUMO (Neon)\tCOSTO actual→excel\tFIJO actual→excel');
+    console.log('ID\tINSUMO (Neon)\tCOSTO\tFIJO\tACTUAL');
     for (const m of matched) {
-      const costoStr = m.difCosto ? `${m.costoActual ?? '—'} → ${m.costoExcel}` : `(igual) ${m.costoExcel}`;
-      const fijoStr = m.difFijo ? `${m.fijoActual ?? '—'} → ${m.fijoExcel}` : `(igual) ${m.fijoExcel}`;
-      const flag = (m.difCosto || m.difFijo) ? ' ⚠' : '';
-      console.log(`${m.id}\t${m.nombre}\t${costoStr}\t${fijoStr}${flag}`);
+      const costoStr = m.difCosto ? `${m.costoActual ?? '—'}→${m.costoExcel}` : `=${m.costoExcel}`;
+      const fijoStr = m.difFijo ? `${m.fijoActual ?? '—'}→${m.fijoExcel}` : `=${m.fijoExcel}`;
+      const actualStr = m.actualExcel == null ? '(sin dato)' : (m.difActual ? `${m.actualActual ?? '—'}→${m.actualExcel}` : `=${m.actualExcel}`);
+      const flag = (m.difCosto || m.difFijo || m.difActual) ? ' ⚠' : '';
+      console.log(`${m.id}\t${m.nombre}\t${costoStr}\t${fijoStr}\t${actualStr}${flag}`);
     }
 
     const cambiosCosto = matched.filter(m => m.difCosto).length;
     const cambiosFijo = matched.filter(m => m.difFijo).length;
+    const cambiosActual = matched.filter(m => m.difActual).length;
     console.log(`\nMatched: ${matched.length} | Sin coincidencia en Neon: ${noMatchNeon.length} | Sin coincidencia en Excel: ${noMatchExcel.length}`);
-    console.log(`Cambios de costo: ${cambiosCosto} | Cambios de stock fijo: ${cambiosFijo}`);
+    console.log(`Cambios de costo: ${cambiosCosto} | stock fijo: ${cambiosFijo} | stock actual: ${cambiosActual}`);
 
     if (noMatchNeon.length) {
       console.log('\n--- Insumos en Neon SIN coincidencia en el Excel ---');
@@ -116,12 +122,12 @@ async function main() {
     }
     if (noMatchExcel.length) {
       console.log('\n--- Insumos del Excel SIN coincidencia en Neon ---');
-      for (const e of noMatchExcel) console.log(`${e.nombre}\tcosto=${e.costo}\tfijo=${e.fijo}`);
+      for (const e of noMatchExcel) console.log(`${e.nombre}\tcosto=${e.costo}\tfijo=${e.fijo}\tactual=${e.actual ?? '—'}`);
     }
 
     if (RESTORE) {
       await client.query('BEGIN');
-      let okCosto = 0, okFijo = 0;
+      let okCosto = 0, okFijo = 0, okActual = 0;
       for (const m of matched) {
         if (m.difCosto && m.costoExcel != null) {
           await client.query('UPDATE insumos SET costo_unitario = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [m.costoExcel, m.id]);
@@ -131,9 +137,13 @@ async function main() {
           await client.query('UPDATE insumos SET stock_fijo = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [m.fijoExcel, m.id]);
           okFijo++;
         }
+        if (m.difActual && m.actualExcel != null) {
+          await client.query('UPDATE insumos SET stock_actual = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [m.actualExcel, m.id]);
+          okActual++;
+        }
       }
       await client.query('COMMIT');
-      console.log(`\n✅ Restaurados: ${okCosto} costos unitarios y ${okFijo} stock fijo.`);
+      console.log(`\n✅ Restaurados: ${okCosto} costos, ${okFijo} stock fijo, ${okActual} stock actual.`);
     } else {
       console.log('\nℹ️  Modo solo-lectura. Para aplicar: node restaurar_desde_excel.js --restore');
     }
