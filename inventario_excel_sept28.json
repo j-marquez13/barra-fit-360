@@ -1,0 +1,467 @@
+[
+  {
+    "nombre": "Aceite de Oliva 500 ML (pote vacio 37,60)",
+    "costo": 0,
+    "fijo": 500
+  },
+  {
+    "nombre": "Agua 1 LT con pico (8 unds)",
+    "costo": 2150,
+    "fijo": 34
+  },
+  {
+    "nombre": "Agua nevada 1,5 lts",
+    "costo": 3667,
+    "fijo": 18
+  },
+  {
+    "nombre": "Agua nevada 355",
+    "costo": 1625,
+    "fijo": 24
+  },
+  {
+    "nombre": "Agua nevada 600 (16 unds)",
+    "costo": 1880,
+    "fijo": 35
+  },
+  {
+    "nombre": "Agua vida 600 ml (20 unds)",
+    "costo": 950,
+    "fijo": 45
+  },
+  {
+    "nombre": "Almendras por bolsita",
+    "costo": 0,
+    "fijo": 0
+  },
+  {
+    "nombre": "Amino Energy",
+    "costo": 15200,
+    "fijo": 0
+  },
+  {
+    "nombre": "Aminox 30 Servicios (435 Gramos )",
+    "costo": 120000,
+    "fijo": 1
+  },
+  {
+    "nombre": "Amper Energizante",
+    "costo": 3500,
+    "fijo": 6
+  },
+  {
+    "nombre": "APIO",
+    "costo": 60,
+    "fijo": 67
+  },
+  {
+    "nombre": "Arandanos (20GR)",
+    "costo": 1200,
+    "fijo": 30
+  },
+  {
+    "nombre": "Azucar gr (envase vacio 107gr)",
+    "costo": 4,
+    "fijo": 1000
+  },
+  {
+    "nombre": "Barra proteina chocolate unds",
+    "costo": 3500,
+    "fijo": 60
+  },
+  {
+    "nombre": "Basic pre-entreno 240 gr",
+    "costo": 75000,
+    "fijo": 1
+  },
+  {
+    "nombre": "bloom  energizante",
+    "costo": 10000,
+    "fijo": 15
+  },
+  {
+    "nombre": "Bolsa grande 10x14",
+    "costo": 0,
+    "fijo": 110
+  },
+  {
+    "nombre": "Bolsas pequeñas",
+    "costo": 0,
+    "fijo": 110
+  },
+  {
+    "nombre": "C4 en Lata",
+    "costo": 10000,
+    "fijo": 15
+  },
+  {
+    "nombre": "Café 200 gr",
+    "costo": 0,
+    "fijo": 6
+  },
+  {
+    "nombre": "Cambur (65G)",
+    "costo": 130,
+    "fijo": 60
+  },
+  {
+    "nombre": "Canela en polvo frasco 27 gr",
+    "costo": 250,
+    "fijo": 64
+  },
+  {
+    "nombre": "CELSIUS",
+    "costo": 0,
+    "fijo": 8
+  },
+  {
+    "nombre": "celsius de 160 onz",
+    "costo": 10000,
+    "fijo": 15
+  },
+  {
+    "nombre": "celsius de120 onz",
+    "costo": 10000,
+    "fijo": 15
+  },
+  {
+    "nombre": "Cerveza Cardenal Ultra en Lata",
+    "costo": 3300,
+    "fijo": 24
+  },
+  {
+    "nombre": "Cerveza Zulia",
+    "costo": 1800,
+    "fijo": 36
+  },
+  {
+    "nombre": "Chia",
+    "costo": 0,
+    "fijo": 100
+  },
+  {
+    "nombre": "Chispas de chocolate (envase vacio 8,8gr)",
+    "costo": 0,
+    "fijo": 100
+  },
+  {
+    "nombre": "Collagen sascha fitness porc 16gr",
+    "costo": 6858,
+    "fijo": 38
+  },
+  {
+    "nombre": "Cucharas",
+    "costo": 70,
+    "fijo": 100
+  },
+  {
+    "nombre": "Cucharitas plastico",
+    "costo": 70,
+    "fijo": 85
+  },
+  {
+    "nombre": "Cuchillo plastico",
+    "costo": 70,
+    "fijo": 20
+  },
+  {
+    "nombre": "curcuma",
+    "costo": 60,
+    "fijo": 100
+  },
+  {
+    "nombre": "Energizante espartano",
+    "costo": 2084,
+    "fijo": 5
+  },
+  {
+    "nombre": "Flora fuxion",
+    "costo": 0,
+    "fijo": 11
+  },
+  {
+    "nombre": "Fresas (65GR)",
+    "costo": 470,
+    "fijo": 100
+  },
+  {
+    "nombre": "Galletas Coockies Cake de Zanahoria",
+    "costo": 0,
+    "fijo": 0
+  },
+  {
+    "nombre": "Gatorade de 600 ml (12 unds)",
+    "costo": 3250,
+    "fijo": 24
+  },
+  {
+    "nombre": "gelatina",
+    "costo": 2000,
+    "fijo": 8
+  },
+  {
+    "nombre": "Glutamina (300 Gramos)",
+    "costo": 72000,
+    "fijo": 1
+  },
+  {
+    "nombre": "Granola fit graan 350gr",
+    "costo": 0,
+    "fijo": 350
+  },
+  {
+    "nombre": "Harina De Avena",
+    "costo": 0,
+    "fijo": 0
+  },
+  {
+    "nombre": "Huevos und",
+    "costo": 600,
+    "fijo": 30
+  },
+  {
+    "nombre": "Iso 100 Chocolate 5 Libras (2.3 Kgr)",
+    "costo": 4000,
+    "fijo": 31
+  },
+  {
+    "nombre": "jengibre",
+    "costo": 60,
+    "fijo": 100
+  },
+  {
+    "nombre": "Leche Almendra (150ML) 21 unds",
+    "costo": 1400,
+    "fijo": 24
+  },
+  {
+    "nombre": "Leche Completa (150ML)",
+    "costo": 667,
+    "fijo": 86
+  },
+  {
+    "nombre": "Leche Deslatozada (150ML)",
+    "costo": 722.17,
+    "fijo": 75
+  },
+  {
+    "nombre": "limon",
+    "costo": 60,
+    "fijo": 50
+  },
+  {
+    "nombre": "Mango (65GR)",
+    "costo": 325,
+    "fijo": 30
+  },
+  {
+    "nombre": "Mani por bolsita",
+    "costo": 0,
+    "fijo": 0
+  },
+  {
+    "nombre": "Mantequilla de mani (25GR)",
+    "costo": 0,
+    "fijo": 0
+  },
+  {
+    "nombre": "manzana",
+    "costo": 60,
+    "fijo": 15
+  },
+  {
+    "nombre": "Miel natural 350 gr",
+    "costo": 0,
+    "fijo": 500
+  },
+  {
+    "nombre": "MONSTER",
+    "costo": 7500,
+    "fijo": 15
+  },
+  {
+    "nombre": "mora",
+    "costo": 0,
+    "fijo": 20
+  },
+  {
+    "nombre": "naranja",
+    "costo": 60,
+    "fijo": 25
+  },
+  {
+    "nombre": "Nitro Tech vainilla 2 l",
+    "costo": 150000,
+    "fijo": 1
+  },
+  {
+    "nombre": "Nocartb",
+    "costo": 0,
+    "fijo": 21
+  },
+  {
+    "nombre": "Parchita (65GR)",
+    "costo": 1000,
+    "fijo": 20
+  },
+  {
+    "nombre": "pepino",
+    "costo": 60,
+    "fijo": 60
+  },
+  {
+    "nombre": "Pimienta gr (pimentero vacio 80,20gr y frasco 27gr)",
+    "costo": 250,
+    "fijo": 64
+  },
+  {
+    "nombre": "Piña (65GR)",
+    "costo": 150,
+    "fijo": 43
+  },
+  {
+    "nombre": "piña de los jugos",
+    "costo": 700,
+    "fijo": 20
+  },
+  {
+    "nombre": "Pistacho por Bolsita",
+    "costo": 0,
+    "fijo": 0
+  },
+  {
+    "nombre": "Pitillo",
+    "costo": 60,
+    "fijo": 250
+  },
+  {
+    "nombre": "Pre Entreno C4 30 Servicios (285 Gramos)",
+    "costo": 95000,
+    "fijo": 1
+  },
+  {
+    "nombre": "Pre Entreno C4 50 porc (9GR)",
+    "costo": 3600,
+    "fijo": 58
+  },
+  {
+    "nombre": "Pre Entreno C4 50 Servicios (475 Gramos)",
+    "costo": 115000,
+    "fijo": 1
+  },
+  {
+    "nombre": "Proteina vainilla (25GR)",
+    "costo": 2660,
+    "fijo": 272.4
+  },
+  {
+    "nombre": "Sal gr",
+    "costo": 0,
+    "fijo": 1000
+  },
+  {
+    "nombre": "Semillas de Ajonjoli",
+    "costo": 0,
+    "fijo": 100
+  },
+  {
+    "nombre": "Soda Schweppes",
+    "costo": 2666.67,
+    "fijo": 16
+  },
+  {
+    "nombre": "Stiker",
+    "costo": 426.67,
+    "fijo": 1100
+  },
+  {
+    "nombre": "Te hatsu 200 ml",
+    "costo": 2400,
+    "fijo": 6
+  },
+  {
+    "nombre": "Te macornick bolsita",
+    "costo": 0,
+    "fijo": 20
+  },
+  {
+    "nombre": "Tenedor plastico",
+    "costo": 70,
+    "fijo": 20
+  },
+  {
+    "nombre": "Vainilla blanca (envase vacio 20,6)",
+    "costo": 0,
+    "fijo": 150
+  },
+  {
+    "nombre": "Vaso 14 onz Tapas",
+    "costo": 0,
+    "fijo": 210
+  },
+  {
+    "nombre": "Vaso 5 onz",
+    "costo": 600,
+    "fijo": 50
+  },
+  {
+    "nombre": "Vaso 5, 7 Y 10  onz TAPA",
+    "costo": 0,
+    "fijo": 142
+  },
+  {
+    "nombre": "vaso 8 onzas tapa",
+    "costo": 0,
+    "fijo": 100
+  },
+  {
+    "nombre": "vaso 8onzas",
+    "costo": 340,
+    "fijo": 100
+  },
+  {
+    "nombre": "Vaso 9 onz TAPA",
+    "costo": 0,
+    "fijo": 0
+  },
+  {
+    "nombre": "Vasos 14 onz",
+    "costo": 500,
+    "fijo": 200
+  },
+  {
+    "nombre": "Vasos 9 onz",
+    "costo": 700,
+    "fijo": 50
+  },
+  {
+    "nombre": "Yogurt Griego Entero NATURAL 500G (Pote vacio 33)",
+    "costo": 26.4,
+    "fijo": 1000
+  },
+  {
+    "nombre": "Yogurt Ku de Frutas 150gr",
+    "costo": 7000,
+    "fijo": 3
+  },
+  {
+    "nombre": "Yogurt ku Natural Griego",
+    "costo": 7000,
+    "fijo": 3
+  },
+  {
+    "nombre": "yolo firme",
+    "costo": 11300,
+    "fijo": 3
+  },
+  {
+    "nombre": "yolo fit",
+    "costo": 7000,
+    "fijo": 6
+  },
+  {
+    "nombre": "zanahoria",
+    "costo": 60,
+    "fijo": 30
+  }
+]
