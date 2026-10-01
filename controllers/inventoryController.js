@@ -883,7 +883,6 @@ export async function createRecetaBase(req, res) {
       if (insumos && Array.isArray(insumos)) {
         for (const item of insumos) {
           await tx.execute('INSERT INTO recetas_base_insumos (receta_base_id, insumo_id, cantidad) VALUES ($1, $2, $3)', [rbId, item.insumo_id, parseFloat(item.cantidad) || 0]);
-          await applyInsumoCostoDesdePlantilla(tx, item);
         }
       }
       return rbId;
@@ -906,7 +905,6 @@ export async function updateRecetaBase(req, res) {
         await tx.execute('DELETE FROM recetas_base_insumos WHERE receta_base_id = $1', [id]);
         for (const item of insumos) {
           await tx.execute('INSERT INTO recetas_base_insumos (receta_base_id, insumo_id, cantidad) VALUES ($1, $2, $3)', [id, item.insumo_id, parseFloat(item.cantidad) || 0]);
-          await applyInsumoCostoDesdePlantilla(tx, item);
         }
       }
       // Recalcular el costo de producción de todos los productos que usan esta plantilla
@@ -928,18 +926,6 @@ function normalizeCostoTotal(costo_total, insumos) {
   const manual = parseFloat(costo_total);
   if (!isNaN(manual) && manual >= 0) return manual;
   return (insumos || []).reduce((s, it) => s + (parseFloat(it.cantidad) || 0) * (parseFloat(it.costo) || 0), 0);
-}
-
-/**
- * Actualiza el costo unitario de un insumo desde la plantilla (si se envió un costo).
- */
-async function applyInsumoCostoDesdePlantilla(tx, item) {
-  if (item.costo != null && !isNaN(parseFloat(item.costo))) {
-    await tx.execute(
-      'UPDATE insumos SET costo_unitario = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-      [parseFloat(item.costo), item.insumo_id]
-    );
-  }
 }
 
 /**
