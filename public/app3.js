@@ -1540,6 +1540,20 @@ async function loadInventarioData() {
 let ordenCompraItems = [];
 let ordenSeleccionState = {}; // Selección del usuario (checkbox + cantidad) que se conserva al filtrar.
 
+// Estado efectivo de un insumo: lo que el usuario eligió, o el sugerido por defecto.
+function estadoOrdenItem(item) {
+  const st = ordenSeleccionState[String(item.id)];
+  return st || { checked: (item.por_comprar > 0), qty: '' };
+}
+
+// Guarda en el estado lo que hay actualmente en una fila (checkbox + cantidad).
+function guardarEstadoFila(tr) {
+  const chk = tr.querySelector('.chk-orden-item');
+  const qty = tr.querySelector('.orden-qty');
+  if (!chk) return;
+  ordenSeleccionState[chk.dataset.id] = { checked: chk.checked, qty: qty ? qty.value : '' };
+}
+
 window.loadOrdenCompra = async function() {
   const tbody = document.getElementById('tbody-orden');
   if (!tbody) return;
@@ -1566,15 +1580,7 @@ function renderOrdenCompraTable() {
 
   // Guarda el estado actual (checkboxes y cantidades) antes de volver a dibujar la tabla,
   // así al buscar/filtrar no se pierde lo que el usuario ya seleccionó.
-  tbody.querySelectorAll('tr').forEach(tr => {
-    const chk = tr.querySelector('.chk-orden-item');
-    const qty = tr.querySelector('.orden-qty');
-    if (!chk) return;
-    ordenSeleccionState[chk.dataset.id] = {
-      checked: chk.checked,
-      qty: qty ? qty.value : ''
-    };
-  });
+  tbody.querySelectorAll('tr').forEach(guardarEstadoFila);
 
   const searchTerm = (document.getElementById('search-orden-input')?.value || '').toLowerCase().trim();
   const itemsFiltrados = searchTerm
@@ -1593,9 +1599,9 @@ function renderOrdenCompraTable() {
     const sugeridoTxt = sugerido > 0 ? ('+' + sugerido) : String(sugerido);
     const sugeridoColor = sugerido > 0 ? 'var(--warning)' : (sugerido < 0 ? 'var(--success)' : 'var(--color-muted)');
     const ph = sugerido > 0 ? sugerido : '';
-    const sel = ordenSeleccionState[String(item.id)];
-    const checked = sel ? sel.checked : (sugerido > 0);
-    const qtyVal = sel && sel.qty ? sel.qty : '';
+    const sel = estadoOrdenItem(item);
+    const checked = sel.checked;
+    const qtyVal = sel.qty || '';
     return `<tr>
       <td><input type="checkbox" class="chk-orden-item" data-id="${item.id}" ${checked ? 'checked' : ''}></td>
       <td><strong>${item.nombre}</strong></td>
@@ -1608,13 +1614,20 @@ function renderOrdenCompraTable() {
     </tr>`;
   }).join('');
 
-  tbody.querySelectorAll('.chk-orden-item').forEach(chk => chk.addEventListener('change', updateOrdenTotal));
-  tbody.querySelectorAll('.orden-qty').forEach(inp => inp.addEventListener('input', updateOrdenTotal));
+  tbody.querySelectorAll('.chk-orden-item').forEach(chk => chk.addEventListener('change', (e) => {
+    guardarEstadoFila(e.target.closest('tr'));
+    updateOrdenTotal();
+  }));
+  tbody.querySelectorAll('.orden-qty').forEach(inp => inp.addEventListener('input', (e) => {
+    guardarEstadoFila(e.target.closest('tr'));
+    updateOrdenTotal();
+  }));
 
   if (chkTodos) {
     chkTodos.checked = false;
     chkTodos.onchange = () => {
       tbody.querySelectorAll('.chk-orden-item').forEach(c => c.checked = chkTodos.checked);
+      tbody.querySelectorAll('tr').forEach(guardarEstadoFila);
       updateOrdenTotal();
     };
   }
@@ -1626,32 +1639,42 @@ function updateOrdenTotal() {
   const tbody = document.getElementById('tbody-orden');
   const valTotal = document.getElementById('val-total-orden');
   let total = 0;
-  tbody.querySelectorAll('tr').forEach(tr => {
-    const chk = tr.querySelector('.chk-orden-item');
-    const qty = tr.querySelector('.orden-qty');
-    if (!chk || !chk.checked || !qty) return;
-    const item = ordenCompraItems.find(o => String(o.id) === chk.dataset.id);
-    if (!item) return;
-    const cantidad = parseFloat(qty.value) || 0;
-    const subtotal = cantidad * (parseFloat(item.costo_unitario) || 0);
-    total += subtotal;
-    const cell = tr.querySelector('.orden-item-total');
-    if (cell) cell.textContent = '$' + subtotal.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 });
+
+  // Calcula el total sobre TODA la selección (incluye items ocultos por el filtro).
+  ordenCompraItems.forEach(item => {
+    const st = estadoOrdenItem(item);
+    if (!st.checked) return;
+    const cantidad = parseFloat(st.qty) || 0;
+    if (cantidad <= 0) return;
+    total += cantidad * (parseFloat(item.costo_unitario) || 0);
   });
+
+  // Refresca la celda de subtotal de cada fila visible.
+  if (tbody) {
+    tbody.querySelectorAll('tr').forEach(tr => {
+      const chk = tr.querySelector('.chk-orden-item');
+      const qty = tr.querySelector('.orden-qty');
+      if (!chk || !qty) return;
+      const item = ordenCompraItems.find(o => String(o.id) === chk.dataset.id);
+      if (!item) return;
+      const cantidad = parseFloat(qty.value) || 0;
+      const subtotal = cantidad * (parseFloat(item.costo_unitario) || 0);
+      const cell = tr.querySelector('.orden-item-total');
+      if (cell) cell.textContent = '$' + subtotal.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 });
+    });
+  }
+
   if (valTotal) valTotal.textContent = '$' + total.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 });
   return total;
 }
 
 function getOrdenSeleccion() {
-  const tbody = document.getElementById('tbody-orden');
   const items = [];
-  tbody.querySelectorAll('tr').forEach(tr => {
-    const chk = tr.querySelector('.chk-orden-item');
-    const qty = tr.querySelector('.orden-qty');
-    if (!chk || !chk.checked || !qty) return;
-    const item = ordenCompraItems.find(o => String(o.id) === chk.dataset.id);
-    if (!item) return;
-    const cantidad = parseFloat(qty.value) || 0;
+  // Lee la selección COMPLETA (incluye items ocultos por el filtro del buscador).
+  ordenCompraItems.forEach(item => {
+    const st = estadoOrdenItem(item);
+    if (!st.checked) return;
+    const cantidad = parseFloat(st.qty) || 0;
     if (cantidad <= 0) return;
     items.push({ insumo_id: item.id, cantidad, costo_unitario: parseFloat(item.costo_unitario) || 0 });
   });
