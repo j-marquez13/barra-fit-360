@@ -1538,6 +1538,7 @@ async function loadInventarioData() {
 }
 
 let ordenCompraItems = [];
+let ordenSeleccionState = {}; // Selección del usuario (checkbox + cantidad) que se conserva al filtrar.
 
 window.loadOrdenCompra = async function() {
   const tbody = document.getElementById('tbody-orden');
@@ -1549,6 +1550,7 @@ window.loadOrdenCompra = async function() {
     const data = await res.json();
     // Mostrar TODOS los insumos: el usuario decide qué comprar y la cantidad.
     ordenCompraItems = data.items || [];
+    ordenSeleccionState = {}; // Reinicia la selección al cargar una orden nueva.
     renderOrdenCompraTable();
     loadHistorialCompras();
   } catch (err) {
@@ -1561,6 +1563,18 @@ function renderOrdenCompraTable() {
   const tbody = document.getElementById('tbody-orden');
   const chkTodos = document.getElementById('chk-orden-todos');
   if (!tbody) return;
+
+  // Guarda el estado actual (checkboxes y cantidades) antes de volver a dibujar la tabla,
+  // así al buscar/filtrar no se pierde lo que el usuario ya seleccionó.
+  tbody.querySelectorAll('tr').forEach(tr => {
+    const chk = tr.querySelector('.chk-orden-item');
+    const qty = tr.querySelector('.orden-qty');
+    if (!chk) return;
+    ordenSeleccionState[chk.dataset.id] = {
+      checked: chk.checked,
+      qty: qty ? qty.value : ''
+    };
+  });
 
   const searchTerm = (document.getElementById('search-orden-input')?.value || '').toLowerCase().trim();
   const itemsFiltrados = searchTerm
@@ -1579,13 +1593,16 @@ function renderOrdenCompraTable() {
     const sugeridoTxt = sugerido > 0 ? ('+' + sugerido) : String(sugerido);
     const sugeridoColor = sugerido > 0 ? 'var(--warning)' : (sugerido < 0 ? 'var(--success)' : 'var(--color-muted)');
     const ph = sugerido > 0 ? sugerido : '';
+    const sel = ordenSeleccionState[String(item.id)];
+    const checked = sel ? sel.checked : (sugerido > 0);
+    const qtyVal = sel && sel.qty ? sel.qty : '';
     return `<tr>
-      <td><input type="checkbox" class="chk-orden-item" data-id="${item.id}" ${sugerido > 0 ? 'checked' : ''}></td>
+      <td><input type="checkbox" class="chk-orden-item" data-id="${item.id}" ${checked ? 'checked' : ''}></td>
       <td><strong>${item.nombre}</strong></td>
       <td>${item.stock_actual} ${item.unidad_medida}</td>
       <td>${item.stock_fijo} ${item.unidad_medida}</td>
       <td style="color:${sugeridoColor}; font-weight:bold;">${sugeridoTxt} ${item.unidad_medida}</td>
-      <td><input type="number" class="orden-qty" data-id="${item.id}" value="" min="0" step="any" placeholder="${ph}" style="width:100px; background:rgba(0,0,0,0.25); border:1px solid var(--border-glass); border-radius:6px; padding:6px 8px; color:var(--color-text); font-family:var(--font-title);"></td>
+      <td><input type="number" class="orden-qty" data-id="${item.id}" value="${qtyVal}" min="0" step="any" placeholder="${ph}" style="width:100px; background:rgba(0,0,0,0.25); border:1px solid var(--border-glass); border-radius:6px; padding:6px 8px; color:var(--color-text); font-family:var(--font-title);"></td>
       <td>$${item.costo_unitario.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
       <td class="orden-item-total" style="font-weight:bold; color:var(--success);">$0</td>
     </tr>`;
