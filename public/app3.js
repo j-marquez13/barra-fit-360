@@ -104,6 +104,7 @@ const DOM = {
   btnMixto: document.getElementById('btn-mixto'),
   btnCreditoDirecto: document.getElementById('btn-credito-directo'),
   btnCortesiaDirecto: document.getElementById('btn-cortesia-directo'),
+  btnCortesiaGym: document.getElementById('btn-cortesia-gym'),
   
   // Modal de Pago
   paymentModal: document.getElementById('payment-modal'),
@@ -235,6 +236,10 @@ checkApiHealth();
         STATE.isCortesia = false; // Reset after submit
       }
     });
+  }
+
+  if(DOM.btnCortesiaGym) {
+    DOM.btnCortesiaGym.addEventListener('click', submitCortesiaGym);
   }
 
   // Modales secundarios;
@@ -710,6 +715,7 @@ function renderCart() {
     if(DOM.btnMixto) DOM.btnMixto.disabled = true;
     if(DOM.btnCreditoDirecto) DOM.btnCreditoDirecto.disabled = true;
     if(DOM.btnCortesiaDirecto) DOM.btnCortesiaDirecto.disabled = true;
+    if(DOM.btnCortesiaGym) DOM.btnCortesiaGym.disabled = true;
     document.querySelectorAll('.quick-pay-btn').forEach(b => b.disabled = true);
     return;
   }
@@ -778,6 +784,7 @@ function renderCart() {
   if(DOM.btnMixto) DOM.btnMixto.disabled = false;
   if(DOM.btnCreditoDirecto) DOM.btnCreditoDirecto.disabled = false;
   if(DOM.btnCortesiaDirecto) DOM.btnCortesiaDirecto.disabled = false;
+  if(DOM.btnCortesiaGym) DOM.btnCortesiaGym.disabled = false;
   document.querySelectorAll('.quick-pay-btn').forEach(b => b.disabled = false);
   lucide.createIcons();
 }
@@ -1469,6 +1476,102 @@ function resetSale() {
   STATE.cart = [];
   renderCart();
   DOM.receiptModal.classList.remove('open');
+}
+
+// ============================================
+// CORTESÍA GYM — el gimnasio paga SOLO el costo de los productos regalados.
+// Se registra como venta a crédito al cliente "Gimnasio" por el valor del COSTO.
+// ============================================
+async function obtenerClienteGym() {
+  const GYM_IDENT = 'GYM-0001';
+
+  // 1. Buscar en caché local
+  let cliente = (STATE.clientes || []).find(c => c.identificacion === GYM_IDENT || (c.nombre || '').toLowerCase() === 'gimnasio');
+  if (cliente) return cliente.id;
+
+  // 2. Buscar en el servidor (por si aún no está cargado)
+  try {
+    const res = await fetch('/api/clientes');
+    if (res.ok) {
+      const lista = await res.json();
+      cliente = lista.find(c => c.identificacion === GYM_IDENT || (c.nombre || '').toLowerCase() === 'gimnasio');
+      if (cliente) {
+        STATE.clientes = lista;
+        return cliente.id;
+      }
+    }
+  } catch (e) { /* se intenta crear abajo */ }
+
+  // 3. Crear el cliente "Gimnasio" automáticamente
+  const res = await fetch('/api/clientes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nombre: 'Gimnasio', identificacion: GYM_IDENT, telefono: '', limite_credito: 0 })
+  });
+  const data = await res.json();
+  if (res.status === 201 && data.cliente) {
+    if (!Array.isArray(STATE.clientes)) STATE.clientes = [];
+    STATE.clientes.push(data.cliente);
+    return data.cliente.id;
+  }
+  throw new Error(data.error || 'No se pudo crear el cliente Gimnasio.');
+}
+
+async function submitCortesiaGym() {
+  if (!STATE.cart || STATE.cart.length === 0) {
+    showToast('Agrega productos al carrito primero.', 'warning');
+    return;
+  }
+
+  // Costo total = lo que el gimnasio debe pagar (costo por unidad × cantidad).
+  let costoTotal = 0;
+  STATE.cart.forEach(item => {
+    const prod = STATE.products.find(p => p.id === item.producto_id);
+    const costo = (item.costo_produccion_calculado !== undefined)
+      ? parseFloat(item.costo_produccion_calculado)
+      : (prod ? parseFloat(prod.costo_produccion) : 0);
+    costoTotal += (costo || 0) * (parseFloat(item.cantidad) || 0);
+  });
+
+  if (costoTotal <= 0) {
+    showToast('El costo total es $0. Revisa los costos de los productos.', 'warning');
+    return;
+  }
+
+  const msg = `¿Registrar esta venta como CORTESÍA GYM?\n\nEl gimnasio quedará debiendo $${costoTotal.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP (solo el costo).`;
+  if (!confirm(msg)) return;
+
+  try {
+    const clienteId = await obtenerClienteGym();
+
+    const payload = {
+      items: STATE.cart,
+      pagos: [{ metodo_pago: 'Crédito', moneda: 'COP', monto_original: costoTotal, referencia: null }],
+      tasas: { USD: STATE.tasas.USD, VES: STATE.tasas.VES },
+      tipo_transaccion: 'Venta',
+      cortesia_gym: true,
+      notas: 'Cortesía Gym (paga el gimnasio, solo costo)',
+      cliente_id: clienteId
+    };
+
+    const res = await fetch('/api/ventas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (res.status === 201) {
+      showReceipt(data);
+      await loadProductsFromAPI();
+      if (typeof loadClientesData === 'function') loadClientesData();
+      showToast('Cortesía Gym registrada. Quedó a crédito del gimnasio.', 'success');
+    } else {
+      alert(data.error || 'Error al registrar la cortesía gym.');
+    }
+  } catch (e) {
+    console.error(e);
+    alert('Error: ' + e.message);
+  }
 }
 
 // ============================================

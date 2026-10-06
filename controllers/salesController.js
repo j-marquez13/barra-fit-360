@@ -62,10 +62,13 @@ export async function processSale(req, res) {
     }
 
     // 3. Calcular el total de la venta (Moneda Base: COP)
+    const esCortesiaGym = req.body.cortesia_gym === true;
     let totalVentaCop = 0;
     const detallesVenta = items.map(item => {
       const prod = productosMap.get(item.producto_id);
-      const precioUnitario = isCortesia ? 0 : parseFloat(prod.precio_venta);
+      const costoUnitario = (item.costo_produccion_calculado !== undefined) ? parseFloat(item.costo_produccion_calculado) : parseFloat(prod.costo_produccion);
+      // Cortesía Gym: el gimnasio paga SOLO el costo (no el precio de venta).
+      const precioUnitario = isCortesia ? 0 : (esCortesiaGym ? costoUnitario : parseFloat(prod.precio_venta));
       const cantidad = parseFloat(item.cantidad);
       const subtotal = precioUnitario * cantidad;
       totalVentaCop += subtotal;
@@ -76,7 +79,7 @@ export async function processSale(req, res) {
         cantidad,
         precio_unitario: precioUnitario,
         subtotal,
-        costo_unitario: (item.costo_produccion_calculado !== undefined) ? parseFloat(item.costo_produccion_calculado) : parseFloat(prod.costo_produccion),
+        costo_unitario: costoUnitario,
         receta_base_ids: (item.receta_base_ids && item.receta_base_ids.length > 0) ? JSON.stringify(item.receta_base_ids) : null,
         insumos_manuales: (item.insumos_manuales && item.insumos_manuales.length > 0) ? item.insumos_manuales : null,
         extras: item.extras || []
