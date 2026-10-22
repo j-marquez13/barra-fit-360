@@ -2965,12 +2965,13 @@ async function loadCierreDiario() {
     document.getElementById('kpi-utilidad').style.color = isProfit ? 'var(--success)' : 'var(--danger)';
     document.getElementById('kpi-margen').textContent = isProfit ? 'Ganancia' : 'Pérdida';
 
-    // Desglose pagos
+    // Desglose de pagos, separando Ventas (contado) de Cobranza (abonos)
     const tbodyPagos = document.getElementById('tbody-pagos-diario');
-    if (data.desglose_pagos.length === 0) {
-      tbodyPagos.innerHTML = '<tr><td colspan="5" class="loading-cell">Sin pagos registrados para esta fecha.</td></tr>';
-    } else {
-      tbodyPagos.innerHTML = data.desglose_pagos.map(p => `
+    const tbodyCobranza = document.getElementById('tbody-cobranza-diario');
+    const ventasRows = (data.desglose_pagos || []).filter(p => (p.origen || 'Venta') === 'Venta');
+    const cobranzaRows = (data.desglose_pagos || []).filter(p => p.origen === 'Cobranza');
+
+    const renderPagoRow = (p) => `
         <tr>
           <td><strong>${p.metodo_pago}</strong></td>
           <td>${p.moneda}</td>
@@ -2978,7 +2979,16 @@ async function loadCierreDiario() {
           <td>${parseFloat(p.total_original).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
           <td class="font-outfit">$${parseFloat(p.total_cop).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
         </tr>
-      `).join('');
+      `;
+
+    tbodyPagos.innerHTML = ventasRows.length === 0
+      ? '<tr><td colspan="5" class="loading-cell">Sin ventas de contado para esta fecha.</td></tr>'
+      : ventasRows.map(renderPagoRow).join('');
+
+    if (tbodyCobranza) {
+      tbodyCobranza.innerHTML = cobranzaRows.length === 0
+        ? '<tr><td colspan="5" class="loading-cell">Sin cobranza de deudas para esta fecha.</td></tr>'
+        : cobranzaRows.map(renderPagoRow).join('');
     }
 
     // Desglose de Gastos Operativos
@@ -3219,10 +3229,13 @@ async function loadCierreMensual() {
       chartContainer.innerHTML = '<div style="text-align:center; color:var(--color-muted); padding:40px; width:100%;">Sin datos para este mes.</div>';
     }
 
-    // Desglose pagos
+    // Desglose de pagos, separando Ventas (contado) de Cobranza (abonos)
     const tbodyPagos = document.getElementById('tbody-pagos-mensual');
-    if (data.desglose_pagos && data.desglose_pagos.length > 0) {
-      tbodyPagos.innerHTML = data.desglose_pagos.map(p => `
+    const tbodyCobranza = document.getElementById('tbody-cobranza-mensual');
+    const ventasRowsMen = (data.desglose_pagos || []).filter(p => (p.origen || 'Venta') === 'Venta');
+    const cobranzaRowsMen = (data.desglose_pagos || []).filter(p => p.origen === 'Cobranza');
+
+    const renderPagoRowMen = (p) => `
         <tr>
           <td><strong>${p.metodo_pago}</strong></td>
           <td>${p.moneda}</td>
@@ -3230,9 +3243,16 @@ async function loadCierreMensual() {
           <td>${parseFloat(p.total_original).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
           <td class="font-outfit">$${parseFloat(p.total_cop).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
         </tr>
-      `).join('');
-    } else {
-      tbodyPagos.innerHTML = '<tr><td colspan="5" class="loading-cell">Sin pagos registrados en este mes.</td></tr>';
+      `;
+
+    tbodyPagos.innerHTML = ventasRowsMen.length === 0
+      ? '<tr><td colspan="5" class="loading-cell">Sin ventas de contado en este mes.</td></tr>'
+      : ventasRowsMen.map(renderPagoRowMen).join('');
+
+    if (tbodyCobranza) {
+      tbodyCobranza.innerHTML = cobranzaRowsMen.length === 0
+        ? '<tr><td colspan="5" class="loading-cell">Sin cobranza de deudas en este mes.</td></tr>'
+        : cobranzaRowsMen.map(renderPagoRowMen).join('');
     }
 
     // Top productos

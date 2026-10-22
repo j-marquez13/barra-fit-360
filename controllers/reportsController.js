@@ -30,19 +30,21 @@ export async function cierreDiario(req, res) {
       WHERE ${dateFilter} AND v.tipo_transaccion = 'Venta' AND pv.metodo_pago = 'Crédito'
     `, [fecha]);
 
-    // 2. Desglose por método de pago (Ventas + Abonos)
+    // 2. Desglose por método de pago, separando Ventas (contado) de Cobranza (abonos)
     const pagosPorMetodo = await db.query(`
-      SELECT metodo_pago, moneda, sum(cantidad_pagos) as cantidad_pagos, sum(total_original) as total_original, sum(total_cop) as total_cop
+      SELECT origen, metodo_pago, moneda, sum(cantidad_pagos) as cantidad_pagos, sum(total_original) as total_original, sum(total_cop) as total_cop
       FROM (
-        SELECT pv.metodo_pago, pv.moneda, COUNT(*) as cantidad_pagos, SUM(pv.monto_original) as total_original, SUM(pv.monto_base) as total_cop
+        SELECT 'Venta' as origen, pv.metodo_pago, pv.moneda, COUNT(*) as cantidad_pagos, SUM(pv.monto_original) as total_original, SUM(pv.monto_base) as total_cop
         FROM pagos_ventas pv JOIN ventas v ON pv.venta_id = v.id
-        WHERE ${dateFilter} AND v.tipo_transaccion != 'Anulada' GROUP BY pv.metodo_pago, pv.moneda
+        WHERE ${dateFilter} AND v.tipo_transaccion != 'Anulada' AND pv.metodo_pago != 'Crédito'
+        GROUP BY pv.metodo_pago, pv.moneda
         UNION ALL
-        SELECT pa.metodo_pago, pa.moneda, COUNT(*) as cantidad_pagos, SUM(pa.monto_original) as total_original, SUM(pa.monto_base) as total_cop
+        SELECT 'Cobranza' as origen, pa.metodo_pago, pa.moneda, COUNT(*) as cantidad_pagos, SUM(pa.monto_original) as total_original, SUM(pa.monto_base) as total_cop
         FROM pagos_abonos pa JOIN abonos_credito a ON pa.abono_id = a.id
-        WHERE ${dateFilter.replace('v.fecha', 'a.fecha')} GROUP BY pa.metodo_pago, pa.moneda
+        WHERE ${dateFilter.replace('v.fecha', 'a.fecha')}
+        GROUP BY pa.metodo_pago, pa.moneda
       ) combined
-      GROUP BY metodo_pago, moneda ORDER BY total_cop DESC
+      GROUP BY origen, metodo_pago, moneda ORDER BY origen, total_cop DESC
     `, [fecha]);
     
     // 2.5 Cobranza de deudas
@@ -201,11 +203,12 @@ export async function cierreSemanal(req, res) {
       GROUP BY ${dateExpr('v.fecha')} ORDER BY dia ASC
     `);
 
-    // 3. Desglose por método de pago semanal
+    // 3. Desglose por método de pago semanal (solo ventas de contado, sin crédito)
     const pagosSemanal = await db.query(`
-      SELECT pv.metodo_pago, pv.moneda, COUNT(*) as cantidad, SUM(pv.monto_original) as total_original, SUM(pv.monto_base) as total_cop
+      SELECT 'Venta' as origen, pv.metodo_pago, pv.moneda, COUNT(*) as cantidad_pagos, SUM(pv.monto_original) as total_original, SUM(pv.monto_base) as total_cop
       FROM pagos_ventas pv JOIN ventas v ON pv.venta_id = v.id
-      WHERE ${dateFilter} AND v.tipo_transaccion != 'Anulada' GROUP BY pv.metodo_pago, pv.moneda ORDER BY total_cop DESC
+      WHERE ${dateFilter} AND v.tipo_transaccion != 'Anulada' AND pv.metodo_pago != 'Crédito'
+      GROUP BY pv.metodo_pago, pv.moneda ORDER BY total_cop DESC
     `);
 
     // 4. Gastos Operacionales (Nómina y Gastos Generales).
@@ -352,19 +355,21 @@ export async function cierreRango(req, res) {
       GROUP BY ${dateExpr('v.fecha')} ORDER BY dia ASC
     `, params);
 
-    // 3. Desglose por método de pago (Ventas + Abonos)
+    // 3. Desglose por método de pago, separando Ventas (contado) de Cobranza (abonos)
     const pagosRango = await db.query(`
-      SELECT metodo_pago, moneda, sum(cantidad_pagos) as cantidad_pagos, sum(total_original) as total_original, sum(total_cop) as total_cop
+      SELECT origen, metodo_pago, moneda, sum(cantidad_pagos) as cantidad_pagos, sum(total_original) as total_original, sum(total_cop) as total_cop
       FROM (
-        SELECT pv.metodo_pago, pv.moneda, COUNT(*) as cantidad_pagos, SUM(pv.monto_original) as total_original, SUM(pv.monto_base) as total_cop
+        SELECT 'Venta' as origen, pv.metodo_pago, pv.moneda, COUNT(*) as cantidad_pagos, SUM(pv.monto_original) as total_original, SUM(pv.monto_base) as total_cop
         FROM pagos_ventas pv JOIN ventas v ON pv.venta_id = v.id
-        WHERE ${dateFilterVentas} AND v.tipo_transaccion != 'Anulada' GROUP BY pv.metodo_pago, pv.moneda
+        WHERE ${dateFilterVentas} AND v.tipo_transaccion != 'Anulada' AND pv.metodo_pago != 'Crédito'
+        GROUP BY pv.metodo_pago, pv.moneda
         UNION ALL
-        SELECT pa.metodo_pago, pa.moneda, COUNT(*) as cantidad_pagos, SUM(pa.monto_original) as total_original, SUM(pa.monto_base) as total_cop
+        SELECT 'Cobranza' as origen, pa.metodo_pago, pa.moneda, COUNT(*) as cantidad_pagos, SUM(pa.monto_original) as total_original, SUM(pa.monto_base) as total_cop
         FROM pagos_abonos pa JOIN abonos_credito a ON pa.abono_id = a.id
-        WHERE ${dateFilterAbonos} GROUP BY pa.metodo_pago, pa.moneda
+        WHERE ${dateFilterAbonos}
+        GROUP BY pa.metodo_pago, pa.moneda
       ) combined
-      GROUP BY metodo_pago, moneda ORDER BY total_cop DESC
+      GROUP BY origen, metodo_pago, moneda ORDER BY origen, total_cop DESC
     `, baseParams);
 
     // 3.5 Cobranza de deudas

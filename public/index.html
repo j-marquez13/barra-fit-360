@@ -1015,9 +1015,9 @@
               </div>
             </div>
 
-            <!-- Desglose por Método de Pago -->
+            <!-- Ventas de contado por método de pago -->
             <div class="report-section">
-              <h4><i data-lucide="wallet"></i> Desglose por Método de Pago</h4>
+              <h4><i data-lucide="wallet"></i> Ventas (Contado) por Método de Pago</h4>
               <div class="data-table-wrapper">
                 <table class="data-table">
                   <thead>
@@ -1030,6 +1030,27 @@
                     </tr>
                   </thead>
                   <tbody id="tbody-pagos-diario">
+                    <tr><td colspan="5" class="loading-cell">Seleccione una fecha y presione Cargar</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Cobranza de deudas por método de pago -->
+            <div class="report-section">
+              <h4><i data-lucide="coins"></i> Cobranza de Deudas por Método de Pago</h4>
+              <div class="data-table-wrapper">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Método</th>
+                      <th>Moneda</th>
+                      <th>Cant. Pagos</th>
+                      <th>Total Original</th>
+                      <th>Total COP</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-cobranza-diario">
                     <tr><td colspan="5" class="loading-cell">Seleccione una fecha y presione Cargar</td></tr>
                   </tbody>
                 </table>
@@ -1168,7 +1189,7 @@
 
             <!-- Desglose pagos semanal -->
             <div class="report-section" id="section-pagos-semanal">
-              <h4><i data-lucide="wallet"></i> Desglose por Método de Pago</h4>
+              <h4><i data-lucide="wallet"></i> Ventas (Contado) por Método de Pago</h4>
               <div class="data-table-wrapper">
                 <table class="data-table">
                   <thead>
@@ -1268,9 +1289,9 @@
               </div>
             </div>
 
-            <!-- Desglose pagos mensual -->
+            <!-- Ventas de contado por método de pago (mensual) -->
             <div class="report-section">
-              <h4><i data-lucide="wallet"></i> Desglose por Método de Pago</h4>
+              <h4><i data-lucide="wallet"></i> Ventas (Contado) por Método de Pago</h4>
               <div class="data-table-wrapper">
                 <table class="data-table">
                   <thead>
@@ -1283,6 +1304,27 @@
                     </tr>
                   </thead>
                   <tbody id="tbody-pagos-mensual">
+                    <tr><td colspan="5" class="loading-cell">Seleccione el mes y presione Consultar</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Cobranza de deudas por método de pago (mensual) -->
+            <div class="report-section">
+              <h4><i data-lucide="coins"></i> Cobranza de Deudas por Método de Pago</h4>
+              <div class="data-table-wrapper">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Método</th>
+                      <th>Moneda</th>
+                      <th>Cant. Pagos</th>
+                      <th>Total Original</th>
+                      <th>Total COP</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-cobranza-mensual">
                     <tr><td colspan="5" class="loading-cell">Seleccione el mes y presione Consultar</td></tr>
                   </tbody>
                 </table>
