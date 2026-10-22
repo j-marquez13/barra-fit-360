@@ -1682,14 +1682,18 @@
                 <span>Total Gastos:</span>
                 <strong id="cc-total-gastos" style="color: var(--danger);">$0</strong>
               </div>
+              <div class="cierre-stat-item">
+                <span>Ingresos del Día:</span>
+                <strong id="cc-ingresos-dia" style="color: var(--success);">$0</strong>
+              </div>
             </div>
             
             <div class="cierre-total-esperado">
-              <span>Total Esperado (COP):</span>
+              <span>Total en Caja (con fondo):</span>
               <strong id="cc-total-esperado">$0</strong>
             </div>
             <p class="text-muted" style="font-size: 0.8rem; margin-top: 10px; text-align: center;">
-              *Calculado sumando fondo inicial + ventas + abonos - gastos.
+              *Ingresos del día = ventas + abonos (sin fondo). Total en caja = ingresos + fondo - gastos.
             </p>
           </div>
           
@@ -1785,7 +1789,7 @@
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Efectivo (USD):</span><strong id="ticket-efectivo-usd">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Pesos Efectivo (COP):</span><strong id="ticket-efectivo-pesos">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px dashed var(--border-glass);"><span>Bancolombia (COP):</span><strong id="ticket-bancolombia">$0</strong></div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Total Esperado:</span><strong id="ticket-esperado">$0</strong></div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Total en Caja (con fondo):</span><strong id="ticket-esperado">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 15px;"><span>Declarado:</span><strong id="ticket-declarado">$0</strong></div>
           <div style="display: flex; justify-content: space-between; border-top: 1px solid var(--border-glass); padding-top: 10px; font-size: 1.1em; color: var(--success);" id="ticket-diff-row">
             <span>Diferencia:</span><strong id="ticket-diferencia">$0</strong>

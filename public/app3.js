@@ -4300,6 +4300,7 @@ async function cerrarTurnoActual() {
       else if (moneda === 'VES') abonosCop += monto * rateVes;
     });
 
+    const ingresosDia = ventasCop + abonosCop;
     totalEsperado = fondoBaseCop + ventasCop + abonosCop - gastosCop;
 
     // Totales esperados por método de pago (para conciliación visual del cajero)
@@ -4331,6 +4332,7 @@ async function cerrarTurnoActual() {
     document.getElementById('cc-total-credito').textContent = `$${creditoVentaCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
     document.getElementById('cc-total-abonos').textContent = `$${abonosCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
     document.getElementById('cc-total-gastos').textContent = `-$${gastosCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
+    document.getElementById('cc-ingresos-dia').textContent = `$${ingresosDia.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
     document.getElementById('cc-total-esperado').textContent = `$${totalEsperado.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
 
   } catch (err) {
