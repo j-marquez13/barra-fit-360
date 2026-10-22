@@ -343,10 +343,10 @@ export async function cerrarCaja(req, res) {
     const reposicionData = await db.query(reposicionQuery, [fechaApertura]);
     const totalReposicion = parseFloat(reposicionData[0]?.total || 0);
 
-    // 3. Total esperado por moneda = fondo inicial + ingresos (ventas + abonos) - gastos
+    // 3. Total esperado por moneda = ventas + abonos (SIN fondo, que se declara aparte)
     const saldosMoneda = {
-      COP: parseFloat(currentSession.fondo_inicial_cop) || 0,
-      USD: parseFloat(currentSession.fondo_inicial_usd) || 0,
+      COP: 0,
+      USD: 0,
       VES: 0
     };
     const ventasMoneda = {};

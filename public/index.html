@@ -1689,11 +1689,11 @@
             </div>
             
             <div class="cierre-total-esperado">
-              <span>Total en Caja (con fondo):</span>
+              <span>Total Esperado (sin fondo):</span>
               <strong id="cc-total-esperado">$0</strong>
             </div>
             <p class="text-muted" style="font-size: 0.8rem; margin-top: 10px; text-align: center;">
-              *Ingresos del día = ventas + abonos (sin fondo). Total en caja = ingresos + fondo - gastos.
+              *Ingresos del día = ventas + abonos. Total esperado = ventas + abonos - gastos (sin fondo). El fondo se declara aparte y NO suma a la venta.
             </p>
           </div>
           
@@ -1803,7 +1803,7 @@
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Efectivo (USD):</span><strong id="ticket-efectivo-usd">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Pesos Efectivo (COP):</span><strong id="ticket-efectivo-pesos">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px dashed var(--border-glass);"><span>Bancolombia (COP):</span><strong id="ticket-bancolombia">$0</strong></div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Total en Caja (con fondo):</span><strong id="ticket-esperado">$0</strong></div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Total Esperado (sin fondo):</span><strong id="ticket-esperado">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 15px;"><span>Declarado:</span><strong id="ticket-declarado">$0</strong></div>
           <div style="display: flex; justify-content: space-between; border-top: 1px solid var(--border-glass); padding-top: 10px; font-size: 1.1em; color: var(--success);" id="ticket-diff-row">
             <span>Diferencia:</span><strong id="ticket-diferencia">$0</strong>
@@ -2065,7 +2065,7 @@
     </div>
   </div>
 
-  <script src="app3.js?v=42"></script>
+  <script src="app3.js?v=43"></script>
   <script src="whatsapp.js?v=3"></script>
 <!-- Script to automatically replace commas with dots in number inputs -->
   <script>

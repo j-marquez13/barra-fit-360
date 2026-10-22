@@ -4304,7 +4304,8 @@ async function cerrarTurnoActual() {
     });
 
     const ingresosDia = ventasCop + abonosCop;
-    totalEsperado = fondoBaseCop + ventasCop + abonosCop - gastosCop;
+    // Total esperado = ventas + abonos - gastos (SIN fondo, que se declara aparte)
+    totalEsperado = ventasCop + abonosCop - gastosCop;
 
     // Totales esperados por método de pago (para conciliación visual del cajero)
     const ventasMetodo = arqueo.ventas_detalle || {};
@@ -4374,8 +4375,8 @@ async function cerrarTurnoActual() {
 
     // USD total declarado = Zelle + Binance + Efectivo USD
     const totalUsd = decZelle + decBinance + decUsd;
-    // El declarado incluye el fondo (pesos + dólares) que se devuelve
-    const declaradoCop = decPesos + decBanco + (totalUsd * rateUsd) + (decPagoMovil * rateVes) + decFondoPesos + (decFondoUsd * rateUsd);
+    // El declarado es solo VENTAS + cobranza (el fondo NO suma a la venta)
+    const declaradoCop = decPesos + decBanco + (totalUsd * rateUsd) + (decPagoMovil * rateVes);
     
     const diferencia = declaradoCop - totalEsperado;
 
@@ -4438,7 +4439,8 @@ async function cerrarTurnoActual() {
       const rateVes = STATE.tasas.VES || 1;
       
       const totalUsd = decZelle + decBinance + decUsd;
-      const monto_declarado_cop = decPesos + decBanco + (totalUsd * rateUsd) + (decPagoMovil * rateVes) + decFondoPesos + (decFondoUsd * rateUsd);
+      // El fondo NO suma a la venta: se guarda aparte
+      const monto_declarado_cop = decPesos + decBanco + (totalUsd * rateUsd) + (decPagoMovil * rateVes);
 
       const res = await fetch('/api/caja/cerrar', {
         method: 'POST',
