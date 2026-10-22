@@ -255,11 +255,15 @@ checkApiHealth();
     });
   }
   
-  function populateCreditClientSelector() {
+  function populateCreditClientSelector(filter) {
     const sel = document.getElementById('credit-client-selector');
     if (!sel) return;
+    const f = (filter || '').trim().toLowerCase();
     let html = '<option value="">-- Seleccione un cliente --</option>';
     STATE.clientes.forEach(c => {
+      const nombre = (c.nombre || '').toLowerCase();
+      const ident = (c.identificacion || '').toLowerCase();
+      if (f && nombre.indexOf(f) === -1 && ident.indexOf(f) === -1) return;
       const saldo = parseFloat(c.saldo_deudor) || 0;
       const saldoTxt = saldo > 0 ? ' (Deuda: $' + saldo.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 }) + ')' : '';
       html += '<option value="' + c.id + '">' + c.nombre + ' — ' + c.identificacion + saldoTxt + '</option>';
@@ -275,6 +279,15 @@ checkApiHealth();
     document.getElementById('new-client-id').value = '';
     document.getElementById('new-client-phone').value = '';
   }
+
+  // Búsqueda de clientes por nombre o cédula
+  document.getElementById('credit-client-search')?.addEventListener('input', function(e) {
+    populateCreditClientSelector(e.target.value);
+  });
+  document.getElementById('btn-credit-search')?.addEventListener('click', function() {
+    const q = document.getElementById('credit-client-search')?.value || '';
+    populateCreditClientSelector(q);
+  });
 
   document.getElementById('credit-client-selector')?.addEventListener('change', function(e) {
     const val = e.target.value;
@@ -3882,40 +3895,84 @@ window.showEditClienteModal = function() {
   });
 }
 
+const ABONO_PAGO_ROW_HTML = `
+  <div class="form-group" style="margin:0;"><label>Método</label>
+    <select class="abono-metodo" onchange="abonoAutoMoneda(this)">
+      <option value="Efectivo COP">Efectivo COP</option>
+      <option value="Bancolombia">Bancolombia</option>
+      <option value="Efectivo USD">Efectivo USD</option>
+      <option value="Zelle">Zelle</option>
+      <option value="Pago Móvil">Pago Móvil (VES)</option>
+      <option value="Binance">Binance</option>
+    </select>
+  </div>
+  <div class="form-group" style="margin:0;"><label>Moneda</label>
+    <select class="abono-moneda">
+      <option value="COP">COP</option>
+      <option value="USD">USD</option>
+      <option value="VES">VES</option>
+    </select>
+  </div>
+  <div class="form-group" style="margin:0;"><label>Monto</label>
+    <input type="number" class="abono-monto" placeholder="0.00" min="0" step="any" style="width:100%;">
+  </div>
+`;
+
+window.abonoAutoMoneda = function(selectEl) {
+  const metodo = selectEl.value;
+  const row = selectEl.closest('.abono-pago-row');
+  if (!row) return;
+  const mon = row.querySelector('.abono-moneda');
+  if (mon) {
+    if (metodo === 'Efectivo USD' || metodo === 'Zelle' || metodo === 'Binance') mon.value = 'USD';
+    else if (metodo === 'Pago Móvil') mon.value = 'VES';
+    else mon.value = 'COP';
+  }
+};
+
+window.agregarFilaPagoAbono = function() {
+  const container = document.getElementById('abono-pagos-container');
+  if (!container) return;
+  const row = document.createElement('div');
+  row.className = 'abono-pago-row';
+  row.style.cssText = 'display:grid; grid-template-columns: 1fr 90px 1fr; gap:8px; margin-bottom:8px; align-items:end;';
+  row.innerHTML = ABONO_PAGO_ROW_HTML;
+  container.appendChild(row);
+  lucide.createIcons();
+};
+
 function showAbonoModal(clientId, clientName, saldoActual) {
   openGenericModal(`Registrar Abono — ${clientName}`, `
     <div class="alert-item alert-warning" style="margin-bottom:8px;">
       <i data-lucide="info"></i>
       <span>Saldo deudor actual: <strong>$${saldoActual.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP</strong></span>
     </div>
-    <div class="form-group"><label>Método de Pago</label>
-      <select id="inp-abono-metodo">
-        <option value="Efectivo COP">Efectivo COP</option>
-        <option value="Bancolombia">Bancolombia</option>
-        <option value="Efectivo USD">Efectivo USD</option>
-        <option value="Zelle">Zelle</option>
-        <option value="Pago Móvil">Pago Móvil (VES)</option>
-        <option value="Binance">Binance</option>
-      </select>
+    <div id="abono-pagos-container">
+      <div class="abono-pago-row" style="display:grid; grid-template-columns: 1fr 90px 1fr; gap:8px; margin-bottom:8px; align-items:end;">
+        ${ABONO_PAGO_ROW_HTML}
+      </div>
     </div>
-    <div class="form-group"><label>Monto a Abonar</label><input type="number" step="any" id="inp-abono-monto" placeholder="0" min="0.01" step="0.01"></div>
-    <div class="form-group"><label>Referencia (opcional)</label><input type="text" id="inp-abono-ref" placeholder="Ref. transacción"></div>
+    <button type="button" class="action-btn secondary" style="width:100%; margin-bottom:10px;" onclick="agregarFilaPagoAbono()">
+      <i data-lucide="plus"></i> Agregar otro pago (Pago Mixto)
+    </button>
     <div class="form-group"><label>Notas</label><input type="text" id="inp-abono-notas" placeholder="Ej: Abono parcial"></div>
   `, async () => {
-    
-    const methodEl = document.getElementById('inp-abono-metodo').value;
-    let autoMoneda = 'COP';
-    if (methodEl === 'Efectivo USD' || methodEl === 'Zelle' || methodEl === 'Binance') autoMoneda = 'USD';
-    if (methodEl === 'Pago Móvil') autoMoneda = 'VES';
-    
+    const rows = [...document.querySelectorAll('.abono-pago-row')];
+    const pagos = rows.map(row => {
+      const metodo = row.querySelector('.abono-metodo')?.value || 'Efectivo COP';
+      const moneda = row.querySelector('.abono-moneda')?.value || 'COP';
+      const monto = parseFloat(row.querySelector('.abono-monto')?.value) || 0;
+      return { metodo_pago: metodo, moneda, monto_original: monto, referencia: '' };
+    }).filter(p => p.monto > 0);
+
+    if (pagos.length === 0) {
+      showToast('Ingresa al menos un monto a abonar', 'warning');
+      return;
+    }
+
     const payload = {
       cliente_id: clientId,
-      pagos: [{
-        metodo_pago: methodEl,
-        moneda: autoMoneda,
-        monto_original: parseFloat(document.getElementById('inp-abono-monto').value),
-        referencia: document.getElementById('inp-abono-ref').value
-      }],
+      pagos,
       tasas: STATE.tasas,
       notas: document.getElementById('inp-abono-notas').value
     };
@@ -4304,8 +4361,8 @@ async function cerrarTurnoActual() {
     });
 
     const ingresosDia = ventasCop + abonosCop;
-    // Total esperado = ventas + abonos - gastos (SIN fondo, que se declara aparte)
-    totalEsperado = ventasCop + abonosCop - gastosCop;
+    // Total esperado = fondo + ventas + abonos - gastos (TODO el dinero disponible)
+    totalEsperado = fondoBaseCop + ventasCop + abonosCop - gastosCop;
 
     // Totales esperados por método de pago (para conciliación visual del cajero)
     const ventasMetodo = arqueo.ventas_detalle || {};
@@ -4375,8 +4432,8 @@ async function cerrarTurnoActual() {
 
     // USD total declarado = Zelle + Binance + Efectivo USD
     const totalUsd = decZelle + decBinance + decUsd;
-    // El declarado es solo VENTAS + cobranza (el fondo NO suma a la venta)
-    const declaradoCop = decPesos + decBanco + (totalUsd * rateUsd) + (decPagoMovil * rateVes);
+    // El declarado incluye TODO el dinero (ventas + cobranza + fondo)
+    const declaradoCop = decPesos + decBanco + (totalUsd * rateUsd) + (decPagoMovil * rateVes) + decFondoPesos + (decFondoUsd * rateUsd);
     
     const diferencia = declaradoCop - totalEsperado;
 
@@ -4439,8 +4496,8 @@ async function cerrarTurnoActual() {
       const rateVes = STATE.tasas.VES || 1;
       
       const totalUsd = decZelle + decBinance + decUsd;
-      // El fondo NO suma a la venta: se guarda aparte
-      const monto_declarado_cop = decPesos + decBanco + (totalUsd * rateUsd) + (decPagoMovil * rateVes);
+      // El declarado incluye TODO el dinero (ventas + cobranza + fondo)
+      const monto_declarado_cop = decPesos + decBanco + (totalUsd * rateUsd) + (decPagoMovil * rateVes) + decFondoPesos + (decFondoUsd * rateUsd);
 
       const res = await fetch('/api/caja/cerrar', {
         method: 'POST',

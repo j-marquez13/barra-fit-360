@@ -343,10 +343,10 @@ export async function cerrarCaja(req, res) {
     const reposicionData = await db.query(reposicionQuery, [fechaApertura]);
     const totalReposicion = parseFloat(reposicionData[0]?.total || 0);
 
-    // 3. Total esperado por moneda = ventas + abonos (SIN fondo, que se declara aparte)
+    // 3. Total esperado por moneda = fondo + ventas + abonos (el cajero reporta TODO el dinero)
     const saldosMoneda = {
-      COP: 0,
-      USD: 0,
+      COP: parseFloat(currentSession.fondo_inicial_cop) || 0,
+      USD: parseFloat(currentSession.fondo_inicial_usd) || 0,
       VES: 0
     };
     const ventasMoneda = {};
@@ -364,9 +364,8 @@ export async function cerrarCaja(req, res) {
 
     const totalVentasCop = (ventasMoneda.COP || 0) + (ventasMoneda.USD || 0) * tasaUsd + (ventasMoneda.VES || 0) * tasaVes;
     const totalAbonosCop = (abonosMoneda.COP || 0) + (abonosMoneda.USD || 0) * tasaUsd + (abonosMoneda.VES || 0) * tasaVes;
-    // El saldo teórico sí descuenta la reposición (salió dinero de la caja para
-    // comprar stock), pero la utilidad neta NO la resta.
-    const saldoTeorico = (saldosMoneda.COP || 0) + (saldosMoneda.USD || 0) * tasaUsd + (saldosMoneda.VES || 0) * tasaVes - totalGastos - totalReposicion;
+    // La reposición NO descuenta de la venta del día: se maneja desde Tesorería.
+    const saldoTeorico = (saldosMoneda.COP || 0) + (saldosMoneda.USD || 0) * tasaUsd + (saldosMoneda.VES || 0) * tasaVes - totalGastos;
     const totalIngresosCop = totalVentasCop + totalAbonosCop;
 
     // 3.0 Total real de ventas del turno (solo tipo 'Venta', en COP según v.total)
