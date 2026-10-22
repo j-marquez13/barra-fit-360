@@ -4,7 +4,7 @@
 // Las APIs (/api) NUNCA se cachean para evitar datos viejos o sensibles.
 // ============================================
 
-const CACHE_NAME = 'barrafit360-v1';
+const CACHE_NAME = 'barrafit360-v2';
 const APP_SHELL = [
   './',
   './index.html',
