@@ -2940,6 +2940,9 @@ async function loadCierreDiario() {
     
     document.getElementById('kpi-ventas').textContent = `${data.resumen.ingresos_totales_cop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     document.getElementById('kpi-transacciones').textContent = `${data.resumen.total_transacciones} transacciones`;
+    if (document.getElementById('kpi-credito')) {
+      document.getElementById('kpi-credito').textContent = `${(data.resumen.ventas_credito_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+    }
     if (document.getElementById('kpi-cobranza')) {
       document.getElementById('kpi-cobranza').textContent = `${data.resumen.cobranza_deudas_cop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       document.getElementById('kpi-flujo-caja').textContent = `Flujo Total: ${data.resumen.flujo_caja_ingresos.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
@@ -4305,6 +4308,7 @@ async function cerrarTurnoActual() {
     // Actualizar UI - Valores Teóricos
     document.getElementById('cc-fondo-inicial').textContent = `$${fondoBaseCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
     document.getElementById('cc-total-ventas').textContent = `$${ventasCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
+    document.getElementById('cc-total-credito').textContent = `$${creditoVentaCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
     document.getElementById('cc-total-abonos').textContent = `$${abonosCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
     document.getElementById('cc-total-gastos').textContent = `-$${gastosCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
     document.getElementById('cc-total-esperado').textContent = `$${totalEsperado.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
@@ -4429,7 +4433,9 @@ async function cerrarTurnoActual() {
       viewArqueo.style.display = 'none';
       viewSuccess.style.display = 'block';
       
-      document.getElementById('ticket-ventas').textContent = `$${d.resumen.total_ventas.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      document.getElementById('ticket-ventas').textContent = `$${(d.resumen.total_ventas_contado_cop ?? d.resumen.total_ventas_detalle_cop ?? 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      document.getElementById('ticket-credito').textContent = `$${(d.resumen.total_ventas_credito_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      document.getElementById('ticket-abonos').textContent = `$${(d.resumen.total_abonos_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       document.getElementById('ticket-costo').textContent = `-$${(d.resumen.costo_produccion || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       document.getElementById('ticket-gastos').textContent = `-$${d.resumen.total_gastos.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       document.getElementById('ticket-reposicion').textContent = `-$${(d.resumen.total_reposicion || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
@@ -4503,7 +4509,8 @@ window.loadCierreDia = async function() {
     const r = d.resumen || {};
 
     document.getElementById('dia-turnos').textContent = r.total_turnos || 0;
-    document.getElementById('dia-ventas').textContent = `$${(r.total_ventas_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+    document.getElementById('dia-ventas').textContent = `$${(r.total_ventas_contado_cop ?? r.total_ventas_cop ?? 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+    document.getElementById('dia-credito').textContent = `$${(r.total_ventas_credito_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     document.getElementById('dia-costo').textContent = `$${(r.costo_produccion || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     document.getElementById('dia-gastos').textContent = `$${(r.total_gastos_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     document.getElementById('dia-declarado').textContent = `$${(r.declarado_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
@@ -4576,7 +4583,7 @@ async function loadCierresAdmin() {
     cierresCache = d.cierres || [];
     const tbody = document.getElementById('tabla-cierres');
     if (cierresCache.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="10" class="loading-cell">No hay cierres registrados en el rango seleccionado.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11" class="loading-cell">No hay cierres registrados en el rango seleccionado.</td></tr>';
       return;
     }
 
@@ -4588,7 +4595,8 @@ async function loadCierresAdmin() {
       return `<tr>
         <td>${c.fecha}</td>
         <td>${c.total_turnos}</td>
-        <td class="font-outfit">$${fmt(c.total_ventas_cop)}</td>
+        <td class="font-outfit">$${fmt(c.total_ventas_contado_cop ?? c.total_ventas_cop)}</td>
+        <td class="font-outfit" style="color:var(--warning)">$${fmt(c.total_ventas_credito_cop)}</td>
         <td class="font-outfit" style="color:var(--danger)">-$${fmt(c.costo_produccion)}</td>
         <td class="font-outfit" style="color:var(--danger)">-$${fmt(c.total_gastos_cop)}</td>
         <td class="font-outfit" style="color:var(--warning)">-$${fmt(c.reposicion)}</td>
@@ -4616,7 +4624,8 @@ window.verTicketCierre = function(idx) {
 
   document.getElementById('dia-fecha').textContent = c.fecha;
   document.getElementById('dia-turnos').textContent = c.total_turnos || 0;
-  document.getElementById('dia-ventas').textContent = `$${fmt(c.total_ventas_cop)}`;
+  document.getElementById('dia-ventas').textContent = `$${fmt(c.total_ventas_contado_cop ?? c.total_ventas_cop)}`;
+  document.getElementById('dia-credito').textContent = `$${fmt(c.total_ventas_credito_cop)}`;
   document.getElementById('dia-costo').textContent = `-$${fmt(c.costo_produccion)}`;
   document.getElementById('dia-gastos').textContent = `-$${fmt(c.total_gastos_cop)}`;
   document.getElementById('dia-reposicion').textContent = `-$${fmt(c.reposicion)}`;
@@ -4662,11 +4671,12 @@ function exportarCierresCSV() {
     showToast('No hay datos para exportar. Carga el historial primero.', 'warning');
     return;
   }
-  const encabezado = ['Fecha', 'Turnos', 'Ventas COP', 'Costo Produccion COP', 'Gastos COP', 'Reposicion COP', 'Utilidad COP', 'Declarado COP', 'Diferencia COP'];
+  const encabezado = ['Fecha', 'Turnos', 'Ventas Contado COP', 'Credito COP', 'Costo Produccion COP', 'Gastos COP', 'Reposicion COP', 'Utilidad COP', 'Declarado COP', 'Diferencia COP'];
   const filas = cierresCache.map(c => [
     c.fecha,
     c.total_turnos,
-    c.total_ventas_cop,
+    c.total_ventas_contado_cop ?? c.total_ventas_cop,
+    c.total_ventas_credito_cop,
     c.costo_produccion,
     c.total_gastos_cop,
     c.reposicion,

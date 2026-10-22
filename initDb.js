@@ -71,6 +71,7 @@ export async function initializeDatabase() {
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_efectivo_pesos DOUBLE PRECISION DEFAULT 0.0;');
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_bancolombia DOUBLE PRECISION DEFAULT 0.0;');
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_pago_movil DOUBLE PRECISION DEFAULT 0.0;');
+      await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS total_ventas_credito_cop DOUBLE PRECISION DEFAULT 0.0;');
       await db.execute('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS password_hash TEXT;');
       await db.execute("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS permisos TEXT NOT NULL DEFAULT '[\"pos\",\"caja\"]';");
       await db.execute("UPDATE usuarios SET permisos = '[\"all\"]' WHERE rol = 'Administrador';");
@@ -475,6 +476,7 @@ async function createTables() {
       fondo_inicial_cop REAL NOT NULL DEFAULT 0.0,
       fondo_inicial_usd REAL NOT NULL DEFAULT 0.0,
       total_ventas_cop REAL DEFAULT 0.0,
+      total_ventas_credito_cop REAL DEFAULT 0.0,
       total_gastos_cop REAL DEFAULT 0.0,
       diferencia_caja REAL,
       estado TEXT NOT NULL DEFAULT 'Abierta',
@@ -586,6 +588,12 @@ async function runMigrations() {
   // Efectivo USD declarado en el cierre de caja
   try { 
     await db.execute("ALTER TABLE sesiones_caja ADD COLUMN declarado_efectivo_usd REAL DEFAULT 0.0"); 
+  } catch(e) {}
+
+  // Ventas a crédito (cuentas por cobrar) del turno, separadas de las ventas de contado
+  try {
+    await db.execute("ALTER TABLE sesiones_caja ADD COLUMN total_ventas_credito_cop REAL DEFAULT 0.0");
+    console.log('   🔄 Migración: columna total_ventas_credito_cop agregada a sesiones_caja.');
   } catch(e) {}
 
   // Migraciones para Batido Combinado

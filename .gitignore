@@ -1,7 +1,15 @@
 node_modules/
 .env
+
+# Bases de datos y respaldos locales (contienen datos del negocio, NO subir)
 database.sqlite
 database.sqlite-journal
+database.sqlite*
+*.sqlite
+*.sqlite-journal
+*.bak
+backup_*
+
 backup_pg.js
 backup_railway.sql
 .DS_Store

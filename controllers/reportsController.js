@@ -23,6 +23,13 @@ export async function cierreDiario(req, res) {
       WHERE ${dateFilter} AND v.tipo_transaccion = 'Venta'
     `, [fecha]);
 
+    // 1.1 Ventas a crédito (cuentas por cobrar) del día
+    const creditoResumen = await db.query(`
+      SELECT COALESCE(SUM(pv.monto_base), 0) as total_credito_cop
+      FROM pagos_ventas pv JOIN ventas v ON pv.venta_id = v.id
+      WHERE ${dateFilter} AND v.tipo_transaccion = 'Venta' AND pv.metodo_pago = 'Crédito'
+    `, [fecha]);
+
     // 2. Desglose por método de pago (Ventas + Abonos)
     const pagosPorMetodo = await db.query(`
       SELECT metodo_pago, moneda, sum(cantidad_pagos) as cantidad_pagos, sum(total_original) as total_original, sum(total_cop) as total_cop
@@ -116,6 +123,9 @@ export async function cierreDiario(req, res) {
 
     // 7. Cálculos Finales
     const totalVentas = parseFloat(ventasResumen[0]?.total_ventas_cop || 0);
+    const ventasCreditoCop = parseFloat(creditoResumen[0]?.total_credito_cop || 0);
+    // "Ventas del día" = ventas de contado (excluye cuentas por cobrar y el fondo inicial)
+    const ventasContadoCop = Math.max(0, totalVentas - ventasCreditoCop);
     const costoProduccion = topProductos.reduce((sum, p) => sum + parseFloat(p.costo_total || 0), 0);
     
     // Utilidad Neta = Ingresos Totales - Costos Producción - Mermas descontadas
@@ -137,9 +147,11 @@ export async function cierreDiario(req, res) {
       fecha,
       resumen: {
         total_transacciones: parseInt(ventasResumen[0]?.total_transacciones || 0),
-        ingresos_totales_cop: totalVentas,
+        ingresos_totales_cop: ventasContadoCop,
+        ventas_credito_cop: ventasCreditoCop,
+        total_ventas_cop: totalVentas,
         cobranza_deudas_cop: totalAbonos,
-        flujo_caja_ingresos: totalVentas + totalAbonos,
+        flujo_caja_ingresos: ventasContadoCop + totalAbonos,
         costo_produccion: costoProduccion,
         gastos_operacionales: totalGastos,
         reposicion_stock_cop: totalReposicion,
@@ -172,6 +184,13 @@ export async function cierreSemanal(req, res) {
     const resumenSemana = await db.query(`
       SELECT COUNT(DISTINCT v.id) as total_transacciones, COALESCE(SUM(v.total), 0) as total_ventas_cop
       FROM ventas v WHERE ${dateFilter} AND v.tipo_transaccion = 'Venta'
+    `);
+
+    // 1.1 Ventas a crédito (cuentas por cobrar) de la semana
+    const creditoSemana = await db.query(`
+      SELECT COALESCE(SUM(pv.monto_base), 0) as total_credito_cop
+      FROM pagos_ventas pv JOIN ventas v ON pv.venta_id = v.id
+      WHERE ${dateFilter} AND v.tipo_transaccion = 'Venta' AND pv.metodo_pago = 'Crédito'
     `);
 
     // 2. Ventas por día de la semana
@@ -233,6 +252,8 @@ export async function cierreSemanal(req, res) {
 
     // 7. Calcular utilidad semanal
     const totalVentas = parseFloat(resumenSemana[0]?.total_ventas_cop || 0);
+    const ventasCreditoCop = parseFloat(creditoSemana[0]?.total_credito_cop || 0);
+    const ventasContadoCop = Math.max(0, totalVentas - ventasCreditoCop);
     const costoProduccion = topProductos.reduce((sum, p) => sum + parseFloat(p.costo_total || 0), 0);
     
     // Utilidad Neta = Ventas - Costo Producción - Mermas descontadas
@@ -243,7 +264,9 @@ export async function cierreSemanal(req, res) {
       periodo: 'Últimos 7 días',
       resumen: {
         total_transacciones: parseInt(resumenSemana[0]?.total_transacciones || 0),
-        ingresos_totales_cop: totalVentas,
+        ingresos_totales_cop: ventasContadoCop,
+        ventas_credito_cop: ventasCreditoCop,
+        total_ventas_cop: totalVentas,
         costo_produccion: costoProduccion,
         gastos_operacionales: totalGastos,
         reposicion_stock_cop: totalReposicion,
@@ -311,6 +334,14 @@ export async function cierreRango(req, res) {
       WHERE ${dateFilterVentas} AND v.tipo_transaccion = 'Venta' ${turnoCondition}
     `;
     const resumenRango = await db.query(resumenQuery, params);
+
+    // 1.1 Ventas a crédito (cuentas por cobrar) del rango
+    const creditoQuery = `
+      SELECT COALESCE(SUM(pv.monto_base), 0) as total_credito_cop
+      FROM pagos_ventas pv JOIN ventas v ON pv.venta_id = v.id ${turnoJoin}
+      WHERE ${dateFilterVentas} AND v.tipo_transaccion = 'Venta' AND pv.metodo_pago = 'Crédito' ${turnoCondition}
+    `;
+    const creditoRango = await db.query(creditoQuery, params);
 
     // 2. Ventas por día
     const diaSelect = isPg ? `${dateExpr('v.fecha')}::text` : dateExpr('v.fecha');
@@ -386,6 +417,8 @@ export async function cierreRango(req, res) {
 
     // 7. Calcular totales financieros
     const totalVentas = parseFloat(resumenRango[0]?.total_ventas_cop || 0);
+    const ventasCreditoCop = parseFloat(creditoRango[0]?.total_credito_cop || 0);
+    const ventasContadoCop = Math.max(0, totalVentas - ventasCreditoCop);
     const costoProduccion = topProductos.reduce((sum, p) => sum + parseFloat(p.costo_total || 0), 0);
     // Los gastos operacionales se manejan desde tesorería, no restan de la utilidad
     const utilidadNeta = totalVentas - costoProduccion - totalMermas;
@@ -395,7 +428,9 @@ export async function cierreRango(req, res) {
       periodo: { desde, hasta, turno_desde: turnoDesde, turno_hasta: turnoHasta },
       resumen: {
         total_transacciones: parseInt(resumenRango[0]?.total_transacciones || 0),
-        ingresos_totales_cop: totalVentas,
+        ingresos_totales_cop: ventasContadoCop,
+        ventas_credito_cop: ventasCreditoCop,
+        total_ventas_cop: totalVentas,
         cobranza_deudas_cop: totalAbonos,
         costo_produccion: costoProduccion,
         gastos_operacionales: totalGastos,

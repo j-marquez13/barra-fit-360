@@ -14,6 +14,15 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- Estilos CSS -->
   <link rel="stylesheet" href="index.css?v=16">
+  <!-- PWA: instalable como aplicación en Chrome/Android/escritorio -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0b0f1a">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Barra Fit 360">
 </head>
 <body>
 
@@ -956,6 +965,14 @@
                   <span class="kpi-sub" id="kpi-transacciones">0 transacciones</span>
                 </div>
               </div>
+              <div class="kpi-card kpi-ventas" style="border-left-color: var(--warning);">
+                <div class="kpi-icon"><i data-lucide="book-user"></i></div>
+                <div class="kpi-data">
+                  <span class="kpi-label">Cuentas por Cobrar</span>
+                  <span class="kpi-value" id="kpi-credito">$0</span>
+                  <span class="kpi-sub">Ventas a crédito (por cobrar)</span>
+                </div>
+              </div>
               <div class="kpi-card kpi-ventas" style="border-left-color: #32c8ff;">
                 <div class="kpi-icon"><i data-lucide="wallet"></i></div>
                 <div class="kpi-data">
@@ -1435,7 +1452,8 @@
                 <tr>
                   <th>Fecha</th>
                   <th>Turnos</th>
-                  <th>Ventas</th>
+                  <th>Ventas (Contado)</th>
+                  <th>Crédito</th>
                   <th>Costo Prod.</th>
                   <th>Gastos</th>
                   <th>Reposición</th>
@@ -1446,7 +1464,7 @@
                 </tr>
               </thead>
               <tbody id="tabla-cierres">
-                <tr><td colspan="10" class="loading-cell">Cargando cierres…</td></tr>
+                <tr><td colspan="11" class="loading-cell">Cargando cierres…</td></tr>
               </tbody>
             </table>
           </div>
@@ -1607,8 +1625,12 @@
                 <strong id="cc-fondo-inicial">$0</strong>
               </div>
               <div class="cierre-stat-item">
-                <span>Total Ventas:</span>
+                <span>Total Ventas (Contado):</span>
                 <strong id="cc-total-ventas" style="color: var(--success);">$0</strong>
+              </div>
+              <div class="cierre-stat-item">
+                <span>Cuentas por Cobrar (Crédito):</span>
+                <strong id="cc-total-credito" style="color: var(--warning);">$0</strong>
               </div>
               <div class="cierre-stat-item">
                 <span>Total Abonos (Cobranza):</span>
@@ -1707,7 +1729,9 @@
         
         <div class="cierre-ticket-preview" style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-glass); border-radius: 12px; padding: 20px; text-align: left; max-width: 400px; margin: 0 auto 25px;">
           <h4 style="text-align: center; border-bottom: 1px dashed var(--border-glass); padding-bottom: 10px; margin-bottom: 15px;">TICKET DE CIERRE</h4>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Total Ventas:</span><strong id="ticket-ventas">$0</strong></div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Total Ventas (Contado):</span><strong id="ticket-ventas">$0</strong></div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Cuentas por Cobrar (Crédito):</span><strong id="ticket-credito">$0</strong></div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Abonos (Cobranza):</span><strong id="ticket-abonos">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Costo de Producción:</span><strong id="ticket-costo">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Total Gastos:</span><strong id="ticket-gastos">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Reposición de Stock:</span><strong id="ticket-reposicion">$0</strong></div>
@@ -1759,7 +1783,8 @@
           <h4 style="text-align: center; border-bottom: 1px dashed var(--border-glass); padding-bottom: 10px; margin-bottom: 15px;">TICKET DEL DÍA</h4>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Fecha:</span><strong id="dia-fecha">—</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Turnos Incluidos:</span><strong id="dia-turnos">0</strong></div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Total Ventas:</span><strong id="dia-ventas">$0</strong></div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Total Ventas (Contado):</span><strong id="dia-ventas">$0</strong></div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Cuentas por Cobrar (Crédito):</span><strong id="dia-credito">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Costo de Producción:</span><strong id="dia-costo">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Total Gastos:</span><strong id="dia-gastos">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Reposición de Stock:</span><strong id="dia-reposicion">$0</strong></div>
@@ -2017,6 +2042,15 @@
         }
       }
     }, true);
+  </script>
+
+  <!-- Registro del Service Worker (instalación PWA y soporte offline) -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('sw.js').catch(function () {});
+      });
+    }
   </script>
 </body>
 </html>
