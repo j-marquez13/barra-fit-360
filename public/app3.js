@@ -4277,6 +4277,7 @@ async function cerrarTurnoActual() {
     currentSessionData = data;
     const arqueo = data.arqueo || { ventas_moneda: {}, ventas_detalle: {}, abonos_moneda: {}, total_gastos_cop: 0 };
     const fondoBaseCop = parseFloat(data.sesion.fondo_inicial_cop) || 0;
+    const fondoBaseUsd = parseFloat(data.sesion.fondo_inicial_usd) || 0;
     const gastosCop = parseFloat(arqueo.total_gastos_cop) || 0;
     
     // Calcular totales convirtiendo a COP usando tasas actuales
@@ -4321,6 +4322,8 @@ async function cerrarTurnoActual() {
     const fmtEsperado = (v, simbolo) =>
       `${Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} ${simbolo}`;
 
+    document.getElementById('cc-esp-fondo-pesos').textContent = `Fondo inicial: ${fmtEsperado(fondoBaseCop, 'COP')}`;
+    document.getElementById('cc-esp-fondo-usd').textContent = `Fondo inicial: ${fmtEsperado(fondoBaseUsd, 'USD')}`;
     document.getElementById('cc-esp-pago-movil').textContent = `Esperado: ${fmtEsperado(espPagoMovil, 'Bs')}`;
     document.getElementById('cc-esp-zelle').textContent = `Esperado: ${fmtEsperado(espZelle, 'USD')}`;
     document.getElementById('cc-esp-binance').textContent = `Esperado: ${fmtEsperado(espBinance, 'USD')}`;
@@ -4345,7 +4348,7 @@ async function cerrarTurnoActual() {
   }
 
   // 2. Setup de inputs y cálculos en tiempo real
-  const inputs = ['cc-dec-pago-movil', 'cc-dec-zelle', 'cc-dec-binance', 'cc-dec-pesos', 'cc-dec-bancolombia', 'cc-dec-usd'];
+  const inputs = ['cc-dec-fondo-pesos', 'cc-dec-fondo-usd', 'cc-dec-pago-movil', 'cc-dec-zelle', 'cc-dec-binance', 'cc-dec-pesos', 'cc-dec-bancolombia', 'cc-dec-usd'];
   const diffBox = document.getElementById('cc-diff-box');
   const diffValue = document.getElementById('cc-diferencia');
   const diffStatus = document.getElementById('cc-diff-status');
@@ -4357,6 +4360,8 @@ async function cerrarTurnoActual() {
   });
 
   const calcularDiferenciaReal = () => {
+    const decFondoPesos = parseFloat(document.getElementById('cc-dec-fondo-pesos').value) || 0;
+    const decFondoUsd = parseFloat(document.getElementById('cc-dec-fondo-usd').value) || 0;
     const decPagoMovil = parseFloat(document.getElementById('cc-dec-pago-movil').value) || 0;
     const decZelle = parseFloat(document.getElementById('cc-dec-zelle').value) || 0;
     const decBinance = parseFloat(document.getElementById('cc-dec-binance').value) || 0;
@@ -4369,7 +4374,8 @@ async function cerrarTurnoActual() {
 
     // USD total declarado = Zelle + Binance + Efectivo USD
     const totalUsd = decZelle + decBinance + decUsd;
-    const declaradoCop = decPesos + decBanco + (totalUsd * rateUsd) + (decPagoMovil * rateVes);
+    // El declarado incluye el fondo (pesos + dólares) que se devuelve
+    const declaradoCop = decPesos + decBanco + (totalUsd * rateUsd) + (decPagoMovil * rateVes) + decFondoPesos + (decFondoUsd * rateUsd);
     
     const diferencia = declaradoCop - totalEsperado;
 
@@ -4419,6 +4425,8 @@ async function cerrarTurnoActual() {
     lucide.createIcons();
     
     try {
+      const decFondoPesos = parseFloat(document.getElementById('cc-dec-fondo-pesos').value) || 0;
+      const decFondoUsd = parseFloat(document.getElementById('cc-dec-fondo-usd').value) || 0;
       const decPagoMovil = parseFloat(document.getElementById('cc-dec-pago-movil').value) || 0;
       const decZelle = parseFloat(document.getElementById('cc-dec-zelle').value) || 0;
       const decBinance = parseFloat(document.getElementById('cc-dec-binance').value) || 0;
@@ -4430,13 +4438,15 @@ async function cerrarTurnoActual() {
       const rateVes = STATE.tasas.VES || 1;
       
       const totalUsd = decZelle + decBinance + decUsd;
-      const monto_declarado_cop = decPesos + decBanco + (totalUsd * rateUsd) + (decPagoMovil * rateVes);
+      const monto_declarado_cop = decPesos + decBanco + (totalUsd * rateUsd) + (decPagoMovil * rateVes) + decFondoPesos + (decFondoUsd * rateUsd);
 
       const res = await fetch('/api/caja/cerrar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           monto_declarado_cop,
+          fondo_declarado_cop: decFondoPesos,
+          fondo_declarado_usd: decFondoUsd,
           declarado_pago_movil: decPagoMovil,
           declarado_zelle: decZelle,
           declarado_binance: decBinance,
@@ -4444,7 +4454,7 @@ async function cerrarTurnoActual() {
           declarado_bancolombia: decBanco,
           declarado_efectivo_usd: decUsd,
           tasas: { USD: rateUsd, VES: rateVes }
-        }) // Backend no guarda Efectivo USD separado ahora mismo, lo suma en monto_declarado_cop
+        })
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error);

@@ -207,6 +207,8 @@ CREATE TABLE sesiones_caja (
     fecha_cierre TIMESTAMP,
     fondo_inicial_cop NUMERIC(12, 2) NOT NULL DEFAULT 0.00 CHECK (fondo_inicial_cop >= 0.00),
     fondo_inicial_usd NUMERIC(12, 2) NOT NULL DEFAULT 0.00 CHECK (fondo_inicial_usd >= 0.00),
+    fondo_declarado_cop NUMERIC(12, 2) DEFAULT 0.00,
+    fondo_declarado_usd NUMERIC(12, 2) DEFAULT 0.00,
     total_ventas_cop NUMERIC(12, 2) DEFAULT 0.00,
     total_ventas_credito_cop NUMERIC(12, 2) DEFAULT 0.00,
     total_gastos_cop NUMERIC(12, 2) DEFAULT 0.00,

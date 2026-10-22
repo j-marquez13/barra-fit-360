@@ -64,6 +64,8 @@ export async function initializeDatabase() {
       await db.execute("ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS turno TEXT NOT NULL DEFAULT 'Manana';");
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS nombre_cajero TEXT;');
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS fondo_inicial_usd DOUBLE PRECISION NOT NULL DEFAULT 0.0;');
+      await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS fondo_declarado_cop DOUBLE PRECISION DEFAULT 0.0;');
+      await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS fondo_declarado_usd DOUBLE PRECISION DEFAULT 0.0;');
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_efectivo_bs DOUBLE PRECISION DEFAULT 0.0;');
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_efectivo_usd DOUBLE PRECISION DEFAULT 0.0;');
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_zelle DOUBLE PRECISION DEFAULT 0.0;');
@@ -475,6 +477,8 @@ async function createTables() {
       fecha_cierre TIMESTAMP,
       fondo_inicial_cop REAL NOT NULL DEFAULT 0.0,
       fondo_inicial_usd REAL NOT NULL DEFAULT 0.0,
+      fondo_declarado_cop REAL DEFAULT 0.0,
+      fondo_declarado_usd REAL DEFAULT 0.0,
       total_ventas_cop REAL DEFAULT 0.0,
       total_ventas_credito_cop REAL DEFAULT 0.0,
       total_gastos_cop REAL DEFAULT 0.0,
@@ -595,6 +599,10 @@ async function runMigrations() {
     await db.execute("ALTER TABLE sesiones_caja ADD COLUMN total_ventas_credito_cop REAL DEFAULT 0.0");
     console.log('   🔄 Migración: columna total_ventas_credito_cop agregada a sesiones_caja.');
   } catch(e) {}
+
+  // Fondo declarado al cierre (pesos y dólares)
+  try { await db.execute("ALTER TABLE sesiones_caja ADD COLUMN fondo_declarado_cop REAL DEFAULT 0.0"); } catch(e) {}
+  try { await db.execute("ALTER TABLE sesiones_caja ADD COLUMN fondo_declarado_usd REAL DEFAULT 0.0"); } catch(e) {}
 
   // Migraciones para Batido Combinado
   try {

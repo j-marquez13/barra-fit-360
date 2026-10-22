@@ -1703,6 +1703,20 @@
             <p class="text-muted" style="margin-bottom: 15px; font-size: 0.85rem;">Ingresa los montos que tienes físicamente.</p>
             
             <div class="cierre-methods-grid">
+              <div class="cierre-method-card" style="border: 1px dashed var(--cyan-neon); background: rgba(0,242,254,0.04);">
+                <div class="cierre-method-head">
+                  <span class="cierre-method-label"><i data-lucide="wallet"></i> Fondo Pesos (COP)</span>
+                  <span class="cierre-method-expected" id="cc-esp-fondo-pesos">Fondo inicial: $0</span>
+                </div>
+                <input type="number" class="cierre-input" id="cc-dec-fondo-pesos" value="0" min="0" step="any" placeholder="0.00">
+              </div>
+              <div class="cierre-method-card" style="border: 1px dashed var(--cyan-neon); background: rgba(0,242,254,0.04);">
+                <div class="cierre-method-head">
+                  <span class="cierre-method-label"><i data-lucide="wallet"></i> Fondo Dólares (USD)</span>
+                  <span class="cierre-method-expected" id="cc-esp-fondo-usd">Fondo inicial: $0</span>
+                </div>
+                <input type="number" class="cierre-input" id="cc-dec-fondo-usd" value="0" min="0" step="any" placeholder="0.00">
+              </div>
               <div class="cierre-method-card">
                 <div class="cierre-method-head">
                   <span class="cierre-method-label"><i data-lucide="smartphone"></i> Pago Móvil (VES)</span>
@@ -2051,7 +2065,7 @@
     </div>
   </div>
 
-  <script src="app3.js?v=41"></script>
+  <script src="app3.js?v=42"></script>
   <script src="whatsapp.js?v=3"></script>
 <!-- Script to automatically replace commas with dots in number inputs -->
   <script>

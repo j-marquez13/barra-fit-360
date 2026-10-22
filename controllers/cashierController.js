@@ -280,6 +280,8 @@ export async function cerrarCaja(req, res) {
   try {
     const { 
       monto_declarado_cop,
+      fondo_declarado_cop,
+      fondo_declarado_usd,
       declarado_pago_movil,
       declarado_zelle,
       declarado_binance,
@@ -423,14 +425,16 @@ export async function cerrarCaja(req, res) {
     const decPesos = parseFloat(declarado_efectivo_pesos) || 0;
     const decBancolombia = parseFloat(declarado_bancolombia) || 0;
     const decUsd = parseFloat(declarado_efectivo_usd) || 0;
+    const decFondoPesos = parseFloat(fondo_declarado_cop) || 0;
+    const decFondoUsd = parseFloat(fondo_declarado_usd) || 0;
 
     // Cerrar la sesión
     const now = localNow();
     const sqlUpdate = isPg
-      ? `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_pago_movil = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9, declarado_efectivo_usd = $10, costo_produccion = $11, utilidad_neta = $12, declarado_cop = $13, total_ventas_credito_cop = $14 WHERE id = $15 RETURNING *`
-      : `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_pago_movil = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9, declarado_efectivo_usd = $10, costo_produccion = $11, utilidad_neta = $12, declarado_cop = $13, total_ventas_credito_cop = $14 WHERE id = $15`;
+      ? `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_pago_movil = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9, declarado_efectivo_usd = $10, costo_produccion = $11, utilidad_neta = $12, declarado_cop = $13, total_ventas_credito_cop = $14, fondo_declarado_cop = $15, fondo_declarado_usd = $16 WHERE id = $17 RETURNING *`
+      : `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_pago_movil = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9, declarado_efectivo_usd = $10, costo_produccion = $11, utilidad_neta = $12, declarado_cop = $13, total_ventas_credito_cop = $14, fondo_declarado_cop = $15, fondo_declarado_usd = $16 WHERE id = $17`;
       
-    const result = await db.execute(sqlUpdate, [now, totalVentasReal, totalGastos, diferencia, decPagoMovil, decZelle, decBinance, decPesos, decBancolombia, decUsd, costoProduccion, utilidadNeta, declarado, totalVentasCreditoCop, currentSession.id]);
+    const result = await db.execute(sqlUpdate, [now, totalVentasReal, totalGastos, diferencia, decPagoMovil, decZelle, decBinance, decPesos, decBancolombia, decUsd, costoProduccion, utilidadNeta, declarado, totalVentasCreditoCop, decFondoPesos, decFondoUsd, currentSession.id]);
     
     let sessionRes = result;
     if (!isPg) {
@@ -442,6 +446,8 @@ export async function cerrarCaja(req, res) {
       mensaje: 'Caja cerrada correctamente',
       resumen: {
         fondo_inicial: currentSession.fondo_inicial_cop,
+        fondo_declarado_cop: decFondoPesos,
+        fondo_declarado_usd: decFondoUsd,
         total_ventas: totalIngresosCop,
         total_ventas_detalle_cop: totalVentasCop,
         total_ventas_contado_cop: totalVentasCop,
