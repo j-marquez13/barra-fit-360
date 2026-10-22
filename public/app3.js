@@ -4131,16 +4131,17 @@ async function loadCajaData() {
       const abonosMoneda = arqueo.abonos_moneda || {};
 
       const copTotal = (arqueo.ingresos_moneda.COP || 0);
-      const copEfectivoVenta = (ventasDetalle.COP?.['Efectivo COP'] || 0);
-      const copEfectivoAbono = (abonosDetalle.COP?.['Efectivo COP'] || 0);
-      const copCredito = (ventasDetalle.COP?.['Crédito'] || 0);
+      const copEfectivoVenta = (ventasDetalle.COP?.['Efectivo COP'] || 0) + (ventasDetalle.COP?.['Efectivo'] || 0);
+      const copEfectivoAbono = (abonosDetalle.COP?.['Efectivo COP'] || 0) + (abonosDetalle.COP?.['Efectivo'] || 0);
+      const copCredito = (ventasDetalle.COP?.['Crédito'] || 0) + (ventasDetalle.COP?.['Credito'] || 0);
       const copBancos = copTotal - copEfectivoVenta - copEfectivoAbono - copCredito;
       const gastosCop = arqueo.total_gastos_cop || 0;
+      const copIngresosDia = copEfectivoVenta + copEfectivoAbono + copBancos;
       const copCajaNeto = fondoBase + copEfectivoVenta + copEfectivoAbono - gastosCop; 
 
       const usdTotal = (arqueo.ingresos_moneda.USD || 0);
-      const usdEfectivoVenta = (ventasDetalle.USD?.['Efectivo USD'] || 0);
-      const usdEfectivoAbono = (abonosDetalle.USD?.['Efectivo USD'] || 0);
+      const usdEfectivoVenta = (ventasDetalle.USD?.['Efectivo USD'] || 0) + (ventasDetalle.USD?.['Efectivo'] || 0);
+      const usdEfectivoAbono = (abonosDetalle.USD?.['Efectivo USD'] || 0) + (abonosDetalle.USD?.['Efectivo'] || 0);
       const usdZelleVenta = (ventasDetalle.USD?.['Zelle'] || 0);
       const usdZelleAbono = (abonosDetalle.USD?.['Zelle'] || 0);
       const usdBinanceVenta = (ventasDetalle.USD?.['Binance'] || 0);
@@ -4180,7 +4181,8 @@ async function loadCajaData() {
             ${copEfectivoAbono > 0 ? `<div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px;"><span>Deudas Cobradas (Efvo):</span> <span style="color:var(--success)">+${copEfectivoAbono.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>` : ''}
             <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px; color:var(--danger);"><span>Gastos (Efvo):</span> <span>-${gastosCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>
             <hr style="border-color:rgba(255,255,255,0.1); margin: 10px 0;">
-            <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:18px; color:var(--text-bright);"><span>Físico a entregar:</span> <span>$${copCajaNeto.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>
+            <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:16px; color:var(--success);"><span>Ingresos del Día (sin fondo):</span> <span>$${copIngresosDia.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>
+            <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:18px; color:var(--text-bright); margin-top:6px;"><span>Físico a entregar (con fondo):</span> <span>$${copCajaNeto.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>
             <div style="display:flex; justify-content:space-between; font-size:12px; margin-top:10px; color:var(--text-dim);"><span>Bancos/Nequi (Digital):</span> <span>$${copBancos.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>
           </div>
 
