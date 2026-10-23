@@ -770,51 +770,6 @@
               </div>
             </div>
           </div>
-
-          <!-- ============================================ -->
-          <!-- Recordatorios WhatsApp                       -->
-          <!-- ============================================ -->
-          <div class="wa-panel">
-            <div class="wa-panel-header">
-              <h4><i data-lucide="message-circle"></i> Recordatorios WhatsApp</h4>
-              <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                <button class="action-btn" id="btn-wa-conectar" style="background:linear-gradient(135deg,#25d366,#128c7e);">
-                  <i data-lucide="link"></i> Iniciar sesión con WhatsApp
-                </button>
-                <button class="action-btn" id="btn-wa-enviar" disabled style="background:linear-gradient(135deg,var(--primary),rgba(127,0,255,0.6));">
-                  <i data-lucide="send"></i> Enviar recordatorios WhatsApp
-                </button>
-              </div>
-            </div>
-            <div class="wa-banner wa-warn" id="wa-banner">Cargando estado de WhatsApp...</div>
-          </div>
-
-          <!-- ============================================ -->
-          <!-- Resumen Semanal de Cobranza                  -->
-          <!-- ============================================ -->
-          <div class="wa-panel" style="margin-top:12px;">
-            <div class="wa-panel-header">
-              <h4><i data-lucide="calendar-clock"></i> Resumen Semanal de Cobranza</h4>
-            </div>
-            <div style="padding:12px; display:flex; flex-direction:column; gap:10px;">
-              <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.9rem;">
-                <input type="checkbox" id="wa-reporte-activo" checked style="width:18px; height:18px;">
-                <span>Activar envío automático (Lunes 8:00 am)</span>
-              </label>
-              <label style="display:flex; flex-direction:column; gap:4px; font-size:0.85rem;">
-                <span>Tu número de WhatsApp (recibe el resumen):</span>
-                <input type="text" id="wa-reporte-telefono" placeholder="584141234567" style="background:rgba(255,255,255,0.05); border:1px solid var(--border-glass); border-radius:8px; padding:8px 10px; color:var(--text-bright);">
-              </label>
-              <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                <button class="action-btn" id="btn-wa-reporte-guardar" style="background:var(--primary);">Guardar</button>
-                <button class="action-btn" id="btn-wa-reporte-enviar" style="background:linear-gradient(135deg,#25d366,#128c7e);">
-                  <i data-lucide="send"></i> Enviar ahora
-                </button>
-              </div>
-              <div class="wa-banner wa-ok" id="wa-reporte-status" style="display:none;"></div>
-            </div>
-          </div>
-          
           <div class="data-table-wrapper">
             <table class="data-table" id="table-clientes">
               <thead>
@@ -880,6 +835,50 @@
                   <!-- Dinámico -->
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          <!-- ============================================ -->
+          <!-- Recordatorios WhatsApp                       -->
+          <!-- ============================================ -->
+          <div class="wa-panel">
+            <div class="wa-panel-header">
+              <h4><i data-lucide="message-circle"></i> Recordatorios WhatsApp</h4>
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="action-btn" id="btn-wa-conectar" style="background:linear-gradient(135deg,#25d366,#128c7e);">
+                  <i data-lucide="link"></i> Iniciar sesión con WhatsApp
+                </button>
+                <button class="action-btn" id="btn-wa-enviar" disabled style="background:linear-gradient(135deg,var(--primary),rgba(127,0,255,0.6));">
+                  <i data-lucide="send"></i> Enviar recordatorios WhatsApp
+                </button>
+              </div>
+            </div>
+            <div class="wa-banner wa-warn" id="wa-banner">Cargando estado de WhatsApp...</div>
+          </div>
+
+          <!-- ============================================ -->
+          <!-- Resumen Semanal de Cobranza                  -->
+          <!-- ============================================ -->
+          <div class="wa-panel">
+            <div class="wa-panel-header">
+              <h4><i data-lucide="calendar-clock"></i> Resumen Semanal de Cobranza</h4>
+            </div>
+            <div style="padding:12px; display:flex; flex-direction:column; gap:10px;">
+              <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.9rem;">
+                <input type="checkbox" id="wa-reporte-activo" checked style="width:18px; height:18px;">
+                <span>Activar envío automático (Lunes 8:00 am)</span>
+              </label>
+              <label style="display:flex; flex-direction:column; gap:4px; font-size:0.85rem;">
+                <span>Tu número de WhatsApp (recibe el resumen):</span>
+                <input type="text" id="wa-reporte-telefono" placeholder="584141234567" style="background:rgba(255,255,255,0.05); border:1px solid var(--border-glass); border-radius:8px; padding:8px 10px; color:var(--text-bright);">
+              </label>
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="action-btn" id="btn-wa-reporte-guardar" style="background:var(--primary);">Guardar</button>
+                <button class="action-btn" id="btn-wa-reporte-enviar" style="background:linear-gradient(135deg,#25d366,#128c7e);">
+                  <i data-lucide="send"></i> Enviar ahora
+                </button>
+              </div>
+              <div class="wa-banner wa-ok" id="wa-reporte-status" style="display:none;"></div>
             </div>
           </div>
         </div>
