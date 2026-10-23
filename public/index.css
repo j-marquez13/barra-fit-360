@@ -84,6 +84,7 @@ input, button, textarea, select {
 /* 3. LAYOUT GENERAL CON SIDEBAR */
 .app-container {
   display: flex;
+  height: 100vh;
   height: 100dvh;
   width: 100vw;
   background: radial-gradient(circle at top right, rgba(24, 24, 27, 1) 0%, rgba(9, 9, 11, 1) 100%);
@@ -1489,10 +1490,12 @@ input, button, textarea, select {
   flex: 1;
   padding: 20px;
   overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   gap: 16px;
   min-width: 0;
+  min-height: 0;
 }
 
 /* Tabs de Sub-navegación */
