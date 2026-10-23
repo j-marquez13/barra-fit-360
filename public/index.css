@@ -1492,6 +1492,7 @@ input, button, textarea, select {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-width: 0;
 }
 
 /* Tabs de Sub-navegación */
@@ -1617,6 +1618,8 @@ input, button, textarea, select {
   border: 1px solid var(--border-glass);
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.1);
+  min-width: 0;
+  max-width: 100%;
 }
 
 .data-table {
@@ -1789,6 +1792,12 @@ select.receta-insumo option {
 .table-actions {
   display: flex;
   gap: 4px;
+  flex-wrap: wrap;
+}
+
+/* Tabla de clientes: ancho mínimo para que no se desborde y haga scroll */
+#table-clientes {
+  min-width: 860px;
 }
 
 /* Date picker */
