@@ -4043,7 +4043,7 @@ function showAbonoModal(clientId, clientName, saldoActual) {
       const moneda = row.querySelector('.abono-moneda')?.value || 'COP';
       const monto = parseMontoAbono(row.querySelector('.abono-monto')?.value);
       return { metodo_pago: metodo, moneda, monto_original: monto, referencia: '' };
-    }).filter(p => p.monto > 0);
+    }).filter(p => p.monto_original > 0);
 
     if (pagos.length === 0) {
       showToast('Ingresa al menos un monto a abonar', 'warning');
