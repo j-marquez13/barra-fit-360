@@ -4007,6 +4007,7 @@ function showAbonoModal(clientId, clientName, saldoActual) {
     }
   });
 }
+window.showAbonoModal = showAbonoModal;
 
 // ============================================
 // 13. FUNCIONES AUXILIARES
