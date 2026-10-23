@@ -1540,6 +1540,17 @@ input, button, textarea, select {
   height: 15px;
 }
 
+/* Paneles de Crédito (Clientes / WhatsApp) */
+.cred-panel {
+  display: none;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+}
+.cred-panel.active {
+  display: flex;
+}
+
 /* Panel headers */
 .panel-header {
   display: flex;

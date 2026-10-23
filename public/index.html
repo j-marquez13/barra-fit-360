@@ -13,7 +13,7 @@
   <!-- Lucide Icons para iconografía limpia y moderna -->
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- Estilos CSS -->
-  <link rel="stylesheet" href="index.css?v=18">
+  <link rel="stylesheet" href="index.css?v=19">
   <!-- PWA: instalable como aplicación en Chrome/Android/escritorio -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#0b0f1a">
@@ -741,6 +741,19 @@
             </div>
           </div>
 
+          <!-- Tabs de Sub-navegación -->
+          <div class="module-tabs">
+            <button class="mod-tab active" data-cred-tab="clientes">
+              <i data-lucide="users"></i> Clientes
+            </button>
+            <button class="mod-tab" data-cred-tab="whatsapp">
+              <i data-lucide="message-circle"></i> WhatsApp
+            </button>
+          </div>
+
+          <!-- Panel: Clientes -->
+          <div class="cred-panel active" id="cred-clientes">
+
           <!-- ============================================ -->
           <!-- Resumen de Crédito (KPIs)                    -->
           <!-- ============================================ -->
@@ -837,6 +850,10 @@
               </table>
             </div>
           </div>
+          </div>
+
+          <!-- Panel: WhatsApp -->
+          <div class="cred-panel" id="cred-whatsapp" style="display:none;">
 
           <!-- ============================================ -->
           <!-- Recordatorios WhatsApp                       -->
@@ -880,6 +897,7 @@
               </div>
               <div class="wa-banner wa-ok" id="wa-reporte-status" style="display:none;"></div>
             </div>
+          </div>
           </div>
         </div>
       </div>
@@ -2153,7 +2171,7 @@
     </div>
   </div>
 
-  <script src="app3.js?v=46"></script>
+  <script src="app3.js?v=47"></script>
   <script src="whatsapp.js?v=4"></script>
 <!-- Script to automatically replace commas with dots in number inputs -->
   <script>

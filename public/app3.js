@@ -478,6 +478,21 @@ checkApiHealth();
     });
   });
 
+  // Crédito tabs (Clientes / WhatsApp)
+  document.querySelectorAll('[data-cred-tab]').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const target = tab.dataset.credTab;
+      document.querySelectorAll('[data-cred-tab]').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      document.querySelectorAll('.cred-panel').forEach(p => p.classList.remove('active'));
+      document.getElementById(`cred-${target}`).classList.add('active');
+      if (target === 'whatsapp') {
+        if (typeof refreshWhatsAppEstado === 'function') refreshWhatsAppEstado();
+        if (typeof loadReporteSemanal === 'function') loadReporteSemanal();
+      }
+    });
+  });
+
   // Botones de módulos
   document.getElementById('btn-add-insumo')?.addEventListener('click', showAddInsumoModal);
 
@@ -2840,6 +2855,7 @@ function renderClientesTable(clientes) {
         <td>
           <div class="table-actions">
             <button class="table-btn btn-detail" onclick="loadClientDetail(${c.id})"><i data-lucide="eye" style="width:12px; height:12px;"></i> Ver</button>
+            <button class="table-btn" style="background:var(--success); color:#000;" onclick="showAbonoModal(${c.id}, '${c.nombre.replace(/'/g, "\\'")}', ${saldo})">Abonar</button>
             <button class="table-btn" style="background:var(--warning); color:#000;" onclick="showRegistrarDeudaModal(${c.id}, '${c.nombre.replace(/'/g, "\\'")}', ${parseFloat(c.saldo_deudor)}, ${parseFloat(c.limite_credito)})">+ Deuda</button>
           </div>
         </td>
