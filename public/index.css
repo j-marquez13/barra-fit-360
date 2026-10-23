@@ -1798,6 +1798,43 @@ select.receta-insumo option {
   flex-wrap: wrap;
 }
 
+/* Tabla de clientes: llena el espacio disponible y tiene scroll propio */
+#clientes-table-wrapper {
+  flex: 1;
+  min-height: 240px;
+  overflow-y: auto;
+}
+
+/* WhatsApp colapsable */
+.wa-collapsible {
+  border: 1px solid var(--border-glass);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.wa-collapsible summary {
+  cursor: pointer;
+  padding: 12px 16px;
+  font-family: var(--font-title);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--cyan-neon);
+  list-style: none;
+  user-select: none;
+}
+.wa-collapsible summary::-webkit-details-marker {
+  display: none;
+}
+.wa-collapsible[open] summary {
+  border-bottom: 1px solid var(--border-glass);
+  margin-bottom: 12px;
+}
+.wa-collapsible .wa-panel {
+  margin: 0 12px 12px;
+  border: 1px solid var(--border-glass);
+}
+
 /* Tabla de clientes: ancho mínimo para que no se desborde y haga scroll */
 #table-clientes {
   min-width: 860px;
