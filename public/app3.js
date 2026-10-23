@@ -2958,7 +2958,6 @@ async function loadCierreDiario() {
     }
     if (document.getElementById('kpi-cobranza')) {
       document.getElementById('kpi-cobranza').textContent = `${data.resumen.cobranza_deudas_cop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-      document.getElementById('kpi-flujo-caja').textContent = `Flujo Total: ${data.resumen.flujo_caja_ingresos.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     }
     
     document.getElementById('kpi-costo').textContent = `$${data.resumen.costo_produccion.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
@@ -4193,7 +4192,6 @@ async function loadCajaData() {
       const copCredito = (ventasDetalle.COP?.['Crédito'] || 0) + (ventasDetalle.COP?.['Credito'] || 0);
       const copBancos = copTotal - copEfectivoVenta - copEfectivoAbono - copCredito;
       const gastosCop = arqueo.total_gastos_cop || 0;
-      const copIngresosDia = copEfectivoVenta + copEfectivoAbono + copBancos;
       const copCajaNeto = fondoBase + copEfectivoVenta + copEfectivoAbono - gastosCop; 
 
       const usdTotal = (arqueo.ingresos_moneda.USD || 0);
@@ -4238,8 +4236,7 @@ async function loadCajaData() {
             ${copEfectivoAbono > 0 ? `<div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px;"><span>Deudas Cobradas (Efvo):</span> <span style="color:var(--success)">+${copEfectivoAbono.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>` : ''}
             <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px; color:var(--danger);"><span>Gastos (Efvo):</span> <span>-${gastosCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>
             <hr style="border-color:rgba(255,255,255,0.1); margin: 10px 0;">
-            <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:16px; color:var(--success);"><span>Ingresos del Día (sin fondo):</span> <span>$${copIngresosDia.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>
-            <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:18px; color:var(--text-bright); margin-top:6px;"><span>Físico a entregar (con fondo):</span> <span>$${copCajaNeto.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>
+            <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:18px; color:var(--text-bright);"><span>Físico a entregar (con fondo):</span> <span>$${copCajaNeto.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>
             <div style="display:flex; justify-content:space-between; font-size:12px; margin-top:10px; color:var(--text-dim);"><span>Bancos/Nequi (Digital):</span> <span>$${copBancos.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>
           </div>
 
