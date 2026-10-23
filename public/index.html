@@ -1661,11 +1661,9 @@
           <!-- Columna Izquierda: Valores Teóricos -->
           <div class="cierre-col-left">
             <h3><i data-lucide="info"></i> Resumen del Turno</h3>
+
+            <div style="font-size:0.72rem; font-weight:700; letter-spacing:1px; color:var(--color-muted); margin:12px 0 6px; text-transform:uppercase; border-bottom:1px solid var(--border-glass); padding-bottom:4px;">Ventas</div>
             <div class="cierre-stats-list">
-              <div class="cierre-stat-item">
-                <span>Fondo Inicial:</span>
-                <strong id="cc-fondo-inicial">$0</strong>
-              </div>
               <div class="cierre-stat-item">
                 <span>Total Ventas (Contado):</span>
                 <strong id="cc-total-ventas" style="color: var(--success);">$0</strong>
@@ -1675,26 +1673,37 @@
                 <strong id="cc-total-credito" style="color: var(--warning);">$0</strong>
               </div>
               <div class="cierre-stat-item">
-                <span>Total Abonos (Cobranza):</span>
+                <span>Abonos (Cobranza):</span>
                 <strong id="cc-total-abonos" style="color: var(--cyan-neon);">$0</strong>
               </div>
+              <div class="cierre-stat-item">
+                <span>Ingresos del Día (Ventas + Abonos):</span>
+                <strong id="cc-ingresos-dia" style="color: var(--success);">$0</strong>
+              </div>
+            </div>
+
+            <div style="font-size:0.72rem; font-weight:700; letter-spacing:1px; color:var(--color-muted); margin:12px 0 6px; text-transform:uppercase; border-bottom:1px solid var(--border-glass); padding-bottom:4px;">Costos</div>
+            <div class="cierre-stats-list">
               <div class="cierre-stat-item">
                 <span>Total Gastos:</span>
                 <strong id="cc-total-gastos" style="color: var(--danger);">$0</strong>
               </div>
+            </div>
+
+            <div style="font-size:0.72rem; font-weight:700; letter-spacing:1px; color:var(--color-muted); margin:12px 0 6px; text-transform:uppercase; border-bottom:1px solid var(--border-glass); padding-bottom:4px;">Fondo de Caja</div>
+            <div class="cierre-stats-list">
               <div class="cierre-stat-item">
-                <span>Ingresos del Día:</span>
-                <strong id="cc-ingresos-dia" style="color: var(--success);">$0</strong>
+                <span>Fondo de Caja Base:</span>
+                <strong id="cc-fondo-base">$0</strong>
+              </div>
+              <div class="cierre-stat-item" style="align-items:center;">
+                <span>¿El fondo está completo?</span>
+                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                  <input type="checkbox" id="cc-fondo-completo" checked style="width:18px; height:18px;">
+                  <span id="cc-fondo-completo-txt" style="font-weight:600; color: var(--success);">Sí</span>
+                </label>
               </div>
             </div>
-            
-            <div class="cierre-total-esperado">
-              <span>Total Dinero en Caja (con fondo):</span>
-              <strong id="cc-total-esperado">$0</strong>
-            </div>
-            <p class="text-muted" style="font-size: 0.8rem; margin-top: 10px; text-align: center;">
-              *Ingresos del día = ventas + abonos (sin fondo). Total dinero en caja = ingresos + fondo - gastos. Reporta TODO el dinero disponible.
-            </p>
           </div>
           
           <!-- Columna Derecha: Ingreso de Efectivo Contado -->
@@ -1703,20 +1712,6 @@
             <p class="text-muted" style="margin-bottom: 15px; font-size: 0.85rem;">Ingresa los montos que tienes físicamente.</p>
             
             <div class="cierre-methods-grid">
-              <div class="cierre-method-card" style="border: 1px dashed var(--cyan-neon); background: rgba(0,242,254,0.04);">
-                <div class="cierre-method-head">
-                  <span class="cierre-method-label"><i data-lucide="wallet"></i> Fondo Pesos (COP)</span>
-                  <span class="cierre-method-expected" id="cc-esp-fondo-pesos">Fondo inicial: $0</span>
-                </div>
-                <input type="number" class="cierre-input" id="cc-dec-fondo-pesos" value="0" min="0" step="any" placeholder="0.00">
-              </div>
-              <div class="cierre-method-card" style="border: 1px dashed var(--cyan-neon); background: rgba(0,242,254,0.04);">
-                <div class="cierre-method-head">
-                  <span class="cierre-method-label"><i data-lucide="wallet"></i> Fondo Dólares (USD)</span>
-                  <span class="cierre-method-expected" id="cc-esp-fondo-usd">Fondo inicial: $0</span>
-                </div>
-                <input type="number" class="cierre-input" id="cc-dec-fondo-usd" value="0" min="0" step="any" placeholder="0.00">
-              </div>
               <div class="cierre-method-card">
                 <div class="cierre-method-head">
                   <span class="cierre-method-label"><i data-lucide="smartphone"></i> Pago Móvil (VES)</span>
@@ -1789,25 +1784,30 @@
         
         <div class="cierre-ticket-preview" style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-glass); border-radius: 12px; padding: 20px; text-align: left; max-width: 400px; margin: 0 auto 25px;">
           <h4 style="text-align: center; border-bottom: 1px dashed var(--border-glass); padding-bottom: 10px; margin-bottom: 15px;">TICKET DE CIERRE</h4>
+
+          <div style="font-size:0.7rem; font-weight:700; letter-spacing:1px; color:var(--color-muted); text-transform:uppercase; border-bottom:1px solid var(--border-glass); padding-bottom:4px; margin-bottom:8px;">Ventas</div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Total Ventas (Contado):</span><strong id="ticket-ventas">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Cuentas por Cobrar (Crédito):</span><strong id="ticket-credito">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Abonos (Cobranza):</span><strong id="ticket-abonos">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-weight:600;"><span>Ingresos del Día (Ventas + Abonos):</span><strong id="ticket-ingresos-dia" style="color: var(--success);">$0</strong></div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Costo de Producción:</span><strong id="ticket-costo">$0</strong></div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Total Gastos:</span><strong id="ticket-gastos">$0</strong></div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Reposición de Stock:</span><strong id="ticket-reposicion">$0</strong></div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Mermas Descontadas:</span><strong id="ticket-mermas">$0</strong></div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 15px; padding-top: 10px; border-top: 1px solid var(--border-glass); font-size: 1.05em;"><span>Utilidad Neta:</span><strong id="ticket-utilidad">$0</strong></div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-weight:600;"><span>Fondo Pesos (COP):</span><strong id="ticket-fondo-pesos" style="color: var(--cyan-neon);">$0</strong></div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-weight:600;"><span>Fondo Dólares (USD):</span><strong id="ticket-fondo-usd" style="color: var(--cyan-neon);">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Pago Móvil (Bs):</span><strong id="ticket-pago-movil">Bs 0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Zelle (USD):</span><strong id="ticket-zelle">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Binance (USD):</span><strong id="ticket-binance">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Efectivo (USD):</span><strong id="ticket-efectivo-usd">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Pesos Efectivo (COP):</span><strong id="ticket-efectivo-pesos">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px dashed var(--border-glass);"><span>Bancolombia (COP):</span><strong id="ticket-bancolombia">$0</strong></div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Total Dinero en Caja (con fondo):</span><strong id="ticket-esperado">$0</strong></div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 15px;"><span>Declarado (Todo el dinero):</span><strong id="ticket-declarado">$0</strong></div>
+
+          <div style="font-size:0.7rem; font-weight:700; letter-spacing:1px; color:var(--color-muted); text-transform:uppercase; border-bottom:1px solid var(--border-glass); padding-bottom:4px; margin-bottom:8px;">Costos y Utilidad</div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Costo de Producción:</span><strong id="ticket-costo">$0</strong></div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Reposición de Stock:</span><strong id="ticket-reposicion">$0</strong></div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Total Gastos / Mermas:</span><strong id="ticket-gastos">$0</strong></div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 15px; padding-top: 10px; border-top: 1px solid var(--border-glass); font-size: 1.05em;"><span>Utilidad Neta:</span><strong id="ticket-utilidad">$0</strong></div>
+
+          <div style="font-size:0.7rem; font-weight:700; letter-spacing:1px; color:var(--color-muted); text-transform:uppercase; border-bottom:1px solid var(--border-glass); padding-bottom:4px; margin-bottom:8px;">Fondo de Caja</div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Fondo de Caja Base:</span><strong id="ticket-fondo-base">$0</strong></div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 15px;"><span>¿El fondo está completo?</span><strong id="ticket-fondo-completo">—</strong></div>
+
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Declarado (Ventas + Abonos):</span><strong id="ticket-declarado">$0</strong></div>
           <div style="display: flex; justify-content: space-between; border-top: 1px solid var(--border-glass); padding-top: 10px; font-size: 1.1em; color: var(--success);" id="ticket-diff-row">
             <span>Diferencia:</span><strong id="ticket-diferencia">$0</strong>
           </div>

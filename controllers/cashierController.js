@@ -282,6 +282,7 @@ export async function cerrarCaja(req, res) {
       monto_declarado_cop,
       fondo_declarado_cop,
       fondo_declarado_usd,
+      fondo_completo,
       declarado_pago_movil,
       declarado_zelle,
       declarado_binance,
@@ -343,10 +344,10 @@ export async function cerrarCaja(req, res) {
     const reposicionData = await db.query(reposicionQuery, [fechaApertura]);
     const totalReposicion = parseFloat(reposicionData[0]?.total || 0);
 
-    // 3. Total esperado por moneda = fondo + ventas + abonos (el cajero reporta TODO el dinero)
+    // 3. Total esperado por moneda = ventas + abonos (SIN fondo: se verifica aparte)
     const saldosMoneda = {
-      COP: parseFloat(currentSession.fondo_inicial_cop) || 0,
-      USD: parseFloat(currentSession.fondo_inicial_usd) || 0,
+      COP: 0,
+      USD: 0,
       VES: 0
     };
     const ventasMoneda = {};
@@ -426,14 +427,15 @@ export async function cerrarCaja(req, res) {
     const decUsd = parseFloat(declarado_efectivo_usd) || 0;
     const decFondoPesos = parseFloat(fondo_declarado_cop) || 0;
     const decFondoUsd = parseFloat(fondo_declarado_usd) || 0;
+    const fondoCompleto = fondo_completo ? 1 : 0;
 
     // Cerrar la sesión
     const now = localNow();
     const sqlUpdate = isPg
-      ? `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_pago_movil = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9, declarado_efectivo_usd = $10, costo_produccion = $11, utilidad_neta = $12, declarado_cop = $13, total_ventas_credito_cop = $14, fondo_declarado_cop = $15, fondo_declarado_usd = $16 WHERE id = $17 RETURNING *`
-      : `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_pago_movil = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9, declarado_efectivo_usd = $10, costo_produccion = $11, utilidad_neta = $12, declarado_cop = $13, total_ventas_credito_cop = $14, fondo_declarado_cop = $15, fondo_declarado_usd = $16 WHERE id = $17`;
+      ? `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_pago_movil = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9, declarado_efectivo_usd = $10, costo_produccion = $11, utilidad_neta = $12, declarado_cop = $13, total_ventas_credito_cop = $14, fondo_declarado_cop = $15, fondo_declarado_usd = $16, fondo_completo = $17 WHERE id = $18 RETURNING *`
+      : `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_pago_movil = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9, declarado_efectivo_usd = $10, costo_produccion = $11, utilidad_neta = $12, declarado_cop = $13, total_ventas_credito_cop = $14, fondo_declarado_cop = $15, fondo_declarado_usd = $16, fondo_completo = $17 WHERE id = $18`;
       
-    const result = await db.execute(sqlUpdate, [now, totalVentasReal, totalGastos, diferencia, decPagoMovil, decZelle, decBinance, decPesos, decBancolombia, decUsd, costoProduccion, utilidadNeta, declarado, totalVentasCreditoCop, decFondoPesos, decFondoUsd, currentSession.id]);
+    const result = await db.execute(sqlUpdate, [now, totalVentasReal, totalGastos, diferencia, decPagoMovil, decZelle, decBinance, decPesos, decBancolombia, decUsd, costoProduccion, utilidadNeta, declarado, totalVentasCreditoCop, decFondoPesos, decFondoUsd, fondoCompleto, currentSession.id]);
     
     let sessionRes = result;
     if (!isPg) {
@@ -445,8 +447,10 @@ export async function cerrarCaja(req, res) {
       mensaje: 'Caja cerrada correctamente',
       resumen: {
         fondo_inicial: currentSession.fondo_inicial_cop,
+        fondo_inicial_usd: currentSession.fondo_inicial_usd,
         fondo_declarado_cop: decFondoPesos,
         fondo_declarado_usd: decFondoUsd,
+        fondo_completo: !!fondoCompleto,
         total_ventas: totalIngresosCop,
         total_ventas_detalle_cop: totalVentasCop,
         total_ventas_contado_cop: totalVentasCop,

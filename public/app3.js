@@ -4361,8 +4361,8 @@ async function cerrarTurnoActual() {
     });
 
     const ingresosDia = ventasCop + abonosCop;
-    // Total esperado = fondo + ventas + abonos - gastos (TODO el dinero disponible)
-    totalEsperado = fondoBaseCop + ventasCop + abonosCop - gastosCop;
+    // Total esperado = ventas + abonos - gastos (SIN fondo, que se verifica aparte)
+    totalEsperado = ventasCop + abonosCop - gastosCop;
 
     // Totales esperados por método de pago (para conciliación visual del cajero)
     const ventasMetodo = arqueo.ventas_detalle || {};
@@ -4380,8 +4380,6 @@ async function cerrarTurnoActual() {
     const fmtEsperado = (v, simbolo) =>
       `${Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} ${simbolo}`;
 
-    document.getElementById('cc-esp-fondo-pesos').textContent = `Fondo inicial: ${fmtEsperado(fondoBaseCop, 'COP')}`;
-    document.getElementById('cc-esp-fondo-usd').textContent = `Fondo inicial: ${fmtEsperado(fondoBaseUsd, 'USD')}`;
     document.getElementById('cc-esp-pago-movil').textContent = `Esperado: ${fmtEsperado(espPagoMovil, 'Bs')}`;
     document.getElementById('cc-esp-zelle').textContent = `Esperado: ${fmtEsperado(espZelle, 'USD')}`;
     document.getElementById('cc-esp-binance').textContent = `Esperado: ${fmtEsperado(espBinance, 'USD')}`;
@@ -4390,13 +4388,12 @@ async function cerrarTurnoActual() {
     document.getElementById('cc-esp-usd').textContent = `Esperado: ${fmtEsperado(espUsd, 'USD')}`;
 
     // Actualizar UI - Valores Teóricos
-    document.getElementById('cc-fondo-inicial').textContent = `$${fondoBaseCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
     document.getElementById('cc-total-ventas').textContent = `$${ventasCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
     document.getElementById('cc-total-credito').textContent = `$${creditoVentaCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
     document.getElementById('cc-total-abonos').textContent = `$${abonosCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
     document.getElementById('cc-total-gastos').textContent = `-$${gastosCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
     document.getElementById('cc-ingresos-dia').textContent = `$${ingresosDia.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
-    document.getElementById('cc-total-esperado').textContent = `$${totalEsperado.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+    document.getElementById('cc-fondo-base').textContent = `$${fondoBaseCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP + $${fondoBaseUsd.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} USD`;
 
   } catch (err) {
     console.error('Error al cargar estado para cierre', err);
@@ -4406,10 +4403,24 @@ async function cerrarTurnoActual() {
   }
 
   // 2. Setup de inputs y cálculos en tiempo real
-  const inputs = ['cc-dec-fondo-pesos', 'cc-dec-fondo-usd', 'cc-dec-pago-movil', 'cc-dec-zelle', 'cc-dec-binance', 'cc-dec-pesos', 'cc-dec-bancolombia', 'cc-dec-usd'];
+  const inputs = ['cc-dec-pago-movil', 'cc-dec-zelle', 'cc-dec-binance', 'cc-dec-pesos', 'cc-dec-bancolombia', 'cc-dec-usd'];
   const diffBox = document.getElementById('cc-diff-box');
   const diffValue = document.getElementById('cc-diferencia');
   const diffStatus = document.getElementById('cc-diff-status');
+
+  // Verificación del fondo de caja (Sí / No)
+  const fondoCompletoChk = document.getElementById('cc-fondo-completo');
+  const fondoCompletoTxt = document.getElementById('cc-fondo-completo-txt');
+  const updateFondoCompleto = () => {
+    if (fondoCompletoChk && fondoCompletoTxt) {
+      fondoCompletoTxt.textContent = fondoCompletoChk.checked ? 'Sí' : 'No';
+      fondoCompletoTxt.style.color = fondoCompletoChk.checked ? 'var(--success)' : 'var(--danger)';
+    }
+  };
+  if (fondoCompletoChk) {
+    fondoCompletoChk.addEventListener('change', updateFondoCompleto);
+    updateFondoCompleto();
+  }
 
   // Limpiar inputs
   inputs.forEach(id => {
@@ -4418,8 +4429,6 @@ async function cerrarTurnoActual() {
   });
 
   const calcularDiferenciaReal = () => {
-    const decFondoPesos = parseFloat(document.getElementById('cc-dec-fondo-pesos').value) || 0;
-    const decFondoUsd = parseFloat(document.getElementById('cc-dec-fondo-usd').value) || 0;
     const decPagoMovil = parseFloat(document.getElementById('cc-dec-pago-movil').value) || 0;
     const decZelle = parseFloat(document.getElementById('cc-dec-zelle').value) || 0;
     const decBinance = parseFloat(document.getElementById('cc-dec-binance').value) || 0;
@@ -4432,8 +4441,8 @@ async function cerrarTurnoActual() {
 
     // USD total declarado = Zelle + Binance + Efectivo USD
     const totalUsd = decZelle + decBinance + decUsd;
-    // El declarado incluye TODO el dinero (ventas + cobranza + fondo)
-    const declaradoCop = decPesos + decBanco + (totalUsd * rateUsd) + (decPagoMovil * rateVes) + decFondoPesos + (decFondoUsd * rateUsd);
+    // El declarado es SOLO ventas + cobranza (el fondo se verifica aparte)
+    const declaradoCop = decPesos + decBanco + (totalUsd * rateUsd) + (decPagoMovil * rateVes);
     
     const diferencia = declaradoCop - totalEsperado;
 
@@ -4483,8 +4492,6 @@ async function cerrarTurnoActual() {
     lucide.createIcons();
     
     try {
-      const decFondoPesos = parseFloat(document.getElementById('cc-dec-fondo-pesos').value) || 0;
-      const decFondoUsd = parseFloat(document.getElementById('cc-dec-fondo-usd').value) || 0;
       const decPagoMovil = parseFloat(document.getElementById('cc-dec-pago-movil').value) || 0;
       const decZelle = parseFloat(document.getElementById('cc-dec-zelle').value) || 0;
       const decBinance = parseFloat(document.getElementById('cc-dec-binance').value) || 0;
@@ -4496,16 +4503,16 @@ async function cerrarTurnoActual() {
       const rateVes = STATE.tasas.VES || 1;
       
       const totalUsd = decZelle + decBinance + decUsd;
-      // El declarado incluye TODO el dinero (ventas + cobranza + fondo)
-      const monto_declarado_cop = decPesos + decBanco + (totalUsd * rateUsd) + (decPagoMovil * rateVes) + decFondoPesos + (decFondoUsd * rateUsd);
+      // El declarado es SOLO ventas + cobranza (el fondo se verifica aparte)
+      const monto_declarado_cop = decPesos + decBanco + (totalUsd * rateUsd) + (decPagoMovil * rateVes);
+      const fondoCompleto = document.getElementById('cc-fondo-completo')?.checked ? true : false;
 
       const res = await fetch('/api/caja/cerrar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           monto_declarado_cop,
-          fondo_declarado_cop: decFondoPesos,
-          fondo_declarado_usd: decFondoUsd,
+          fondo_completo: fondoCompleto,
           declarado_pago_movil: decPagoMovil,
           declarado_zelle: decZelle,
           declarado_binance: decBinance,
@@ -4531,17 +4538,17 @@ async function cerrarTurnoActual() {
       document.getElementById('ticket-abonos').textContent = `$${(d.resumen.total_abonos_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       document.getElementById('ticket-ingresos-dia').textContent = `$${((d.resumen.total_ventas_contado_cop || 0) + (d.resumen.total_abonos_cop || 0)).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       document.getElementById('ticket-costo').textContent = `-$${(d.resumen.costo_produccion || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-      document.getElementById('ticket-gastos').textContent = `-$${d.resumen.total_gastos.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       document.getElementById('ticket-reposicion').textContent = `-$${(d.resumen.total_reposicion || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-      document.getElementById('ticket-mermas').textContent = `-$${(d.resumen.mermas_descontadas || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      document.getElementById('ticket-gastos').textContent = `-$${((d.resumen.total_gastos || 0) + (d.resumen.mermas_descontadas || 0)).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       
       const utilidad = d.resumen.utilidad_neta || 0;
       const utilEl = document.getElementById('ticket-utilidad');
       utilEl.textContent = `$${utilidad.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       utilEl.style.color = utilidad >= 0 ? 'var(--success)' : 'var(--danger)';
-      document.getElementById('ticket-fondo-pesos').textContent = `$${(d.resumen.fondo_declarado_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-      document.getElementById('ticket-fondo-usd').textContent = `$${(d.resumen.fondo_declarado_usd || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-      document.getElementById('ticket-esperado').textContent = `$${d.resumen.saldo_teorico.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      document.getElementById('ticket-fondo-base').textContent = `$${(d.resumen.fondo_inicial || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP + $${(d.resumen.fondo_inicial_usd || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} USD`;
+      const fondoCompletoEl = document.getElementById('ticket-fondo-completo');
+      fondoCompletoEl.textContent = d.resumen.fondo_completo ? 'Sí' : 'No';
+      fondoCompletoEl.style.color = d.resumen.fondo_completo ? 'var(--success)' : 'var(--danger)';
       document.getElementById('ticket-declarado').textContent = `$${d.resumen.monto_declarado.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       document.getElementById('ticket-pago-movil').textContent = `Bs ${(d.resumen.declarado_pago_movil || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       document.getElementById('ticket-zelle').textContent = `$${(d.resumen.declarado_zelle || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;

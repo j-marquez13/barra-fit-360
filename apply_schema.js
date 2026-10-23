@@ -83,6 +83,7 @@ async function run() {
       ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS fondo_inicial_usd REAL NOT NULL DEFAULT 0.0;
       ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS fondo_declarado_cop REAL DEFAULT 0.0;
       ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS fondo_declarado_usd REAL DEFAULT 0.0;
+      ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS fondo_completo INTEGER DEFAULT 0;
       ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS total_ventas_cop REAL DEFAULT 0.0;
       ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS total_ventas_credito_cop REAL DEFAULT 0.0;
       ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS total_gastos_cop REAL DEFAULT 0.0;
