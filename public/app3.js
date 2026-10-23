@@ -4528,8 +4528,9 @@ async function cerrarTurnoActual() {
       const decPesos = vPesos + aPesos;
       const decBanco = vBanco + aBanco;
 
-      const totalUsd = decZelle + decBinance + decUsd;
-      const monto_declarado_cop = decPesos + decBanco + (totalUsd * rateUsd) + (decPagoMovil * rateVes);
+      const declaradoVentasCop = vPesos + vBanco + ((vZelle + vBinance + vUsd) * rateUsd) + (vPagoMovil * rateVes);
+      const declaradoAbonosCop = aPesos + aBanco + ((aZelle + aBinance + aUsd) * rateUsd) + (aPagoMovil * rateVes);
+      const monto_declarado_cop = declaradoVentasCop + declaradoAbonosCop;
       const fondoCompleto = document.getElementById('cc-fondo-completo')?.checked ? true : false;
 
       const res = await fetch('/api/caja/cerrar', {
@@ -4574,7 +4575,8 @@ async function cerrarTurnoActual() {
       const fondoCompletoEl = document.getElementById('ticket-fondo-completo');
       fondoCompletoEl.textContent = d.resumen.fondo_completo ? 'Sí' : 'No';
       fondoCompletoEl.style.color = d.resumen.fondo_completo ? 'var(--success)' : 'var(--danger)';
-      document.getElementById('ticket-declarado').textContent = `$${d.resumen.monto_declarado.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      document.getElementById('ticket-declarado-ventas').textContent = `$${declaradoVentasCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      document.getElementById('ticket-declarado-abonos').textContent = `$${declaradoAbonosCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       document.getElementById('ticket-pago-movil').textContent = `Bs ${(d.resumen.declarado_pago_movil || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       document.getElementById('ticket-zelle').textContent = `$${(d.resumen.declarado_zelle || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       document.getElementById('ticket-binance').textContent = `$${(d.resumen.declarado_binance || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
@@ -4582,20 +4584,23 @@ async function cerrarTurnoActual() {
       document.getElementById('ticket-efectivo-pesos').textContent = `$${(d.resumen.declarado_efectivo_pesos || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       document.getElementById('ticket-bancolombia').textContent = `$${(d.resumen.declarado_bancolombia || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       
-      const diff = d.resumen.diferencia;
-      const diffEl = document.getElementById('ticket-diferencia');
-      const diffRow = document.getElementById('ticket-diff-row');
-      
-      if (Math.abs(diff) < 100) {
-        diffEl.textContent = `$0`;
-        diffRow.style.color = 'var(--success)';
-      } else if (diff < 0) {
-        diffEl.textContent = `-$${Math.abs(diff).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-        diffRow.style.color = 'var(--danger)';
-      } else {
-        diffEl.textContent = `+$${Math.abs(diff).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-        diffRow.style.color = 'var(--warning)';
-      }
+      const setDiff = (rowId, elId, diff) => {
+        const el = document.getElementById(elId);
+        const row = document.getElementById(rowId);
+        if (!el || !row) return;
+        if (Math.abs(diff) < 100) {
+          el.textContent = '$0';
+          row.style.color = 'var(--success)';
+        } else if (diff < 0) {
+          el.textContent = `-$${Math.abs(diff).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+          row.style.color = 'var(--danger)';
+        } else {
+          el.textContent = `+$${Math.abs(diff).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+          row.style.color = 'var(--warning)';
+        }
+      };
+      setDiff('ticket-diff-ventas-row', 'ticket-diferencia-ventas', declaradoVentasCop - (ventasCop - gastosCop));
+      setDiff('ticket-diff-abonos-row', 'ticket-diferencia-abonos', declaradoAbonosCop - abonosCop);
       
     } catch (e) {
       alert('Error: ' + e.message);
