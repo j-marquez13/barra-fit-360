@@ -166,6 +166,7 @@ export async function listarCierresAdmin(req, res) {
         COUNT(*) as total_turnos,
         COALESCE(SUM(total_ventas_cop), 0) as total_ventas_cop,
         COALESCE(SUM(total_ventas_credito_cop), 0) as total_ventas_credito_cop,
+        COALESCE(SUM(total_abonos_cop), 0) as total_abonos_cop,
         COALESCE(SUM(total_gastos_cop), 0) as total_gastos_cop,
         COALESCE(SUM(costo_produccion), 0) as costo_produccion,
         COALESCE(SUM(utilidad_neta), 0) as utilidad_neta,
@@ -202,6 +203,7 @@ export async function listarCierresAdmin(req, res) {
       total_turnos: parseInt(r.total_turnos || 0, 10),
       total_ventas_cop: parseFloat(r.total_ventas_cop || 0),
       total_ventas_credito_cop: parseFloat(r.total_ventas_credito_cop || 0),
+      total_abonos_cop: parseFloat(r.total_abonos_cop || 0),
       total_ventas_contado_cop: Math.max(0, parseFloat(r.total_ventas_cop || 0) - parseFloat(r.total_ventas_credito_cop || 0)),
       total_gastos_cop: parseFloat(r.total_gastos_cop || 0),
       costo_produccion: parseFloat(r.costo_produccion || 0),
@@ -233,6 +235,7 @@ export async function cierreDia(req, res) {
         COUNT(*) as total_turnos,
         COALESCE(SUM(total_ventas_cop), 0) as total_ventas_cop,
         COALESCE(SUM(total_ventas_credito_cop), 0) as total_ventas_credito_cop,
+        COALESCE(SUM(total_abonos_cop), 0) as total_abonos_cop,
         COALESCE(SUM(total_gastos_cop), 0) as total_gastos_cop,
         COALESCE(SUM(costo_produccion), 0) as costo_produccion,
         COALESCE(SUM(utilidad_neta), 0) as utilidad_neta,
@@ -255,6 +258,7 @@ export async function cierreDia(req, res) {
         total_turnos: parseInt(r.total_turnos || 0, 10),
         total_ventas_cop: parseFloat(r.total_ventas_cop || 0),
         total_ventas_credito_cop: parseFloat(r.total_ventas_credito_cop || 0),
+        total_abonos_cop: parseFloat(r.total_abonos_cop || 0),
         total_ventas_contado_cop: Math.max(0, parseFloat(r.total_ventas_cop || 0) - parseFloat(r.total_ventas_credito_cop || 0)),
         total_gastos_cop: parseFloat(r.total_gastos_cop || 0),
         costo_produccion: parseFloat(r.costo_produccion || 0),
@@ -432,10 +436,10 @@ export async function cerrarCaja(req, res) {
     // Cerrar la sesión
     const now = localNow();
     const sqlUpdate = isPg
-      ? `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_pago_movil = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9, declarado_efectivo_usd = $10, costo_produccion = $11, utilidad_neta = $12, declarado_cop = $13, total_ventas_credito_cop = $14, fondo_declarado_cop = $15, fondo_declarado_usd = $16, fondo_completo = $17 WHERE id = $18 RETURNING *`
-      : `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_pago_movil = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9, declarado_efectivo_usd = $10, costo_produccion = $11, utilidad_neta = $12, declarado_cop = $13, total_ventas_credito_cop = $14, fondo_declarado_cop = $15, fondo_declarado_usd = $16, fondo_completo = $17 WHERE id = $18`;
+      ? `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_pago_movil = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9, declarado_efectivo_usd = $10, costo_produccion = $11, utilidad_neta = $12, declarado_cop = $13, total_ventas_credito_cop = $14, fondo_declarado_cop = $15, fondo_declarado_usd = $16, fondo_completo = $17, total_abonos_cop = $18 WHERE id = $19 RETURNING *`
+      : `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_pago_movil = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9, declarado_efectivo_usd = $10, costo_produccion = $11, utilidad_neta = $12, declarado_cop = $13, total_ventas_credito_cop = $14, fondo_declarado_cop = $15, fondo_declarado_usd = $16, fondo_completo = $17, total_abonos_cop = $18 WHERE id = $19`;
       
-    const result = await db.execute(sqlUpdate, [now, totalVentasReal, totalGastos, diferencia, decPagoMovil, decZelle, decBinance, decPesos, decBancolombia, decUsd, costoProduccion, utilidadNeta, declarado, totalVentasCreditoCop, decFondoPesos, decFondoUsd, fondoCompleto, currentSession.id]);
+    const result = await db.execute(sqlUpdate, [now, totalVentasReal, totalGastos, diferencia, decPagoMovil, decZelle, decBinance, decPesos, decBancolombia, decUsd, costoProduccion, utilidadNeta, declarado, totalVentasCreditoCop, decFondoPesos, decFondoUsd, fondoCompleto, totalAbonosCop, currentSession.id]);
     
     let sessionRes = result;
     if (!isPg) {

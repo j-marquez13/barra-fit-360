@@ -75,6 +75,7 @@ export async function initializeDatabase() {
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_bancolombia DOUBLE PRECISION DEFAULT 0.0;');
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_pago_movil DOUBLE PRECISION DEFAULT 0.0;');
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS total_ventas_credito_cop DOUBLE PRECISION DEFAULT 0.0;');
+      await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS total_abonos_cop DOUBLE PRECISION DEFAULT 0.0;');
       await db.execute('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS password_hash TEXT;');
       await db.execute("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS permisos TEXT NOT NULL DEFAULT '[\"pos\",\"caja\"]';");
       await db.execute("UPDATE usuarios SET permisos = '[\"all\"]' WHERE rol = 'Administrador';");
@@ -483,6 +484,7 @@ async function createTables() {
       fondo_completo INTEGER DEFAULT 0,
       total_ventas_cop REAL DEFAULT 0.0,
       total_ventas_credito_cop REAL DEFAULT 0.0,
+      total_abonos_cop REAL DEFAULT 0.0,
       total_gastos_cop REAL DEFAULT 0.0,
       diferencia_caja REAL,
       estado TEXT NOT NULL DEFAULT 'Abierta',
@@ -606,6 +608,7 @@ async function runMigrations() {
   try { await db.execute("ALTER TABLE sesiones_caja ADD COLUMN fondo_declarado_cop REAL DEFAULT 0.0"); } catch(e) {}
   try { await db.execute("ALTER TABLE sesiones_caja ADD COLUMN fondo_declarado_usd REAL DEFAULT 0.0"); } catch(e) {}
   try { await db.execute("ALTER TABLE sesiones_caja ADD COLUMN fondo_completo INTEGER DEFAULT 0"); } catch(e) {}
+  try { await db.execute("ALTER TABLE sesiones_caja ADD COLUMN total_abonos_cop REAL DEFAULT 0.0"); } catch(e) {}
 
   // Migraciones para Batido Combinado
   try {
