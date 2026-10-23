@@ -438,6 +438,9 @@ app.post('/api/whatsapp/desconectar', whatsapp.desconectar);
 app.post('/api/whatsapp/recordatorios/vista-previa', whatsapp.vistaPrevia);
 app.post('/api/whatsapp/recordatorios/enviar', whatsapp.enviar);
 app.get('/api/whatsapp/recordatorios/progreso', whatsapp.progreso);
+app.get('/api/whatsapp/reporte-semanal/estado', whatsapp.reporteSemanalEstado);
+app.post('/api/whatsapp/reporte-semanal/config', whatsapp.reporteSemanalGuardarConfig);
+app.post('/api/whatsapp/reporte-semanal/enviar', whatsapp.reporteSemanalEnviarAhora);
 
 // ============================================
 // RUTA DE RESET DEL SISTEMA (PONER STOCK EN 0, BORRAR VENTAS, CRÉDITOS, ETC.)

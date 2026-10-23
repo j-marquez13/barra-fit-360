@@ -404,3 +404,8 @@ CREATE TABLE IF NOT EXISTS whatsapp_logs (
     fecha TIMESTAMP DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS configuracion (
+    clave VARCHAR(255) PRIMARY KEY,
+    valor TEXT
+);
+

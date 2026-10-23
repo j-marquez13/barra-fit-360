@@ -288,6 +288,7 @@ function startWatchdog() {
 
 export function initWhatsApp() {
   startWatchdog();
+  startReporteSemanalScheduler();
   (async () => {
     try {
       const stored = await hasStoredSession();
@@ -534,6 +535,162 @@ async function runSendJob(job) {
 
 export async function progreso(req, res) {
   res.json(sendJob || { enProgreso: false });
+}
+
+
+// ============================================
+// RESUMEN SEMANAL DE COBRANZA (automatizado)
+// ============================================
+const REPORTE_SEMANAL_DEFECTO = {
+  telefono: '584247805402',
+  dia: 1,            // 1 = Lunes (0=Dom ... 6=Sáb)
+  hora: '08:00'
+};
+
+function localDateTime() {
+  const now = new Date();
+  return new Date(now.getTime() - 4 * 60 * 60 * 1000); // Venezuela (UTC-4)
+}
+
+function getSemanaAnterior() {
+  const local = localDateTime();
+  const day = local.getUTCDay(); // 0=Dom
+  const daysSinceMonday = (day + 6) % 7; // Lunes=0 ... Domingo=6
+  const inicio = new Date(local.getTime() - (daysSinceMonday + 7) * 86400000);
+  const fin = new Date(inicio.getTime() + 6 * 86400000);
+  return { inicio: inicio.toISOString().slice(0, 10), fin: fin.toISOString().slice(0, 10) };
+}
+
+async function getConfig(clave) {
+  try {
+    const rows = await db.query('SELECT valor FROM configuracion WHERE clave = $1', [clave]);
+    return rows.length ? rows[0].valor : null;
+  } catch (e) {
+    logger.error('Error leyendo configuración:', e.message);
+    return null;
+  }
+}
+
+async function setConfig(clave, valor) {
+  await db.execute(
+    `INSERT INTO configuracion (clave, valor) VALUES ($1, $2)
+     ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor`,
+    [clave, String(valor ?? '')]
+  );
+}
+
+async function getReporteSemanalConfig() {
+  const telefono = (await getConfig('reporte_semanal_telefono')) || REPORTE_SEMANAL_DEFECTO.telefono;
+  const activado = (await getConfig('reporte_semanal_activado')) !== '0';
+  const dia = parseInt((await getConfig('reporte_semanal_dia')) || String(REPORTE_SEMANAL_DEFECTO.dia), 10);
+  const hora = (await getConfig('reporte_semanal_hora')) || REPORTE_SEMANAL_DEFECTO.hora;
+  const ultimoEnvio = await getConfig('reporte_semanal_ultimo_envio');
+  return { telefono, activado, dia, hora, ultimoEnvio };
+}
+
+async function getPagosSemana(inicio, fin) {
+  const dateCol = db.dateExpr('a.fecha');
+  const rows = await db.query(`
+    SELECT c.nombre, SUM(a.monto_total_cop) as total_pagado, COUNT(*) as num_abonos
+    FROM abonos_credito a JOIN clientes c ON a.cliente_id = c.id
+    WHERE ${dateCol} >= $1 AND ${dateCol} <= $2 AND a.monto_total_cop > 0
+    GROUP BY c.id, c.nombre
+    ORDER BY total_pagado DESC
+  `, [inicio, fin]);
+  return rows.map(r => ({
+    nombre: r.nombre,
+    total_pagado: parseFloat(r.total_pagado || 0),
+    num_abonos: parseInt(r.num_abonos || 0, 10)
+  }));
+}
+
+function buildReporteSemanal(pagos, inicio, fin) {
+  const total = pagos.reduce((s, p) => s + p.total_pagado, 0);
+  const totalAbonos = pagos.reduce((s, p) => s + p.num_abonos, 0);
+  const lineas = pagos.map((p) =>
+    `• ${p.nombre} — $${fmtPesos(p.total_pagado)} COP${p.num_abonos > 1 ? ` (${p.num_abonos} abonos)` : ''}`
+  ).join('\n');
+  return `📊 *Resumen semanal de cobranza*\n📅 ${inicio} → ${fin}\n\n` +
+    (pagos.length ? `Clientes que abonaron:\n${lineas}\n\n` : `No hubo abonos esta semana.\n\n`) +
+    `💰 *Total cobrado: $${fmtPesos(total)} COP* (${totalAbonos} abonos)`;
+}
+
+async function buildReporteSemanalEstado() {
+  const cfg = await getReporteSemanalConfig();
+  const { inicio, fin } = getSemanaAnterior();
+  const pagos = await getPagosSemana(inicio, fin);
+  const totalCobrado = pagos.reduce((s, p) => s + p.total_pagado, 0);
+  return {
+    activado: cfg.activado,
+    telefono: cfg.telefono,
+    dia: cfg.dia,
+    hora: cfg.hora,
+    ultimoEnvio: cfg.ultimoEnvio,
+    preview: { inicio, fin, total: pagos.length, totalCobrado, pagos }
+  };
+}
+
+async function enviarReporteSemanal() {
+  const cfg = await getReporteSemanalConfig();
+  const phone = normalizePhone(cfg.telefono);
+  if (!phone) throw new Error('No hay número de WhatsApp configurado.');
+  if (status !== 'conectado' || !sock) throw new Error('WhatsApp no está conectado.');
+
+  const { inicio, fin } = getSemanaAnterior();
+  const pagos = await getPagosSemana(inicio, fin);
+  const mensaje = buildReporteSemanal(pagos, inicio, fin);
+  await sock.sendMessage(toJid(phone), { text: mensaje });
+  await logEnvio(phone, mensaje, 'enviado');
+  await setConfig('reporte_semanal_ultimo_envio', localDateTime().toISOString().slice(0, 10));
+  return { inicio, fin, total: pagos.length, mensaje };
+}
+
+let reporteSemanalTimer = null;
+export function startReporteSemanalScheduler() {
+  if (reporteSemanalTimer) return;
+  reporteSemanalTimer = setInterval(checkYEnviarReporteSemanal, 15 * 60 * 1000);
+  setTimeout(checkYEnviarReporteSemanal, 90 * 1000); // primer chequeo tras arrancar
+}
+
+async function checkYEnviarReporteSemanal() {
+  try {
+    const cfg = await getReporteSemanalConfig();
+    if (!cfg.activado) return;
+    const local = localDateTime();
+    if (local.getUTCDay() !== cfg.dia) return;
+    const [h, m] = String(cfg.hora || '08:00').split(':').map(Number);
+    if (local.getUTCHours() < h || (local.getUTCHours() === h && local.getUTCMinutes() < m)) return;
+    const hoy = local.toISOString().slice(0, 10);
+    if (cfg.ultimoEnvio === hoy) return; // ya se envió hoy
+
+    await enviarReporteSemanal();
+    logger.info('📊 Reporte semanal de cobranza enviado automáticamente.');
+  } catch (e) {
+    logger.error('Error en el reporte semanal:', e.message);
+  }
+}
+
+export async function reporteSemanalEstado(req, res) {
+  try { res.json(await buildReporteSemanalEstado()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+export async function reporteSemanalGuardarConfig(req, res) {
+  try {
+    const { telefono, activado } = req.body || {};
+    if (telefono !== undefined) await setConfig('reporte_semanal_telefono', telefono);
+    if (activado !== undefined) await setConfig('reporte_semanal_activado', activado ? '1' : '0');
+    res.json(await buildReporteSemanalEstado());
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+export async function reporteSemanalEnviarAhora(req, res) {
+  try {
+    const resultado = await enviarReporteSemanal();
+    res.json({ ok: true, ...resultado });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
 }
 
 

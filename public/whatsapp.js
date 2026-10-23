@@ -246,6 +246,68 @@ async function pollProgreso() {
 }
 
 // ============================================
+// RESUMEN SEMANAL DE COBRANZA
+// ============================================
+async function loadReporteSemanal() {
+  if (!waIsLoggedIn()) return;
+  try {
+    const res = await fetch('/api/whatsapp/reporte-semanal/estado');
+    if (!res.ok) return;
+    const d = await res.json();
+    const chk = document.getElementById('wa-reporte-activo');
+    const tel = document.getElementById('wa-reporte-telefono');
+    const status = document.getElementById('wa-reporte-status');
+    if (chk) chk.checked = !!d.activado;
+    if (tel) tel.value = d.telefono || '';
+    if (status) {
+      const p = d.preview || {};
+      const total = Number(p.totalCobrado || 0).toLocaleString('es-VE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+      status.style.display = 'block';
+      status.className = 'wa-banner wa-ok';
+      status.innerHTML = '📊 Próximo envío: Lunes ' + waEscapeHtml(d.hora || '08:00') +
+        ' · Semana a reportar: ' + waEscapeHtml(p.inicio || '—') + ' → ' + waEscapeHtml(p.fin || '—') +
+        ' · ' + (p.total || 0) + ' cliente(s) · Total $' + total +
+        (d.ultimoEnvio ? ' · Último envío: ' + waEscapeHtml(d.ultimoEnvio) : ' · Aún no se ha enviado');
+    }
+  } catch (e) { /* sin conexión */ }
+}
+
+async function guardarReporteSemanal() {
+  const telefono = (document.getElementById('wa-reporte-telefono')?.value || '').trim();
+  const activado = document.getElementById('wa-reporte-activo')?.checked ? true : false;
+  try {
+    const res = await fetch('/api/whatsapp/reporte-semanal/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ telefono, activado })
+    });
+    const d = await res.json();
+    if (!res.ok) { showToast(d.error || 'Error al guardar', 'danger'); return; }
+    showToast('Configuración del resumen semanal guardada.', 'success');
+    loadReporteSemanal();
+  } catch (e) {
+    showToast('Error al guardar la configuración', 'danger');
+  }
+}
+
+async function enviarReporteSemanalAhora() {
+  const btn = document.getElementById('btn-wa-reporte-enviar');
+  const original = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i data-lucide="loader"></i> Enviando...'; if (typeof lucide !== 'undefined') lucide.createIcons(); }
+  try {
+    const res = await fetch('/api/whatsapp/reporte-semanal/enviar', { method: 'POST' });
+    const d = await res.json();
+    if (!res.ok) showToast(d.error || 'Error al enviar', 'danger');
+    else showToast('Resumen semanal enviado por WhatsApp ✔', 'success');
+    loadReporteSemanal();
+  } catch (e) {
+    showToast('Error al enviar el resumen', 'danger');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = original; if (typeof lucide !== 'undefined') lucide.createIcons(); }
+  }
+}
+
+// ============================================
 // WIRING + ARRANQUE
 // ============================================
 document.addEventListener('DOMContentLoaded', function () {
@@ -254,12 +316,18 @@ document.addEventListener('DOMContentLoaded', function () {
   document.getElementById('btn-wa-cerrar')?.addEventListener('click', closeWhatsAppModal);
   document.getElementById('btn-wa-cancelar')?.addEventListener('click', closeWhatsAppModal);
 
+  // Resumen semanal de cobranza
+  document.getElementById('btn-wa-reporte-guardar')?.addEventListener('click', guardarReporteSemanal);
+  document.getElementById('btn-wa-reporte-enviar')?.addEventListener('click', enviarReporteSemanalAhora);
+
   // Refrescar al entrar a "Cuentas por Cobrar" (instantáneo)
   document.getElementById('nav-credito')?.addEventListener('click', function () {
     setTimeout(refreshWhatsAppEstado, 300);
+    setTimeout(loadReporteSemanal, 300);
   });
 
   refreshWhatsAppEstado();
+  loadReporteSemanal();
   setInterval(refreshWhatsAppEstado, 30000);
 });
 

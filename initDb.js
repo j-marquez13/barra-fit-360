@@ -133,6 +133,10 @@ export async function initializeDatabase() {
         estado VARCHAR(20),
         fecha TIMESTAMP DEFAULT NOW()
       )`);
+      await db.execute(`CREATE TABLE IF NOT EXISTS configuracion (
+        clave VARCHAR(255) PRIMARY KEY,
+        valor TEXT
+      )`);
     } catch(e) {
       console.log('   ⚠️ Migración PostgreSQL ignorada o error:', e.message);
     }
@@ -324,6 +328,12 @@ async function createTables() {
       mensaje TEXT,
       estado TEXT,
       fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS configuracion (
+      clave TEXT PRIMARY KEY,
+      valor TEXT
     )
   `);
 
