@@ -1798,9 +1798,15 @@ select.receta-insumo option {
   flex-wrap: wrap;
 }
 
-/* Tabla de clientes: ancho mínimo para que no se desborde y haga scroll */
-#table-clientes {
-  min-width: 860px;
+/* Tabla de clientes: en pantallas pequeñas se ocultan columnas menos importantes
+   para que la tabla quepa sin desbordarse */
+@media (max-width: 900px) {
+  #table-clientes th:nth-child(1),
+  #table-clientes td:nth-child(1),
+  #table-clientes th:nth-child(3),
+  #table-clientes td:nth-child(3) {
+    display: none;
+  }
 }
 
 /* Date picker */
