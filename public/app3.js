@@ -4363,25 +4363,20 @@ async function cerrarTurnoActual() {
     // Totales esperados por método de pago (para conciliación visual del cajero)
     const ventasMetodo = arqueo.ventas_detalle || {};
     const abonosMetodo = arqueo.abonos_detalle || {};
-    const esperadoMetodo = (metodo, moneda) =>
-      (parseFloat(ventasMetodo[moneda]?.[metodo]) || 0) + (parseFloat(abonosMetodo[moneda]?.[metodo]) || 0);
-
-    const espPagoMovil = esperadoMetodo('Pago Móvil', 'VES');
-    const espZelle = esperadoMetodo('Zelle', 'USD');
-    const espBinance = esperadoMetodo('Binance', 'USD');
-    const espPesos = esperadoMetodo('Efectivo COP', 'COP');
-    const espBancolombia = esperadoMetodo('Bancolombia', 'COP');
-    const espUsd = esperadoMetodo('Efectivo USD', 'USD');
+    const metodoVentas = (metodo, moneda) => parseFloat(ventasMetodo[moneda]?.[metodo]) || 0;
+    const metodoAbonos = (metodo, moneda) => parseFloat(abonosMetodo[moneda]?.[metodo]) || 0;
 
     const fmtEsperado = (v, simbolo) =>
       `${Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} ${simbolo}`;
+    const fmtSeparado = (metodo, moneda, simbolo) =>
+      `Ventas: ${fmtEsperado(metodoVentas(metodo, moneda), simbolo)} · Abonos: ${fmtEsperado(metodoAbonos(metodo, moneda), simbolo)}`;
 
-    document.getElementById('cc-esp-pago-movil').textContent = `Esperado: ${fmtEsperado(espPagoMovil, 'Bs')}`;
-    document.getElementById('cc-esp-zelle').textContent = `Esperado: ${fmtEsperado(espZelle, 'USD')}`;
-    document.getElementById('cc-esp-binance').textContent = `Esperado: ${fmtEsperado(espBinance, 'USD')}`;
-    document.getElementById('cc-esp-pesos').textContent = `Esperado: ${fmtEsperado(espPesos, 'COP')}`;
-    document.getElementById('cc-esp-bancolombia').textContent = `Esperado: ${fmtEsperado(espBancolombia, 'COP')}`;
-    document.getElementById('cc-esp-usd').textContent = `Esperado: ${fmtEsperado(espUsd, 'USD')}`;
+    document.getElementById('cc-esp-pago-movil').textContent = fmtSeparado('Pago Móvil', 'VES', 'Bs');
+    document.getElementById('cc-esp-zelle').textContent = fmtSeparado('Zelle', 'USD', 'USD');
+    document.getElementById('cc-esp-binance').textContent = fmtSeparado('Binance', 'USD', 'USD');
+    document.getElementById('cc-esp-pesos').textContent = fmtSeparado('Efectivo COP', 'COP', 'COP');
+    document.getElementById('cc-esp-bancolombia').textContent = fmtSeparado('Bancolombia', 'COP', 'COP');
+    document.getElementById('cc-esp-usd').textContent = fmtSeparado('Efectivo USD', 'USD', 'USD');
 
     // Actualizar UI - Valores Teóricos
     document.getElementById('cc-total-ventas').textContent = `$${ventasCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
