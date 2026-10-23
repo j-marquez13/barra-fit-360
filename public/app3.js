@@ -3929,7 +3929,7 @@ const ABONO_PAGO_ROW_HTML = `
     </select>
   </div>
   <div class="form-group" style="margin:0;"><label>Monto</label>
-    <input type="number" class="abono-monto" placeholder="0.00" min="0" step="any" style="width:100%;">
+    <input type="text" inputmode="decimal" class="abono-monto" placeholder="0.00" style="width:100%;">
   </div>
 `;
 
@@ -3956,6 +3956,23 @@ window.agregarFilaPagoAbono = function() {
   lucide.createIcons();
 };
 
+function parseMontoAbono(raw) {
+  if (raw == null) return 0;
+  let s = String(raw).trim();
+  if (!s) return 0;
+  // Formato Colombia: punto = miles, coma = decimal (ej: 40.000,50)
+  if (s.includes(',')) {
+    s = s.replace(/\./g, '').replace(',', '.');
+  } else {
+    const dots = s.split('.');
+    if (dots.length > 2 || (dots.length === 2 && dots[1].length > 2)) {
+      s = s.replace(/\./g, '');
+    }
+  }
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+
 function showAbonoModal(clientId, clientName, saldoActual) {
   openGenericModal(`Registrar Abono — ${clientName}`, `
     <div class="alert-item alert-warning" style="margin-bottom:8px;">
@@ -3976,7 +3993,7 @@ function showAbonoModal(clientId, clientName, saldoActual) {
     const pagos = rows.map(row => {
       const metodo = row.querySelector('.abono-metodo')?.value || 'Efectivo COP';
       const moneda = row.querySelector('.abono-moneda')?.value || 'COP';
-      const monto = parseFloat(row.querySelector('.abono-monto')?.value) || 0;
+      const monto = parseMontoAbono(row.querySelector('.abono-monto')?.value);
       return { metodo_pago: metodo, moneda, monto_original: monto, referencia: '' };
     }).filter(p => p.monto > 0);
 
