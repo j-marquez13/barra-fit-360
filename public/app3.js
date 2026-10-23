@@ -4360,7 +4360,6 @@ async function cerrarTurnoActual() {
       else if (moneda === 'VES') abonosCop += monto * rateVes;
     });
 
-    const ingresosDia = ventasCop + abonosCop;
     // Total esperado = ventas + abonos - gastos (SIN fondo, que se verifica aparte)
     totalEsperado = ventasCop + abonosCop - gastosCop;
 
@@ -4392,7 +4391,6 @@ async function cerrarTurnoActual() {
     document.getElementById('cc-total-credito').textContent = `$${creditoVentaCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
     document.getElementById('cc-total-abonos').textContent = `$${abonosCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
     document.getElementById('cc-total-gastos').textContent = `-$${gastosCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
-    document.getElementById('cc-ingresos-dia').textContent = `$${ingresosDia.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
     document.getElementById('cc-fondo-base').textContent = `$${fondoBaseCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP + $${fondoBaseUsd.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} USD`;
 
   } catch (err) {
@@ -4536,10 +4534,10 @@ async function cerrarTurnoActual() {
       document.getElementById('ticket-ventas').textContent = `$${(d.resumen.total_ventas_contado_cop ?? d.resumen.total_ventas_detalle_cop ?? 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       document.getElementById('ticket-credito').textContent = `$${(d.resumen.total_ventas_credito_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       document.getElementById('ticket-abonos').textContent = `$${(d.resumen.total_abonos_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-      document.getElementById('ticket-ingresos-dia').textContent = `$${((d.resumen.total_ventas_contado_cop || 0) + (d.resumen.total_abonos_cop || 0)).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       document.getElementById('ticket-costo').textContent = `-$${(d.resumen.costo_produccion || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       document.getElementById('ticket-reposicion').textContent = `-$${(d.resumen.total_reposicion || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-      document.getElementById('ticket-gastos').textContent = `-$${((d.resumen.total_gastos || 0) + (d.resumen.mermas_descontadas || 0)).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      document.getElementById('ticket-gastos').textContent = `-$${(d.resumen.total_gastos || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      document.getElementById('ticket-mermas').textContent = `-$${(d.resumen.mermas_descontadas || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       
       const utilidad = d.resumen.utilidad_neta || 0;
       const utilEl = document.getElementById('ticket-utilidad');
@@ -4615,7 +4613,6 @@ window.loadCierreDia = async function() {
     document.getElementById('dia-ventas').textContent = `$${(r.total_ventas_contado_cop ?? r.total_ventas_cop ?? 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     document.getElementById('dia-credito').textContent = `$${(r.total_ventas_credito_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     document.getElementById('dia-abonos').textContent = `$${(r.total_abonos_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-    document.getElementById('dia-ingresos').textContent = `$${((r.total_ventas_contado_cop ?? r.total_ventas_cop ?? 0) + (r.total_abonos_cop || 0)).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     document.getElementById('dia-costo').textContent = `$${(r.costo_produccion || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     document.getElementById('dia-gastos').textContent = `$${(r.total_gastos_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     document.getElementById('dia-declarado').textContent = `$${(r.declarado_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
@@ -4732,7 +4729,6 @@ window.verTicketCierre = function(idx) {
   document.getElementById('dia-ventas').textContent = `$${fmt(c.total_ventas_contado_cop ?? c.total_ventas_cop)}`;
   document.getElementById('dia-credito').textContent = `$${fmt(c.total_ventas_credito_cop)}`;
   document.getElementById('dia-abonos').textContent = `$${fmt(c.total_abonos_cop)}`;
-  document.getElementById('dia-ingresos').textContent = `$${fmt((c.total_ventas_contado_cop ?? c.total_ventas_cop) + (c.total_abonos_cop || 0))}`;
   document.getElementById('dia-costo').textContent = `-$${fmt(c.costo_produccion)}`;
   document.getElementById('dia-gastos').textContent = `-$${fmt(c.total_gastos_cop)}`;
   document.getElementById('dia-reposicion').textContent = `-$${fmt(c.reposicion)}`;
