@@ -1551,6 +1551,92 @@ input, button, textarea, select {
   display: flex;
 }
 
+/* Formulario de Abono (Pago Mixto) */
+.abono-resumen {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--border-glass);
+  border-radius: 10px;
+  margin-bottom: 12px;
+  background: rgba(50, 200, 255, 0.06);
+  font-size: 0.85rem;
+}
+.abono-pago-row {
+  border: 1px solid var(--border-glass);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.abono-pago-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.abono-pago-num {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--cyan-neon);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.abono-pago-remove {
+  background: transparent;
+  border: none;
+  color: var(--danger);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+}
+.abono-pago-remove i {
+  width: 16px;
+  height: 16px;
+}
+.abono-pago-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+.btn-abono-add {
+  width: 100%;
+  padding: 9px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px dashed var(--border-glass);
+  border-radius: 8px;
+  color: var(--cyan-neon);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.btn-abono-add:hover {
+  background: rgba(0, 242, 254, 0.06);
+}
+.abono-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--border-glass);
+  border-radius: 10px;
+  margin: 10px 0;
+  background: rgba(0, 230, 118, 0.06);
+  font-size: 0.9rem;
+}
+.abono-total strong {
+  color: var(--success);
+  font-size: 1rem;
+  font-family: var(--font-title);
+}
+
 /* Panel headers */
 .panel-header {
   display: flex;

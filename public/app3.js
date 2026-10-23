@@ -3911,25 +3911,31 @@ window.showEditClienteModal = function() {
 }
 
 const ABONO_PAGO_ROW_HTML = `
-  <div class="form-group" style="margin:0;"><label>Método</label>
-    <select class="abono-metodo" onchange="abonoAutoMoneda(this)">
-      <option value="Efectivo COP">Efectivo COP</option>
-      <option value="Bancolombia">Bancolombia</option>
-      <option value="Efectivo USD">Efectivo USD</option>
-      <option value="Zelle">Zelle</option>
-      <option value="Pago Móvil">Pago Móvil (VES)</option>
-      <option value="Binance">Binance</option>
-    </select>
+  <div class="abono-pago-card-head">
+    <span class="abono-pago-num">Pago</span>
+    <button type="button" class="abono-pago-remove" onclick="eliminarFilaPagoAbono(this)"><i data-lucide="x"></i></button>
   </div>
-  <div class="form-group" style="margin:0;"><label>Moneda</label>
-    <select class="abono-moneda">
-      <option value="COP">COP</option>
-      <option value="USD">USD</option>
-      <option value="VES">VES</option>
-    </select>
-  </div>
-  <div class="form-group" style="margin:0;"><label>Monto</label>
-    <input type="text" inputmode="decimal" class="abono-monto" placeholder="0.00" style="width:100%;">
+  <div class="abono-pago-fields">
+    <div class="form-group" style="margin:0;"><label>Método</label>
+      <select class="abono-metodo" onchange="abonoAutoMoneda(this)">
+        <option value="Efectivo COP">Efectivo COP</option>
+        <option value="Bancolombia">Bancolombia</option>
+        <option value="Efectivo USD">Efectivo USD</option>
+        <option value="Zelle">Zelle</option>
+        <option value="Pago Móvil">Pago Móvil (VES)</option>
+        <option value="Binance">Binance</option>
+      </select>
+    </div>
+    <div class="form-group" style="margin:0;"><label>Moneda</label>
+      <select class="abono-moneda" onchange="recalcAbonoTotal()">
+        <option value="COP">COP</option>
+        <option value="USD">USD</option>
+        <option value="VES">VES</option>
+      </select>
+    </div>
+    <div class="form-group" style="margin:0;"><label>Monto</label>
+      <input type="text" inputmode="decimal" class="abono-monto" placeholder="0.00" oninput="recalcAbonoTotal()">
+    </div>
   </div>
 `;
 
@@ -3943,6 +3949,7 @@ window.abonoAutoMoneda = function(selectEl) {
     else if (metodo === 'Pago Móvil') mon.value = 'VES';
     else mon.value = 'COP';
   }
+  recalcAbonoTotal();
 };
 
 window.agregarFilaPagoAbono = function() {
@@ -3950,10 +3957,43 @@ window.agregarFilaPagoAbono = function() {
   if (!container) return;
   const row = document.createElement('div');
   row.className = 'abono-pago-row';
-  row.style.cssText = 'display:grid; grid-template-columns: 1fr 90px 1fr; gap:8px; margin-bottom:8px; align-items:end;';
   row.innerHTML = ABONO_PAGO_ROW_HTML;
   container.appendChild(row);
+  renumberAbonoRows();
+  recalcAbonoTotal();
   lucide.createIcons();
+};
+
+window.eliminarFilaPagoAbono = function(btn) {
+  const row = btn.closest('.abono-pago-row');
+  if (!row) return;
+  row.remove();
+  renumberAbonoRows();
+  recalcAbonoTotal();
+};
+
+function renumberAbonoRows() {
+  const rows = document.querySelectorAll('#abono-pagos-container .abono-pago-row');
+  rows.forEach((row, i) => {
+    const num = row.querySelector('.abono-pago-num');
+    if (num) num.textContent = 'Pago ' + (i + 1);
+  });
+}
+
+window.recalcAbonoTotal = function() {
+  const totalEl = document.getElementById('abono-total');
+  if (!totalEl) return;
+  const rateUsd = parseFloat(STATE.tasas?.USD) || 4000;
+  const rateVes = parseFloat(STATE.tasas?.VES) || 100;
+  let totalCop = 0;
+  document.querySelectorAll('.abono-pago-row').forEach(row => {
+    const moneda = row.querySelector('.abono-moneda')?.value || 'COP';
+    const monto = parseMontoAbono(row.querySelector('.abono-monto')?.value);
+    if (moneda === 'USD') totalCop += monto * rateUsd;
+    else if (moneda === 'VES') totalCop += monto * rateVes;
+    else totalCop += monto;
+  });
+  totalEl.textContent = '$' + totalCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 }) + ' COP';
 };
 
 function parseMontoAbono(raw) {
@@ -3975,18 +4015,26 @@ function parseMontoAbono(raw) {
 
 function showAbonoModal(clientId, clientName, saldoActual) {
   openGenericModal(`Registrar Abono — ${clientName}`, `
-    <div class="alert-item alert-warning" style="margin-bottom:8px;">
-      <i data-lucide="info"></i>
-      <span>Saldo deudor actual: <strong>$${saldoActual.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP</strong></span>
+    <div class="abono-resumen">
+      <span>Saldo deudor actual:</span>
+      <strong>$${saldoActual.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP</strong>
     </div>
+
     <div id="abono-pagos-container">
-      <div class="abono-pago-row" style="display:grid; grid-template-columns: 1fr 90px 1fr; gap:8px; margin-bottom:8px; align-items:end;">
+      <div class="abono-pago-row">
         ${ABONO_PAGO_ROW_HTML}
       </div>
     </div>
-    <button type="button" class="action-btn secondary" style="width:100%; margin-bottom:10px;" onclick="agregarFilaPagoAbono()">
+
+    <button type="button" class="btn-abono-add" onclick="agregarFilaPagoAbono()">
       <i data-lucide="plus"></i> Agregar otro pago (Pago Mixto)
     </button>
+
+    <div class="abono-total">
+      <span>Total a abonar:</span>
+      <strong id="abono-total">$0 COP</strong>
+    </div>
+
     <div class="form-group"><label>Notas</label><input type="text" id="inp-abono-notas" placeholder="Ej: Abono parcial"></div>
   `, async () => {
     const rows = [...document.querySelectorAll('.abono-pago-row')];
