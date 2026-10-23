@@ -1731,8 +1731,9 @@
           <!-- Columna Derecha: Ingreso de Efectivo Contado -->
           <div class="cierre-col-right">
             <h3><i data-lucide="wallet"></i> Efectivo Contado en Caja</h3>
-            <p class="text-muted" style="margin-bottom: 15px; font-size: 0.85rem;">Ingresa los montos que tienes físicamente.</p>
-            
+            <p class="text-muted" style="margin-bottom: 15px; font-size: 0.85rem;">Ingresa los montos físicos separando ventas de abonos.</p>
+
+            <h4 style="font-size:0.72rem; font-weight:700; letter-spacing:1px; color:var(--color-muted); margin:12px 0 6px; text-transform:uppercase; border-bottom:1px solid var(--border-glass); padding-bottom:4px;"><i data-lucide="receipt" style="width:14px;height:14px;vertical-align:-2px;"></i> Ventas (Contado)</h4>
             <div class="cierre-methods-grid">
               <div class="cierre-method-card">
                 <div class="cierre-method-head">
@@ -1777,15 +1778,66 @@
                 <input type="number" class="cierre-input" id="cc-dec-usd" value="0" min="0" step="any" placeholder="0.00">
               </div>
             </div>
+
+            <h4 style="font-size:0.72rem; font-weight:700; letter-spacing:1px; color:var(--color-muted); margin:12px 0 6px; text-transform:uppercase; border-bottom:1px solid var(--border-glass); padding-bottom:4px;"><i data-lucide="hand-coins" style="width:14px;height:14px;vertical-align:-2px;"></i> Abonos (Cobranza)</h4>
+            <div class="cierre-methods-grid">
+              <div class="cierre-method-card">
+                <div class="cierre-method-head">
+                  <span class="cierre-method-label"><i data-lucide="smartphone"></i> Pago Móvil (VES)</span>
+                  <span class="cierre-method-expected" id="cc-esp-abono-pago-movil">Esperado: Bs 0</span>
+                </div>
+                <input type="number" class="cierre-input" id="cc-dec-abono-pago-movil" value="0" min="0" step="any" placeholder="0.00">
+              </div>
+              <div class="cierre-method-card">
+                <div class="cierre-method-head">
+                  <span class="cierre-method-label"><i data-lucide="landmark"></i> Zelle (USD)</span>
+                  <span class="cierre-method-expected" id="cc-esp-abono-zelle">Esperado: $0</span>
+                </div>
+                <input type="number" class="cierre-input" id="cc-dec-abono-zelle" value="0" min="0" step="any" placeholder="0.00">
+              </div>
+              <div class="cierre-method-card">
+                <div class="cierre-method-head">
+                  <span class="cierre-method-label"><i data-lucide="bitcoin"></i> Binance (USD)</span>
+                  <span class="cierre-method-expected" id="cc-esp-abono-binance">Esperado: $0</span>
+                </div>
+                <input type="number" class="cierre-input" id="cc-dec-abono-binance" value="0" min="0" step="any" placeholder="0.00">
+              </div>
+              <div class="cierre-method-card">
+                <div class="cierre-method-head">
+                  <span class="cierre-method-label"><i data-lucide="banknote"></i> Pesos Efectivo (COP)</span>
+                  <span class="cierre-method-expected" id="cc-esp-abono-pesos">Esperado: $0</span>
+                </div>
+                <input type="number" class="cierre-input" id="cc-dec-abono-pesos" value="0" min="0" step="any" placeholder="0.00">
+              </div>
+              <div class="cierre-method-card">
+                <div class="cierre-method-head">
+                  <span class="cierre-method-label"><i data-lucide="building-2"></i> Bancolombia (COP)</span>
+                  <span class="cierre-method-expected" id="cc-esp-abono-bancolombia">Esperado: $0</span>
+                </div>
+                <input type="number" class="cierre-input" id="cc-dec-abono-bancolombia" value="0" min="0" step="any" placeholder="0.00">
+              </div>
+              <div class="cierre-method-card">
+                <div class="cierre-method-head">
+                  <span class="cierre-method-label"><i data-lucide="dollar-sign"></i> Efectivo (USD)</span>
+                  <span class="cierre-method-expected" id="cc-esp-abono-usd">Esperado: $0</span>
+                </div>
+                <input type="number" class="cierre-input" id="cc-dec-abono-usd" value="0" min="0" step="any" placeholder="0.00">
+              </div>
+            </div>
           </div>
         </div>
 
         <!-- Panel Inferior: Diferencia en Tiempo Real -->
         <div class="cierre-bottom-panel">
-          <div class="cierre-diff-box" id="cc-diff-box">
-            <span class="diff-label">Diferencia:</span>
-            <strong class="diff-value" id="cc-diferencia">$0 COP</strong>
-            <span class="diff-status" id="cc-diff-status">CUADRE PERFECTO</span>
+          <div class="cierre-diff-box" id="cc-diff-ventas-box">
+            <span class="diff-label">Diferencia Ventas:</span>
+            <strong class="diff-value" id="cc-diferencia-ventas">$0 COP</strong>
+            <span class="diff-status" id="cc-diff-ventas-status">CUADRE PERFECTO</span>
+          </div>
+          <div class="cierre-diff-box" id="cc-diff-abonos-box" style="margin-top:10px;">
+            <span class="diff-label">Diferencia Abonos:</span>
+            <strong class="diff-value" id="cc-diferencia-abonos">$0 COP</strong>
+            <span class="diff-status" id="cc-diff-abonos-status">CUADRE PERFECTO</span>
           </div>
           <div class="modal-footer" style="padding-top: 0; border-top: none; margin-top: 15px;">
             <button class="action-btn secondary" id="btn-cancel-cierre">Cancelar</button>

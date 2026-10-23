@@ -4316,6 +4316,9 @@ async function cerrarTurnoActual() {
   lucide.createIcons();
 
   let totalEsperado = 0;
+  let ventasCop = 0;
+  let abonosCop = 0;
+  let gastosCop = 0;
   let currentSessionData = null;
 
   try {
@@ -4332,7 +4335,7 @@ async function cerrarTurnoActual() {
     const arqueo = data.arqueo || { ventas_moneda: {}, ventas_detalle: {}, abonos_moneda: {}, total_gastos_cop: 0 };
     const fondoBaseCop = parseFloat(data.sesion.fondo_inicial_cop) || 0;
     const fondoBaseUsd = parseFloat(data.sesion.fondo_inicial_usd) || 0;
-    const gastosCop = parseFloat(arqueo.total_gastos_cop) || 0;
+    gastosCop = parseFloat(arqueo.total_gastos_cop) || 0;
     
     // Calcular totales convirtiendo a COP usando tasas actuales
     const rateUsd = STATE.tasas.USD || 1;
@@ -4343,14 +4346,14 @@ async function cerrarTurnoActual() {
     const ventasDetalleCierre = arqueo.ventas_detalle || {};
     const creditoVentaCop = parseFloat(ventasDetalleCierre.COP?.['Crédito']) || 0;
     
-    let ventasCop = 0;
+    ventasCop = 0;
     Object.entries(arqueo.ventas_moneda || {}).forEach(([moneda, monto]) => {
       if (moneda === 'COP') ventasCop += (monto - creditoVentaCop);
       else if (moneda === 'USD') ventasCop += monto * rateUsd;
       else if (moneda === 'VES') ventasCop += monto * rateVes;
     });
 
-    let abonosCop = 0;
+    abonosCop = 0;
     Object.entries(arqueo.abonos_moneda || {}).forEach(([moneda, monto]) => {
       if (moneda === 'COP') abonosCop += monto;
       else if (moneda === 'USD') abonosCop += monto * rateUsd;
@@ -4368,15 +4371,20 @@ async function cerrarTurnoActual() {
 
     const fmtEsperado = (v, simbolo) =>
       `${Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} ${simbolo}`;
-    const fmtSeparado = (metodo, moneda, simbolo) =>
-      `Ventas: ${fmtEsperado(metodoVentas(metodo, moneda), simbolo)} · Abonos: ${fmtEsperado(metodoAbonos(metodo, moneda), simbolo)}`;
 
-    document.getElementById('cc-esp-pago-movil').textContent = fmtSeparado('Pago Móvil', 'VES', 'Bs');
-    document.getElementById('cc-esp-zelle').textContent = fmtSeparado('Zelle', 'USD', 'USD');
-    document.getElementById('cc-esp-binance').textContent = fmtSeparado('Binance', 'USD', 'USD');
-    document.getElementById('cc-esp-pesos').textContent = fmtSeparado('Efectivo COP', 'COP', 'COP');
-    document.getElementById('cc-esp-bancolombia').textContent = fmtSeparado('Bancolombia', 'COP', 'COP');
-    document.getElementById('cc-esp-usd').textContent = fmtSeparado('Efectivo USD', 'USD', 'USD');
+    document.getElementById('cc-esp-pago-movil').textContent = `Esperado: ${fmtEsperado(metodoVentas('Pago Móvil', 'VES'), 'Bs')}`;
+    document.getElementById('cc-esp-zelle').textContent = `Esperado: ${fmtEsperado(metodoVentas('Zelle', 'USD'), 'USD')}`;
+    document.getElementById('cc-esp-binance').textContent = `Esperado: ${fmtEsperado(metodoVentas('Binance', 'USD'), 'USD')}`;
+    document.getElementById('cc-esp-pesos').textContent = `Esperado: ${fmtEsperado(metodoVentas('Efectivo COP', 'COP'), 'COP')}`;
+    document.getElementById('cc-esp-bancolombia').textContent = `Esperado: ${fmtEsperado(metodoVentas('Bancolombia', 'COP'), 'COP')}`;
+    document.getElementById('cc-esp-usd').textContent = `Esperado: ${fmtEsperado(metodoVentas('Efectivo USD', 'USD'), 'USD')}`;
+
+    document.getElementById('cc-esp-abono-pago-movil').textContent = `Esperado: ${fmtEsperado(metodoAbonos('Pago Móvil', 'VES'), 'Bs')}`;
+    document.getElementById('cc-esp-abono-zelle').textContent = `Esperado: ${fmtEsperado(metodoAbonos('Zelle', 'USD'), 'USD')}`;
+    document.getElementById('cc-esp-abono-binance').textContent = `Esperado: ${fmtEsperado(metodoAbonos('Binance', 'USD'), 'USD')}`;
+    document.getElementById('cc-esp-abono-pesos').textContent = `Esperado: ${fmtEsperado(metodoAbonos('Efectivo COP', 'COP'), 'COP')}`;
+    document.getElementById('cc-esp-abono-bancolombia').textContent = `Esperado: ${fmtEsperado(metodoAbonos('Bancolombia', 'COP'), 'COP')}`;
+    document.getElementById('cc-esp-abono-usd').textContent = `Esperado: ${fmtEsperado(metodoAbonos('Efectivo USD', 'USD'), 'USD')}`;
 
     // Actualizar UI - Valores Teóricos
     document.getElementById('cc-total-ventas').textContent = `$${ventasCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
@@ -4393,10 +4401,10 @@ async function cerrarTurnoActual() {
   }
 
   // 2. Setup de inputs y cálculos en tiempo real
-  const inputs = ['cc-dec-pago-movil', 'cc-dec-zelle', 'cc-dec-binance', 'cc-dec-pesos', 'cc-dec-bancolombia', 'cc-dec-usd'];
-  const diffBox = document.getElementById('cc-diff-box');
-  const diffValue = document.getElementById('cc-diferencia');
-  const diffStatus = document.getElementById('cc-diff-status');
+  const inputs = [
+    'cc-dec-pago-movil', 'cc-dec-zelle', 'cc-dec-binance', 'cc-dec-pesos', 'cc-dec-bancolombia', 'cc-dec-usd',
+    'cc-dec-abono-pago-movil', 'cc-dec-abono-zelle', 'cc-dec-abono-binance', 'cc-dec-abono-pesos', 'cc-dec-abono-bancolombia', 'cc-dec-abono-usd'
+  ];
 
   // Verificación del fondo de caja (Sí / No)
   const fondoCompletoChk = document.getElementById('cc-fondo-completo');
@@ -4418,41 +4426,54 @@ async function cerrarTurnoActual() {
     if (el) el.value = '0';
   });
 
-  const calcularDiferenciaReal = () => {
-    const decPagoMovil = parseFloat(document.getElementById('cc-dec-pago-movil').value) || 0;
-    const decZelle = parseFloat(document.getElementById('cc-dec-zelle').value) || 0;
-    const decBinance = parseFloat(document.getElementById('cc-dec-binance').value) || 0;
-    const decUsd = parseFloat(document.getElementById('cc-dec-usd').value) || 0;
-    const decPesos = parseFloat(document.getElementById('cc-dec-pesos').value) || 0;
-    const decBanco = parseFloat(document.getElementById('cc-dec-bancolombia').value) || 0;
+  const actualizarDiffBox = (boxId, valueId, statusId, diferencia) => {
+    const box = document.getElementById(boxId);
+    const value = document.getElementById(valueId);
+    const status = document.getElementById(statusId);
+    if (!box || !value || !status) return;
+    box.className = 'cierre-diff-box';
+    if (Math.abs(diferencia) < 100) {
+      box.classList.add('diff-perfect');
+      status.textContent = 'CUADRE PERFECTO';
+      value.textContent = '$0 COP';
+    } else if (diferencia < 0) {
+      box.classList.add('diff-missing');
+      status.textContent = 'FALTANTE EN CAJA';
+      value.textContent = `-$${Math.abs(diferencia).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
+    } else {
+      box.classList.add('diff-extra');
+      status.textContent = 'SOBRANTE EN CAJA';
+      value.textContent = `+$${Math.abs(diferencia).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
+    }
+  };
 
+  const calcularDiferenciaReal = () => {
+    const get = (id) => parseFloat(document.getElementById(id).value) || 0;
     const rateUsd = STATE.tasas.USD || 1;
     const rateVes = STATE.tasas.VES || 1;
 
-    // USD total declarado = Zelle + Binance + Efectivo USD
-    const totalUsd = decZelle + decBinance + decUsd;
-    // El declarado es SOLO ventas + cobranza (el fondo se verifica aparte)
-    const declaradoCop = decPesos + decBanco + (totalUsd * rateUsd) + (decPagoMovil * rateVes);
-    
-    const diferencia = declaradoCop - totalEsperado;
+    const vPagoMovil = get('cc-dec-pago-movil');
+    const vZelle = get('cc-dec-zelle');
+    const vBinance = get('cc-dec-binance');
+    const vUsd = get('cc-dec-usd');
+    const vPesos = get('cc-dec-pesos');
+    const vBanco = get('cc-dec-bancolombia');
+    const declaradoVentasCop = vPesos + vBanco + ((vZelle + vBinance + vUsd) * rateUsd) + (vPagoMovil * rateVes);
 
-    // Actualizar UI
-    diffValue.textContent = `$${Math.abs(diferencia).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
-    
-    diffBox.className = 'cierre-diff-box';
-    if (Math.abs(diferencia) < 100) { // Margen de tolerancia pequeño (centavos/redondeo)
-      diffBox.classList.add('diff-perfect');
-      diffStatus.textContent = 'CUADRE PERFECTO';
-      diffValue.textContent = `$0 COP`;
-    } else if (diferencia < 0) {
-      diffBox.classList.add('diff-missing');
-      diffStatus.textContent = 'FALTANTE EN CAJA';
-      diffValue.textContent = `-$${Math.abs(diferencia).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
-    } else {
-      diffBox.classList.add('diff-extra');
-      diffStatus.textContent = 'SOBRANTE EN CAJA';
-      diffValue.textContent = `+$${Math.abs(diferencia).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
-    }
+    const aPagoMovil = get('cc-dec-abono-pago-movil');
+    const aZelle = get('cc-dec-abono-zelle');
+    const aBinance = get('cc-dec-abono-binance');
+    const aUsd = get('cc-dec-abono-usd');
+    const aPesos = get('cc-dec-abono-pesos');
+    const aBanco = get('cc-dec-abono-bancolombia');
+    const declaradoAbonosCop = aPesos + aBanco + ((aZelle + aBinance + aUsd) * rateUsd) + (aPagoMovil * rateVes);
+
+    // Los gastos se descuentan de las ventas (gasto operativo)
+    const diferenciaVentas = declaradoVentasCop - (ventasCop - gastosCop);
+    const diferenciaAbonos = declaradoAbonosCop - abonosCop;
+
+    actualizarDiffBox('cc-diff-ventas-box', 'cc-diferencia-ventas', 'cc-diff-ventas-status', diferenciaVentas);
+    actualizarDiffBox('cc-diff-abonos-box', 'cc-diferencia-abonos', 'cc-diff-abonos-status', diferenciaAbonos);
   };
 
   // Bind listeners
@@ -4482,18 +4503,32 @@ async function cerrarTurnoActual() {
     lucide.createIcons();
     
     try {
-      const decPagoMovil = parseFloat(document.getElementById('cc-dec-pago-movil').value) || 0;
-      const decZelle = parseFloat(document.getElementById('cc-dec-zelle').value) || 0;
-      const decBinance = parseFloat(document.getElementById('cc-dec-binance').value) || 0;
-      const decUsd = parseFloat(document.getElementById('cc-dec-usd').value) || 0;
-      const decPesos = parseFloat(document.getElementById('cc-dec-pesos').value) || 0;
-      const decBanco = parseFloat(document.getElementById('cc-dec-bancolombia').value) || 0;
-
+      const get = (id) => parseFloat(document.getElementById(id).value) || 0;
       const rateUsd = STATE.tasas.USD || 1;
       const rateVes = STATE.tasas.VES || 1;
-      
+
+      const vPagoMovil = get('cc-dec-pago-movil');
+      const vZelle = get('cc-dec-zelle');
+      const vBinance = get('cc-dec-binance');
+      const vUsd = get('cc-dec-usd');
+      const vPesos = get('cc-dec-pesos');
+      const vBanco = get('cc-dec-bancolombia');
+
+      const aPagoMovil = get('cc-dec-abono-pago-movil');
+      const aZelle = get('cc-dec-abono-zelle');
+      const aBinance = get('cc-dec-abono-binance');
+      const aUsd = get('cc-dec-abono-usd');
+      const aPesos = get('cc-dec-abono-pesos');
+      const aBanco = get('cc-dec-abono-bancolombia');
+
+      const decPagoMovil = vPagoMovil + aPagoMovil;
+      const decZelle = vZelle + aZelle;
+      const decBinance = vBinance + aBinance;
+      const decUsd = vUsd + aUsd;
+      const decPesos = vPesos + aPesos;
+      const decBanco = vBanco + aBanco;
+
       const totalUsd = decZelle + decBinance + decUsd;
-      // El declarado es SOLO ventas + cobranza (el fondo se verifica aparte)
       const monto_declarado_cop = decPesos + decBanco + (totalUsd * rateUsd) + (decPagoMovil * rateVes);
       const fondoCompleto = document.getElementById('cc-fondo-completo')?.checked ? true : false;
 
