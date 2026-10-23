@@ -1792,11 +1792,14 @@
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Total Ventas (Contado):</span><strong id="ticket-ventas">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Cuentas por Cobrar (Crédito):</span><strong id="ticket-credito">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Abonos (Cobranza):</span><strong id="ticket-abonos">$0</strong></div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-weight:600;"><span>Ingresos del Día (Ventas + Abonos):</span><strong id="ticket-ingresos-dia" style="color: var(--success);">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Costo de Producción:</span><strong id="ticket-costo">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Total Gastos:</span><strong id="ticket-gastos">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Reposición de Stock:</span><strong id="ticket-reposicion">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Mermas Descontadas:</span><strong id="ticket-mermas">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 15px; padding-top: 10px; border-top: 1px solid var(--border-glass); font-size: 1.05em;"><span>Utilidad Neta:</span><strong id="ticket-utilidad">$0</strong></div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-weight:600;"><span>Fondo Pesos (COP):</span><strong id="ticket-fondo-pesos" style="color: var(--cyan-neon);">$0</strong></div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-weight:600;"><span>Fondo Dólares (USD):</span><strong id="ticket-fondo-usd" style="color: var(--cyan-neon);">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Pago Móvil (Bs):</span><strong id="ticket-pago-movil">Bs 0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Zelle (USD):</span><strong id="ticket-zelle">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Binance (USD):</span><strong id="ticket-binance">$0</strong></div>
@@ -1804,7 +1807,7 @@
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Pesos Efectivo (COP):</span><strong id="ticket-efectivo-pesos">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px dashed var(--border-glass);"><span>Bancolombia (COP):</span><strong id="ticket-bancolombia">$0</strong></div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Total Dinero en Caja (con fondo):</span><strong id="ticket-esperado">$0</strong></div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 15px;"><span>Declarado:</span><strong id="ticket-declarado">$0</strong></div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 15px;"><span>Declarado (Todo el dinero):</span><strong id="ticket-declarado">$0</strong></div>
           <div style="display: flex; justify-content: space-between; border-top: 1px solid var(--border-glass); padding-top: 10px; font-size: 1.1em; color: var(--success);" id="ticket-diff-row">
             <span>Diferencia:</span><strong id="ticket-diferencia">$0</strong>
           </div>
@@ -2072,7 +2075,7 @@
     </div>
   </div>
 
-  <script src="app3.js?v=44"></script>
+  <script src="app3.js?v=45"></script>
   <script src="whatsapp.js?v=3"></script>
 <!-- Script to automatically replace commas with dots in number inputs -->
   <script>

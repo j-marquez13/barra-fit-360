@@ -4529,6 +4529,7 @@ async function cerrarTurnoActual() {
       document.getElementById('ticket-ventas').textContent = `$${(d.resumen.total_ventas_contado_cop ?? d.resumen.total_ventas_detalle_cop ?? 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       document.getElementById('ticket-credito').textContent = `$${(d.resumen.total_ventas_credito_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       document.getElementById('ticket-abonos').textContent = `$${(d.resumen.total_abonos_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      document.getElementById('ticket-ingresos-dia').textContent = `$${((d.resumen.total_ventas_contado_cop || 0) + (d.resumen.total_abonos_cop || 0)).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       document.getElementById('ticket-costo').textContent = `-$${(d.resumen.costo_produccion || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       document.getElementById('ticket-gastos').textContent = `-$${d.resumen.total_gastos.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       document.getElementById('ticket-reposicion').textContent = `-$${(d.resumen.total_reposicion || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
@@ -4538,6 +4539,8 @@ async function cerrarTurnoActual() {
       const utilEl = document.getElementById('ticket-utilidad');
       utilEl.textContent = `$${utilidad.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       utilEl.style.color = utilidad >= 0 ? 'var(--success)' : 'var(--danger)';
+      document.getElementById('ticket-fondo-pesos').textContent = `$${(d.resumen.fondo_declarado_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      document.getElementById('ticket-fondo-usd').textContent = `$${(d.resumen.fondo_declarado_usd || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       document.getElementById('ticket-esperado').textContent = `$${d.resumen.saldo_teorico.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       document.getElementById('ticket-declarado').textContent = `$${d.resumen.monto_declarado.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
       document.getElementById('ticket-pago-movil').textContent = `Bs ${(d.resumen.declarado_pago_movil || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
