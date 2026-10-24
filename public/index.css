@@ -3532,6 +3532,243 @@ select.receta-insumo option {
 }
 
 /* ============================================
+   TICKET DE CIERRE — DASHBOARD / CARD MODERNO
+   ============================================ */
+.cierre-ticket-dashboard {
+  text-align: left;
+  max-width: 480px;
+  margin: 0 auto 25px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  font-family: var(--font-sans);
+}
+
+.ctd-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 2px;
+}
+
+.ctd-header-icon {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.35), rgba(56, 189, 248, 0.25));
+  color: var(--cyan-neon);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+}
+.ctd-header-icon i { width: 22px; height: 22px; }
+
+.ctd-title {
+  font-family: var(--font-title);
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--color-text);
+}
+.ctd-subtitle {
+  font-size: 0.78rem;
+  color: var(--color-muted);
+  margin-top: 2px;
+}
+
+.ctd-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-glass);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.ctd-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 12px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border-glass);
+}
+
+.ctd-card-icon {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+}
+.ctd-card-icon i { width: 16px; height: 16px; }
+.ctd-icon-green { background: var(--success-glow); color: var(--success); }
+.ctd-icon-cyan { background: var(--cyan-glow); color: var(--cyan-neon); }
+.ctd-icon-gold { background: var(--warning-glow); color: var(--warning); }
+.ctd-icon-red { background: var(--danger-glow); color: var(--danger); }
+
+.ctd-card-title {
+  flex: 1;
+  font-family: var(--font-title);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.ctd-card-total {
+  font-family: var(--font-title);
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: var(--warning);
+  font-variant-numeric: tabular-nums;
+}
+
+.ctd-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  margin-top: 8px;
+}
+.ctd-table th {
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.66rem;
+  font-weight: 700;
+  padding: 5px 6px;
+  text-align: right;
+  border-bottom: 1px solid var(--border-glass);
+}
+.ctd-table th:first-child { text-align: left; }
+.ctd-table td {
+  padding: 7px 6px;
+  text-align: right;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.06);
+  color: var(--color-text);
+}
+.ctd-table td:first-child { text-align: left; color: var(--color-muted); }
+.ctd-table tbody tr:last-child td { border-bottom: none; }
+
+.ctd-mono {
+  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Mono', Consolas, 'Roboto Mono', monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.ctd-foot-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 2px 0;
+  margin-top: 8px;
+  border-top: 1px solid var(--border-glass);
+  font-size: 0.86rem;
+}
+.ctd-foot-row span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-muted);
+}
+.ctd-foot-row span i { width: 14px; height: 14px; }
+.ctd-foot-row strong { font-size: 0.95rem; }
+.ctd-foot-danger strong { color: var(--danger); }
+.ctd-foot-danger span { color: var(--danger); }
+.ctd-foot-total strong { color: var(--warning); font-weight: 800; }
+
+.ctd-kpi {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 8px;
+}
+.ctd-kpi-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-glass);
+  background: rgba(0, 0, 0, 0.2);
+}
+.ctd-kpi-item span {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-muted);
+}
+.ctd-kpi-item strong { font-size: 1.15rem; font-weight: 800; }
+.ctd-kpi-cost strong { color: var(--danger); }
+.ctd-kpi-profit strong { color: var(--success); }
+
+.ctd-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 2px;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.06);
+}
+.ctd-row span { color: var(--color-muted); font-size: 0.85rem; }
+.ctd-row strong { font-size: 0.92rem; color: var(--color-text); }
+
+.ctd-badge {
+  font-family: var(--font-title);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--warning-glow);
+  color: var(--warning);
+}
+.ctd-badge.ctd-badge-ok { background: var(--success-glow); color: var(--success); }
+.ctd-badge.ctd-badge-no { background: var(--danger-glow); color: var(--danger); }
+
+.ctd-divider {
+  height: 1px;
+  background: var(--border-glass);
+  margin: 12px 0 4px;
+}
+
+.ctd-declare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.ctd-declare-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-glass);
+}
+.ctd-declare-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-muted);
+}
+.ctd-declare-cell strong { font-size: 0.95rem; font-weight: 700; }
+
+.ctd-arqueo-final { padding-top: 12px; }
+.ctd-arqueo-final strong { font-size: 1.05rem; }
+
+@media (max-width: 600px) {
+  .cierre-ticket-dashboard {
+    max-width: 100% !important;
+  }
+  .ctd-kpi { grid-template-columns: 1fr; }
+  .ctd-declare-grid { grid-template-columns: 1fr; }
+}
+
+
+/* ============================================
    TICKET DE CIERRE — EVITAR DESBORDE DE MARGEN
    ============================================ */
 .cierre-ticket-preview > div {

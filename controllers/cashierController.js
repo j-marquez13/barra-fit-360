@@ -336,6 +336,36 @@ export async function cerrarCaja(req, res) {
     const creditoTurnoData = await db.query(creditoTurnoQuery, [fechaApertura]);
     const totalVentasCreditoCop = parseFloat(creditoTurnoData[0]?.total || 0);
 
+    // 1.3 Desglose por método de pago (para el ticket de cierre: ventas de contado + abonos)
+    const ventasDetalleQuery = `
+      SELECT pv.moneda, pv.metodo_pago, SUM(pv.monto_original) as total
+      FROM pagos_ventas pv JOIN ventas v ON pv.venta_id = v.id
+      WHERE pv.fecha >= $1 AND pv.metodo_pago != 'Crédito' AND v.tipo_transaccion != 'Anulada'
+      GROUP BY pv.moneda, pv.metodo_pago
+    `;
+    const ventasDetalleData = await db.query(ventasDetalleQuery, [fechaApertura]);
+
+    const abonosDetalleQuery = `
+      SELECT pa.moneda, pa.metodo_pago, SUM(pa.monto_original) as total
+      FROM pagos_abonos pa JOIN abonos_credito a ON pa.abono_id = a.id
+      WHERE pa.fecha >= $1
+      GROUP BY pa.moneda, pa.metodo_pago
+    `;
+    const abonosDetalleData = await db.query(abonosDetalleQuery, [fechaApertura]);
+
+    const ventasDetalle = {};
+    const abonosDetalle = {};
+    ventasDetalleData.forEach(r => {
+      const moneda = (r.moneda || '').toUpperCase();
+      if (!ventasDetalle[moneda]) ventasDetalle[moneda] = {};
+      ventasDetalle[moneda][r.metodo_pago] = parseFloat(r.total || 0);
+    });
+    abonosDetalleData.forEach(r => {
+      const moneda = (r.moneda || '').toUpperCase();
+      if (!abonosDetalle[moneda]) abonosDetalle[moneda] = {};
+      abonosDetalle[moneda][r.metodo_pago] = parseFloat(r.total || 0);
+    });
+
     // 2. Calcular total de gastos operacionales desde apertura (en COP).
     //    La reposición de inventario NO es gasto operativo: es compra de stock
     //    (activo) y no debe restarse de la utilidad. Solo sale de la caja.
@@ -369,8 +399,9 @@ export async function cerrarCaja(req, res) {
 
     const totalVentasCop = (ventasMoneda.COP || 0) + (ventasMoneda.USD || 0) * tasaUsd + (ventasMoneda.VES || 0) * tasaVes;
     const totalAbonosCop = (abonosMoneda.COP || 0) + (abonosMoneda.USD || 0) * tasaUsd + (abonosMoneda.VES || 0) * tasaVes;
-    // La reposición NO descuenta de la venta del día: se maneja desde Tesorería.
-    const saldoTeorico = (saldosMoneda.COP || 0) + (saldosMoneda.USD || 0) * tasaUsd + (saldosMoneda.VES || 0) * tasaVes - totalGastos;
+    // Los gastos, la reposición de stock y las mermas salen de la TESORERÍA general:
+    // NO restan del efectivo teórico de la caja ni de la diferencia de caja.
+    const saldoTeorico = (saldosMoneda.COP || 0) + (saldosMoneda.USD || 0) * tasaUsd + (saldosMoneda.VES || 0) * tasaVes;
     const totalIngresosCop = totalVentasCop + totalAbonosCop;
 
     // 3.0 Total real de ventas del turno (solo tipo 'Venta', en COP según v.total)
@@ -414,9 +445,10 @@ export async function cerrarCaja(req, res) {
     const mermasData = await db.query(mermasQuery, [fechaApertura]);
     const totalMermas = parseFloat(mermasData[0]?.total_mermas || 0);
 
-    // 3.3 Utilidad Neta = Total Ventas del Turno - Costo de producción - Mermas descontadas
-    // Las cortesías ya entran en el costo; los gastos se manejan desde tesorería (no restan aquí)
-    const utilidadNeta = totalVentasReal - costoProduccion - totalMermas;
+    // 3.3 Utilidad Neta = Total Ventas del Turno - Costo de producción de lo vendido.
+    // Las cortesías ya entran en el costo. Gastos, reposición y mermas se gestionan
+    // desde Tesorería y NO restan de la utilidad de ventas.
+    const utilidadNeta = totalVentasReal - costoProduccion;
 
     // 4. Diferencia de Caja = Monto Físico Declarado (COP) - Saldo Teórico
     const declarado = parseFloat(monto_declarado_cop) || 0;
@@ -475,6 +507,9 @@ export async function cerrarCaja(req, res) {
         declarado_efectivo_pesos: decPesos,
         declarado_bancolombia: decBancolombia,
         declarado_efectivo_usd: decUsd,
+        tasas: { USD: tasaUsd, VES: tasaVes },
+        ventas_detalle: ventasDetalle,
+        abonos_detalle: abonosDetalle,
         diferencia: diferencia
       },
       sesion: sessionRes[0]

@@ -4274,7 +4274,8 @@ async function loadCajaData() {
       const copCredito = (ventasDetalle.COP?.['Crédito'] || 0) + (ventasDetalle.COP?.['Credito'] || 0);
       const copBancos = copTotal - copEfectivoVenta - copEfectivoAbono - copCredito;
       const gastosCop = arqueo.total_gastos_cop || 0;
-      const copCajaNeto = fondoBase + copEfectivoVenta + copEfectivoAbono - gastosCop; 
+      // Los gastos de tesorería NO restan del efectivo físico de la caja.
+      const copCajaNeto = fondoBase + copEfectivoVenta + copEfectivoAbono; 
 
       const usdTotal = (arqueo.ingresos_moneda.USD || 0);
       const usdEfectivoVenta = (ventasDetalle.USD?.['Efectivo USD'] || 0) + (ventasDetalle.USD?.['Efectivo'] || 0);
@@ -4316,7 +4317,7 @@ async function loadCajaData() {
             <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px;"><span>Base Inicial (Efvo):</span> <span style="color:var(--success)">+$${fondoBase.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>
             <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px;"><span>Ventas Efectivo:</span> <span style="color:var(--success)">+${copEfectivoVenta.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>
             ${copEfectivoAbono > 0 ? `<div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px;"><span>Deudas Cobradas (Efvo):</span> <span style="color:var(--success)">+${copEfectivoAbono.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>` : ''}
-            <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px; color:var(--danger);"><span>Gastos (Efvo):</span> <span>-${gastosCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>
+            <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px; color:var(--text-dim);"><span>Gastos (Tesorería):</span> <span>${gastosCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} (no resta de caja)</span></div>
             <hr style="border-color:rgba(255,255,255,0.1); margin: 10px 0;">
             <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:18px; color:var(--text-bright);"><span>Físico a entregar (con fondo):</span> <span>$${copCajaNeto.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>
             <div style="display:flex; justify-content:space-between; font-size:12px; margin-top:10px; color:var(--text-dim);"><span>Bancos/Nequi (Digital):</span> <span>$${copBancos.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</span></div>
@@ -4442,8 +4443,9 @@ async function cerrarTurnoActual() {
       else if (moneda === 'VES') abonosCop += monto * rateVes;
     });
 
-    // Total esperado = ventas + abonos - gastos (SIN fondo, que se verifica aparte)
-    totalEsperado = ventasCop + abonosCop - gastosCop;
+    // Total esperado = ventas + abonos (SIN fondo y SIN gastos de tesorería,
+    // que se gestionan aparte y no afectan el arqueo de caja)
+    totalEsperado = ventasCop + abonosCop;
 
     // Totales esperados por método de pago (para conciliación visual del cajero)
     const ventasMetodo = arqueo.ventas_detalle || {};
@@ -4550,8 +4552,9 @@ async function cerrarTurnoActual() {
     const aBanco = get('cc-dec-abono-bancolombia');
     const declaradoAbonosCop = aPesos + aBanco + ((aZelle + aBinance + aUsd) * rateUsd) + (aPagoMovil * rateVes);
 
-    // Los gastos se descuentan de las ventas (gasto operativo)
-    const diferenciaVentas = declaradoVentasCop - (ventasCop - gastosCop);
+    // Los gastos de tesorería NO descuentan del efectivo: la diferencia se mide
+    // estrictamente entre lo declarado en caja y las ventas contadas.
+    const diferenciaVentas = declaradoVentasCop - ventasCop;
     const diferenciaAbonos = declaradoAbonosCop - abonosCop;
 
     actualizarDiffBox('cc-diff-ventas-box', 'cc-diferencia-ventas', 'cc-diff-ventas-status', diferenciaVentas);
@@ -4641,49 +4644,96 @@ async function cerrarTurnoActual() {
       viewArqueo.style.display = 'none';
       viewSuccess.style.display = 'block';
       
-      document.getElementById('ticket-ventas').textContent = `$${(d.resumen.total_ventas_contado_cop ?? d.resumen.total_ventas_detalle_cop ?? 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-      document.getElementById('ticket-credito').textContent = `$${(d.resumen.total_ventas_credito_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-      document.getElementById('ticket-abonos').textContent = `$${(d.resumen.total_abonos_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-      document.getElementById('ticket-costo').textContent = `-$${(d.resumen.costo_produccion || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-      document.getElementById('ticket-reposicion').textContent = `-$${(d.resumen.total_reposicion || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-      document.getElementById('ticket-gastos').textContent = `-$${(d.resumen.total_gastos || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-      document.getElementById('ticket-mermas').textContent = `-$${(d.resumen.mermas_descontadas || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-      
-      const utilidad = d.resumen.utilidad_neta || 0;
-      const utilEl = document.getElementById('ticket-utilidad');
-      utilEl.textContent = `$${utilidad.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-      utilEl.style.color = utilidad >= 0 ? 'var(--success)' : 'var(--danger)';
-      document.getElementById('ticket-fondo-base').textContent = `$${(d.resumen.fondo_inicial || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP + $${(d.resumen.fondo_inicial_usd || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} USD`;
-      const fondoCompletoEl = document.getElementById('ticket-fondo-completo');
-      fondoCompletoEl.textContent = d.resumen.fondo_completo ? 'Sí' : 'No';
-      fondoCompletoEl.style.color = d.resumen.fondo_completo ? 'var(--success)' : 'var(--danger)';
-      document.getElementById('ticket-declarado-ventas').textContent = `$${declaradoVentasCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-      document.getElementById('ticket-declarado-abonos').textContent = `$${declaradoAbonosCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-      document.getElementById('ticket-pago-movil').textContent = `Bs ${(d.resumen.declarado_pago_movil || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-      document.getElementById('ticket-zelle').textContent = `$${(d.resumen.declarado_zelle || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-      document.getElementById('ticket-binance').textContent = `$${(d.resumen.declarado_binance || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-      document.getElementById('ticket-efectivo-usd').textContent = `$${(d.resumen.declarado_efectivo_usd || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-      document.getElementById('ticket-efectivo-pesos').textContent = `$${(d.resumen.declarado_efectivo_pesos || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-      document.getElementById('ticket-bancolombia').textContent = `$${(d.resumen.declarado_bancolombia || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-      
-      const setDiff = (rowId, elId, diff) => {
-        const el = document.getElementById(elId);
-        const row = document.getElementById(rowId);
-        if (!el || !row) return;
-        if (Math.abs(diff) < 100) {
-          el.textContent = '$0';
-          row.style.color = 'var(--success)';
-        } else if (diff < 0) {
-          el.textContent = `-$${Math.abs(diff).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-          row.style.color = 'var(--danger)';
-        } else {
-          el.textContent = `+$${Math.abs(diff).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-          row.style.color = 'var(--warning)';
-        }
+      const fmtMoney = (v) => Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 });
+      const setMonto = (id, texto) => { const el = document.getElementById(id); if (el) el.textContent = texto; };
+      const fmtTasa = (t) => Number(t || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 4 });
+
+      const tasas = d.resumen.tasas || { USD: rateUsd, VES: rateVes };
+      const rateUsdTicket = parseFloat(tasas.USD) || 1;
+      const rateVesTicket = parseFloat(tasas.VES) || 1;
+      const vDet = d.resumen.ventas_detalle || {};
+      const aDet = d.resumen.abonos_detalle || {};
+
+      const pickDet = (detalle, moneda, claves) => {
+        let total = 0;
+        (claves || []).forEach(k => { total += parseFloat(detalle?.[moneda]?.[k] || 0); });
+        return total;
       };
-      setDiff('ticket-diff-ventas-row', 'ticket-diferencia-ventas', declaradoVentasCop - (ventasCop - gastosCop));
-      setDiff('ticket-diff-abonos-row', 'ticket-diferencia-abonos', declaradoAbonosCop - abonosCop);
+      const ventaMet = (moneda, claves) => pickDet(vDet, moneda, claves);
+      const abonoMet = (moneda, claves) => pickDet(aDet, moneda, claves);
+
+      // Métodos de pago por moneda (Ventas y Abonos)
+      const metodos = [
+        { key: 'pago-movil', moneda: 'VES', claves: ['Pago Móvil', 'Pago Movil'], rate: rateVesTicket, simbolo: 'Bs ' },
+        { key: 'zelle', moneda: 'USD', claves: ['Zelle'], rate: rateUsdTicket, simbolo: '$' },
+        { key: 'binance', moneda: 'USD', claves: ['Binance'], rate: rateUsdTicket, simbolo: '$' },
+        { key: 'usd', moneda: 'USD', claves: ['Efectivo USD', 'Efectivo'], rate: rateUsdTicket, simbolo: '$' },
+        { key: 'pesos', moneda: 'COP', claves: ['Efectivo COP', 'Efectivo'], rate: 1, simbolo: '$' },
+        { key: 'bancolombia', moneda: 'COP', claves: ['Bancolombia'], rate: 1, simbolo: '$' }
+      ];
+
+      metodos.forEach(m => {
+        const vMonto = ventaMet(m.moneda, m.claves);
+        const aMonto = abonoMet(m.moneda, m.claves);
+        setMonto(`v-m-${m.key}`, `${m.simbolo}${fmtMoney(vMonto)}`);
+        setMonto(`v-t-${m.key}`, m.rate === 1 ? '1' : fmtTasa(m.rate));
+        setMonto(`v-c-${m.key}`, `$${fmtMoney(vMonto * m.rate)}`);
+        setMonto(`a-m-${m.key}`, `${m.simbolo}${fmtMoney(aMonto)}`);
+        setMonto(`a-t-${m.key}`, m.rate === 1 ? '1' : fmtTasa(m.rate));
+        setMonto(`a-c-${m.key}`, `$${fmtMoney(aMonto * m.rate)}`);
+      });
+
+      const ventasContado = d.resumen.total_ventas_contado_cop ?? 0;
+      const abonosTotal = d.resumen.total_abonos_cop ?? 0;
+      const credito = d.resumen.total_ventas_credito_cop ?? 0;
+      const facturado = d.resumen.total_ventas_real_cop ?? (ventasContado + credito);
+
+      setMonto('ticket-ventas-total', `$${fmtMoney(ventasContado)}`);
+      setMonto('ticket-abonos-total', `$${fmtMoney(abonosTotal)}`);
+      setMonto('ticket-credito', `$${fmtMoney(credito)}`);
+      setMonto('ticket-facturado', `$${fmtMoney(facturado)}`);
+
+      // Rendimiento (solo costo de producción y utilidad neta)
+      setMonto('ticket-costo', `-$${fmtMoney(d.resumen.costo_produccion || 0)}`);
+      const utilidad = d.resumen.utilidad_neta || 0;
+      setMonto('ticket-utilidad', `${utilidad < 0 ? '-' : ''}$${fmtMoney(Math.abs(utilidad))}`);
+      const utilEl = document.getElementById('ticket-utilidad');
+      if (utilEl) utilEl.style.color = utilidad >= 0 ? 'var(--success)' : 'var(--danger)';
+
+      // Fondo de caja
+      setMonto('ticket-fondo-base', `$${fmtMoney(d.resumen.fondo_inicial || 0)} COP + $${fmtMoney(d.resumen.fondo_inicial_usd || 0)} USD`);
+      const fondoBadge = document.getElementById('ticket-fondo-completo');
+      if (fondoBadge) {
+        const completo = !!d.resumen.fondo_completo;
+        fondoBadge.textContent = completo ? 'Completo' : 'Incompleto';
+        fondoBadge.className = `ctd-badge ${completo ? 'ctd-badge-ok' : 'ctd-badge-no'}`;
+      }
+
+      // Declaración y diferencias (libre de gastos de tesorería)
+      const declaradoVentas = declaradoVentasCop || 0;
+      const declaradoAbonos = declaradoAbonosCop || 0;
+      const diferenciaVentas = declaradoVentas - ventasContado;
+      const diferenciaAbonos = declaradoAbonos - abonosTotal;
+      const diferenciaTotal = d.resumen.diferencia ?? (diferenciaVentas + diferenciaAbonos);
+
+      setMonto('ticket-declarado-ventas', `$${fmtMoney(declaradoVentas)}`);
+      setMonto('ticket-declarado-abonos', `$${fmtMoney(declaradoAbonos)}`);
+
+      const fmtDiff = (v) => {
+        if (Math.abs(v) < 100) return '$0';
+        return (v < 0 ? '-$' : '+$') + fmtMoney(Math.abs(v));
+      };
+      const colorDiff = (v) => (v < 0 && Math.abs(v) >= 100 ? 'var(--danger)' : 'var(--success)');
+      const setDiff = (id, v) => {
+        const el = document.getElementById(id);
+        if (el) { el.textContent = fmtDiff(v); el.style.color = colorDiff(v); }
+      };
+      setDiff('ticket-diferencia-ventas', diferenciaVentas);
+      setDiff('ticket-diferencia-abonos', diferenciaAbonos);
+      setDiff('ticket-diferencia-total', diferenciaTotal);
       
+
+
     } catch (e) {
       alert('Error: ' + e.message);
       btnConfirm.disabled = false;
@@ -4722,25 +4772,30 @@ window.loadCierreDia = async function() {
     if (!res.ok) throw new Error(d.error || 'Error al cargar el cierre diario');
 
     const r = d.resumen || {};
+    const fmt = (v) => Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 });
 
+    document.getElementById('dia-fecha').textContent = d.fecha || '';
     document.getElementById('dia-turnos').textContent = r.total_turnos || 0;
-    document.getElementById('dia-ventas').textContent = `$${(r.total_ventas_contado_cop ?? r.total_ventas_cop ?? 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-    document.getElementById('dia-credito').textContent = `$${(r.total_ventas_credito_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-    document.getElementById('dia-abonos').textContent = `$${(r.total_abonos_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-    document.getElementById('dia-costo').textContent = `$${(r.costo_produccion || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-    document.getElementById('dia-gastos').textContent = `$${(r.total_gastos_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-    document.getElementById('dia-declarado').textContent = `$${(r.declarado_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-    document.getElementById('dia-pago-movil').textContent = `Bs ${(r.declarado_pago_movil || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-    document.getElementById('dia-zelle').textContent = `$${(r.declarado_zelle || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-    document.getElementById('dia-binance').textContent = `$${(r.declarado_binance || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-    document.getElementById('dia-efectivo-usd').textContent = `$${(r.declarado_efectivo_usd || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-    document.getElementById('dia-efectivo-pesos').textContent = `$${(r.declarado_efectivo_pesos || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-    document.getElementById('dia-bancolombia').textContent = `$${(r.declarado_bancolombia || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+    const ventasContado = (r.total_ventas_contado_cop ?? r.total_ventas_cop ?? 0);
+    const credito = (r.total_ventas_credito_cop || 0);
+    document.getElementById('dia-ventas-total').textContent = `$${fmt(ventasContado)}`;
+    document.getElementById('dia-abonos').textContent = `$${fmt(r.total_abonos_cop || 0)}`;
+    document.getElementById('dia-credito').textContent = `$${fmt(credito)}`;
+    document.getElementById('dia-facturado').textContent = `$${fmt(ventasContado + credito)}`;
 
+    document.getElementById('dia-costo').textContent = `-$${fmt(r.costo_produccion || 0)}`;
     const utilidad = r.utilidad_neta || 0;
     const utilEl = document.getElementById('dia-utilidad');
-    utilEl.textContent = `$${utilidad.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+    utilEl.textContent = `$${fmt(utilidad)}`;
     utilEl.style.color = utilidad >= 0 ? 'var(--success)' : 'var(--danger)';
+
+    document.getElementById('dia-pago-movil').textContent = `Bs ${fmt(r.declarado_pago_movil || 0)}`;
+    document.getElementById('dia-zelle').textContent = `$${fmt(r.declarado_zelle || 0)}`;
+    document.getElementById('dia-binance').textContent = `$${fmt(r.declarado_binance || 0)}`;
+    document.getElementById('dia-efectivo-usd').textContent = `$${fmt(r.declarado_efectivo_usd || 0)}`;
+    document.getElementById('dia-efectivo-pesos').textContent = `$${fmt(r.declarado_efectivo_pesos || 0)}`;
+    document.getElementById('dia-bancolombia').textContent = `$${fmt(r.declarado_bancolombia || 0)}`;
+    document.getElementById('dia-declarado').textContent = `$${fmt(r.declarado_cop || 0)}`;
 
     const diff = r.diferencia_caja || 0;
     const diffEl = document.getElementById('dia-diferencia');
@@ -4749,11 +4804,11 @@ window.loadCierreDia = async function() {
       diffEl.textContent = '$0';
       diffRow.style.color = 'var(--success)';
     } else if (diff < 0) {
-      diffEl.textContent = `-$${Math.abs(diff).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
+      diffEl.textContent = `-$${fmt(Math.abs(diff))}`;
       diffRow.style.color = 'var(--danger)';
     } else {
-      diffEl.textContent = `+$${Math.abs(diff).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
-      diffRow.style.color = 'var(--warning)';
+      diffEl.textContent = `+$${fmt(Math.abs(diff))}`;
+      diffRow.style.color = 'var(--success)';
     }
 
     document.getElementById('cierre-dia-overlay').classList.add('open');
@@ -4840,12 +4895,15 @@ window.verTicketCierre = function(idx) {
 
   document.getElementById('dia-fecha').textContent = c.fecha;
   document.getElementById('dia-turnos').textContent = c.total_turnos || 0;
-  document.getElementById('dia-ventas').textContent = `$${fmt(c.total_ventas_contado_cop ?? c.total_ventas_cop)}`;
-  document.getElementById('dia-credito').textContent = `$${fmt(c.total_ventas_credito_cop)}`;
+  const ventasContado = (c.total_ventas_contado_cop ?? c.total_ventas_cop ?? 0);
+  const credito = (c.total_ventas_credito_cop || 0);
+  document.getElementById('dia-ventas-total').textContent = `$${fmt(ventasContado)}`;
   document.getElementById('dia-abonos').textContent = `$${fmt(c.total_abonos_cop)}`;
+  document.getElementById('dia-credito').textContent = `$${fmt(credito)}`;
+  document.getElementById('dia-facturado').textContent = `$${fmt(ventasContado + credito)}`;
+
   document.getElementById('dia-costo').textContent = `-$${fmt(c.costo_produccion)}`;
-  document.getElementById('dia-gastos').textContent = `-$${fmt(c.total_gastos_cop)}`;
-  document.getElementById('dia-reposicion').textContent = `-$${fmt(c.reposicion)}`;
+
   document.getElementById('dia-declarado').textContent = `$${fmt(c.declarado_cop)}`;
   document.getElementById('dia-pago-movil').textContent = `Bs ${fmt(c.declarado_pago_movil)}`;
   document.getElementById('dia-zelle').textContent = `$${fmt(c.declarado_zelle)}`;
@@ -4869,7 +4927,7 @@ window.verTicketCierre = function(idx) {
     diffRow.style.color = 'var(--danger)';
   } else {
     diffEl.textContent = `+$${diff.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
-    diffRow.style.color = 'var(--warning)';
+    diffRow.style.color = 'var(--success)';
   }
 
   document.getElementById('cierre-dia-overlay').classList.add('open');
