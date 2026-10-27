@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import * as db from './db.js';
 
 /**
  * Autenticación simple por token firmado (HMAC-SHA256).
@@ -26,11 +27,28 @@ function getSecret() {
 const SECRET = getSecret();
 const TOKEN_TTL = 12 * 60 * 60 * 1000; // 12 horas
 
-// Lista negra de tokens revocados (en memoria; se limpia al reiniciar el servidor).
-const revokedTokens = new Set();
+// Lista negra de tokens revocados: token → fecha de expiración.
+// Vive en memoria; se limpia sola al expirar cada token.
+const revokedTokens = new Map();
+
+function purgeRevoked() {
+  const now = Date.now();
+  for (const [token, exp] of revokedTokens) {
+    if (exp < now) revokedTokens.delete(token);
+  }
+}
+
+export function getTokenFromRequest(req) {
+  return req.headers['x-auth-token']
+    || (req.headers.authorization && req.headers.authorization.replace(/^Bearer\s+/i, ''))
+    || null;
+}
 
 export function revokeToken(token) {
-  if (token) revokedTokens.add(token);
+  if (!token) return;
+  const payload = verifyToken(token);
+  revokedTokens.set(token, payload ? payload.exp : Date.now() + TOKEN_TTL);
+  purgeRevoked();
 }
 
 function b64url(buf) {
@@ -68,28 +86,70 @@ export function verifyToken(token) {
   }
 }
 
-function parsePermisos(permisos) {
+export function parsePermisos(permisos) {
   if (Array.isArray(permisos)) return permisos;
-  try { return JSON.parse(permisos); } catch (e) { return []; }
+  try { return JSON.parse(permisos) || []; } catch (e) { return []; }
 }
 
-export function requireAuth(req, res, next) {
-  const header = req.headers['x-auth-token']
-    || (req.headers.authorization && req.headers.authorization.replace(/^Bearer\s+/i, ''));
-  const user = verifyToken(header);
-  if (!user) {
+export function esAdmin(user) {
+  if (!user) return false;
+  const perms = parsePermisos(user.permisos);
+  return user.rol === 'Administrador' || perms.includes('all') || perms.includes('admin');
+}
+
+/**
+ * Verifica el token y recarga rol y permisos desde la base de datos, para que
+ * un cambio de permisos (o un usuario eliminado) tenga efecto inmediato y no
+ * recién cuando el token expire.
+ */
+export async function requireAuth(req, res, next) {
+  if (req.usuario) return next(); // ya autenticado por el middleware global
+  const payload = verifyToken(getTokenFromRequest(req));
+  if (!payload) {
     return res.status(401).json({ error: 'No autorizado. Inicia sesión nuevamente.' });
   }
-  req.usuario = user;
-  next();
+  try {
+    const rows = await db.query('SELECT id, nombre, rol, permisos, debe_cambiar_password FROM usuarios WHERE id = $1', [payload.usuario_id]);
+    if (rows.length === 0) {
+      return res.status(401).json({ error: 'No autorizado. Inicia sesión nuevamente.' });
+    }
+    const u = rows[0];
+
+    // Con contraseña inicial (1234 / admin123) solo se permite cambiarla o cerrar sesión.
+    const debeCambiar = [1, true, '1', 't', 'true'].includes(u.debe_cambiar_password);
+    const ruta = (req.originalUrl || '').split('?')[0];
+    if (debeCambiar && ruta !== '/api/auth/cambiar-password' && ruta !== '/api/auth/logout') {
+      return res.status(403).json({ error: 'Debes cambiar tu contraseña antes de continuar.', debe_cambiar_password: true });
+    }
+
+    req.usuario = { ...payload, nombre: u.nombre, rol: u.rol, permisos: parsePermisos(u.permisos) };
+    next();
+  } catch (err) {
+    console.error('Error al verificar sesión:', err);
+    res.status(500).json({ error: 'Error interno al verificar la sesión.' });
+  }
 }
 
 export function requireAdmin(req, res, next) {
   const user = req.usuario;
   if (!user) return res.status(401).json({ error: 'No autorizado.' });
-  const perms = parsePermisos(user.permisos);
-  if (user.rol !== 'Administrador' && !perms.includes('all') && !perms.includes('admin')) {
+  if (!esAdmin(user)) {
     return res.status(403).json({ error: 'Se requieren permisos de administrador.' });
   }
   next();
+}
+
+/**
+ * Exige que el usuario tenga al menos uno de los permisos indicados
+ * (los administradores siempre pasan). Ej: requirePermiso('inventario')
+ */
+export function requirePermiso(...permisos) {
+  return (req, res, next) => {
+    const user = req.usuario;
+    if (!user) return res.status(401).json({ error: 'No autorizado.' });
+    if (esAdmin(user)) return next();
+    const perms = parsePermisos(user.permisos);
+    if (permisos.some(p => perms.includes(p))) return next();
+    return res.status(403).json({ error: 'No tienes permiso para realizar esta acción.' });
+  };
 }

@@ -141,7 +141,7 @@ export async function restockInsumo(req, res) {
         let montoOriginal = moneda === 'COP' ? montoCop : montoCop / tasa;
 
         // Buscar sesión de caja activa
-        const openSession = await tx.execute("SELECT id FROM sesiones_caja WHERE fecha_cierre IS NULL AND estado = 'Abierta' ORDER BY id DESC LIMIT 1");
+        const openSession = await tx.query("SELECT id FROM sesiones_caja WHERE fecha_cierre IS NULL AND estado = 'Abierta' ORDER BY id DESC LIMIT 1");
         const sesion_caja_id = openSession.length > 0 ? openSession[0].id : null;
 
         await tx.execute(

@@ -2,6 +2,7 @@ import pg from 'pg';
 import sqlite3 from 'sqlite3';
 import path from 'path';
 import fs from 'fs';
+import { AsyncLocalStorage } from 'async_hooks';
 
 pg.types.setTypeParser(1700, val => parseFloat(val));
 
@@ -93,6 +94,45 @@ if (usePostgres) {
   sqliteDb = new sqlite3.Database(dbPath);
 }
 
+// ============================================
+// SQLite: una sola conexión compartida.
+// Para que las transacciones no se mezclen con otras peticiones concurrentes,
+// todo acceso pasa por un candado (cola de promesas). Las consultas hechas
+// DENTRO de una transacción (detectadas con AsyncLocalStorage) se ejecutan
+// directamente, sin volver a pedir el candado.
+// ============================================
+const txContext = new AsyncLocalStorage();
+let sqliteLock = Promise.resolve();
+
+function withSqliteLock(fn) {
+  if (txContext.getStore()) return fn();
+  const run = sqliteLock.then(() => fn());
+  sqliteLock = run.catch(() => {});
+  return run;
+}
+
+function sqliteAll(text, params = []) {
+  // Adaptar marcadores de parámetros de PostgreSQL ($1, $2...) a SQLite (?, ?...)
+  const sqliteText = text.replace(/\$(\d+)/g, '?');
+  return new Promise((resolve, reject) => {
+    sqliteDb.all(sqliteText, params, (err, rows) => {
+      if (err) return reject(err);
+      resolve(rows || []);
+    });
+  });
+}
+
+function sqliteRun(text, params = []) {
+  const sqliteText = text.replace(/\$(\d+)/g, '?');
+  return new Promise((resolve, reject) => {
+    sqliteDb.run(sqliteText, params, function (err) {
+      if (err) return reject(err);
+      // Devolver una estructura que incluya el ID generado (lastID)
+      resolve([{ id: this.lastID, changes: this.changes }]);
+    });
+  });
+}
+
 /**
  * Ejecuta una consulta SQL con parámetros y retorna los resultados.
  * Unifica la API para PostgreSQL y SQLite (retornando arreglos de filas).
@@ -101,16 +141,8 @@ export async function query(text, params = []) {
   if (usePostgres) {
     const res = await pgPool.query(text, params);
     return res.rows;
-  } else {
-    // Adaptar marcadores de parámetros de PostgreSQL ($1, $2...) a SQLite (?, ?...)
-    const sqliteText = text.replace(/\$(\d+)/g, '?');
-    return new Promise((resolve, reject) => {
-      sqliteDb.all(sqliteText, params, (err, rows) => {
-        if (err) return reject(err);
-        resolve(rows || []);
-      });
-    });
   }
+  return withSqliteLock(() => sqliteAll(text, params));
 }
 
 /**
@@ -120,16 +152,8 @@ export async function execute(text, params = []) {
   if (usePostgres) {
     const res = await pgPool.query(text, params);
     return res.rows;
-  } else {
-    const sqliteText = text.replace(/\$(\d+)/g, '?');
-    return new Promise((resolve, reject) => {
-      sqliteDb.run(sqliteText, params, function (err) {
-        if (err) return reject(err);
-        // Devolver una estructura que incluya el ID generado (lastID)
-        resolve([{ id: this.lastID, changes: this.changes }]);
-      });
-    });
   }
+  return withSqliteLock(() => sqliteRun(text, params));
 }
 
 /**
@@ -155,42 +179,24 @@ export async function transaction(callback) {
     } finally {
       client.release();
     }
-  } else {
-    return new Promise((resolve, reject) => {
-      sqliteDb.serialize(async () => {
-        try {
-          sqliteDb.run('BEGIN TRANSACTION');
-          // Wrapper del cliente SQLite para promesas
-          const tx = {
-            query: (text, params) => {
-              const sqliteText = text.replace(/\$(\d+)/g, '?');
-              return new Promise((res, rej) => {
-                sqliteDb.all(sqliteText, params, (err, rows) => {
-                  if (err) return rej(err);
-                  res(rows || []);
-                });
-              });
-            },
-            execute: (text, params) => {
-              const sqliteText = text.replace(/\$(\d+)/g, '?');
-              return new Promise((res, rej) => {
-                sqliteDb.run(sqliteText, params, function (err) {
-                  if (err) return rej(err);
-                  res([{ id: this.lastID, changes: this.changes }]);
-                });
-              });
-            }
-          };
-          const result = await callback(tx);
-          sqliteDb.run('COMMIT');
-          resolve(result);
-        } catch (error) {
-          sqliteDb.run('ROLLBACK');
-          reject(error);
-        }
-      });
-    });
   }
+
+  const tx = { query: sqliteAll, execute: sqliteRun };
+
+  // Transacción anidada: se une a la transacción exterior.
+  if (txContext.getStore()) return callback(tx);
+
+  return withSqliteLock(() => txContext.run(true, async () => {
+    await sqliteRun('BEGIN IMMEDIATE TRANSACTION');
+    try {
+      const result = await callback(tx);
+      await sqliteRun('COMMIT');
+      return result;
+    } catch (error) {
+      try { await sqliteRun('ROLLBACK'); } catch (e) { /* sin transacción activa */ }
+      throw error;
+    }
+  }));
 }
 
 /**

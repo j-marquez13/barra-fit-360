@@ -8,7 +8,11 @@ database.sqlite*
 *.sqlite
 *.sqlite-journal
 *.bak
+*.bak_*
+*.antes_de_restaurar
 backup_*
+inventario_excel_*.json
+dist/
 
 backup_pg.js
 backup_railway.sql

@@ -5,10 +5,39 @@ import bcrypt from 'bcryptjs';
  * Controlador de Ventas y Pagos Multimoneda
  */
 
+// Identificación del cliente interno usado por "Cortesía Gym" (ver app3.js).
+const GYM_IDENT = 'GYM-0001';
+
+// Interpreta booleanos guardados como true/1/'1'/'true'/'t' (SQLite y PostgreSQL).
+function esVerdadero(v) {
+  return v === true || v === 1 || v === '1' || v === 'true' || v === 't';
+}
+
+function numeroValido(v) {
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+// Error con código HTTP para lanzarlo desde dentro de una transacción.
+function httpError(status, message, extra = {}) {
+  return Object.assign(new Error(message), { status, extra });
+}
+
+// Valida que la contraseña corresponda a algún administrador.
+async function validarPasswordAdmin(password) {
+  const admins = await db.query("SELECT id, password_hash FROM usuarios WHERE rol = 'Administrador'");
+  for (const admin of admins) {
+    if (admin.password_hash && await bcrypt.compare(String(password), admin.password_hash)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Procesa una venta registrando cabecera, detalles y pagos combinados.
  * Realiza conversiones automáticas y descuenta inventario (a través del trigger de BD).
- * 
+ *
  * Request Body:
  * {
  *   "items": [
@@ -29,12 +58,21 @@ import bcrypt from 'bcryptjs';
 export async function processSale(req, res) {
   const { items, pagos, tasas, notas, tipo_transaccion, cliente_id } = req.body;
   const isCortesia = tipo_transaccion === 'Cortesia';
-  console.log('--- NUEVA VENTA ---');
-  console.log('Items recibidos:', JSON.stringify(items, null, 2));
+  const tipoTransaccion = isCortesia ? 'Cortesia' : 'Venta';
 
   // 1. Validaciones iniciales
   if (!items || !Array.isArray(items) || items.length === 0) {
-    return res.status(400).json({ error: 'La venta debe contener al menos un producto (items). Recibido: ' + JSON.stringify(req.body) });
+    return res.status(400).json({ error: 'La venta debe contener al menos un producto (items).' });
+  }
+
+  for (const item of items) {
+    const cant = numeroValido(item.cantidad);
+    if (!Number.isFinite(cant) || cant <= 0) {
+      return res.status(400).json({ error: `Cantidad inválida para el producto ${item.producto_id}.` });
+    }
+    if (!Number.isInteger(Number(item.producto_id))) {
+      return res.status(400).json({ error: 'producto_id inválido.' });
+    }
   }
 
   if (!isCortesia && (!pagos || !Array.isArray(pagos) || pagos.length === 0)) {
@@ -42,111 +80,119 @@ export async function processSale(req, res) {
   }
 
   // Establecer tasa del día por defecto (USD a COP)
-  const tasaDiaUsd = tasas && tasas.USD ? parseFloat(tasas.USD) : 4000.00;
-  const tasaDiaVes = tasas && tasas.VES ? parseFloat(tasas.VES) : 100.00;
+  const tasaDiaUsd = tasas && tasas.USD ? numeroValido(tasas.USD) : 4000.00;
+  const tasaDiaVes = tasas && tasas.VES ? numeroValido(tasas.VES) : 100.00;
+  if (!(tasaDiaUsd > 0) || !(tasaDiaVes > 0)) {
+    return res.status(400).json({ error: 'Las tasas de cambio deben ser números mayores a 0.' });
+  }
 
   try {
     // 2. Consultar catálogo de productos involucrados para evitar alteración de precios
-    const productoIds = items.map(item => item.producto_id);
+    const productoIds = [...new Set(items.map(item => Number(item.producto_id)))];
     const placeholders = productoIds.map((_, i) => `$${i + 1}`).join(', ');
     const productosQuery = `SELECT id, nombre, costo_produccion, precio_venta FROM productos WHERE id IN (${placeholders})`;
     const productosDB = await db.query(productosQuery, productoIds);
 
-    const productosMap = new Map(productosDB.map(p => [p.id, p]));
+    const productosMap = new Map(productosDB.map(p => [Number(p.id), p]));
 
     // Validar que todos los productos existan
     for (const item of items) {
-      if (!productosMap.has(item.producto_id)) {
+      if (!productosMap.has(Number(item.producto_id))) {
         return res.status(404).json({ error: `El producto con ID ${item.producto_id} no existe en el catálogo.` });
       }
     }
 
-    // 3. Calcular el total de la venta (Moneda Base: COP)
+    // Cortesía Gym: el gimnasio paga SOLO el costo (no el precio de venta).
+    // Solo se permite contra el cliente interno del gimnasio y pagada 100% a crédito,
+    // para que no se pueda usar como "descuento" en una venta normal.
     const esCortesiaGym = req.body.cortesia_gym === true;
+    if (esCortesiaGym) {
+      const gym = cliente_id ? await db.query('SELECT identificacion, nombre FROM clientes WHERE id = $1', [cliente_id]) : [];
+      const esGym = gym.length > 0 && (gym[0].identificacion === GYM_IDENT || String(gym[0].nombre || '').toLowerCase() === 'gimnasio');
+      const todoCredito = Array.isArray(pagos) && pagos.length > 0 && pagos.every(p => p.metodo_pago === 'Crédito');
+      if (!esGym || !todoCredito) {
+        return res.status(400).json({ error: 'La Cortesía Gym solo puede registrarse a crédito del cliente Gimnasio.' });
+      }
+    }
+
+    // 3. Calcular el total de la venta (Moneda Base: COP)
     let totalVentaCop = 0;
     const detallesVenta = items.map(item => {
-      const prod = productosMap.get(item.producto_id);
-      const costoUnitario = (item.costo_produccion_calculado !== undefined) ? parseFloat(item.costo_produccion_calculado) : parseFloat(prod.costo_produccion);
-      // Cortesía Gym: el gimnasio paga SOLO el costo (no el precio de venta).
+      const prod = productosMap.get(Number(item.producto_id));
+      const costoCalc = numeroValido(item.costo_produccion_calculado);
+      const costoUnitario = (item.costo_produccion_calculado !== undefined && costoCalc >= 0)
+        ? costoCalc
+        : (parseFloat(prod.costo_produccion) || 0);
       const precioUnitario = isCortesia ? 0 : (esCortesiaGym ? costoUnitario : parseFloat(prod.precio_venta));
       const cantidad = parseFloat(item.cantidad);
       const subtotal = precioUnitario * cantidad;
       totalVentaCop += subtotal;
 
       return {
-        producto_id: item.producto_id,
+        producto_id: Number(item.producto_id),
         nombre: prod.nombre,
         cantidad,
         precio_unitario: precioUnitario,
         subtotal,
         costo_unitario: costoUnitario,
-        receta_base_ids: (item.receta_base_ids && item.receta_base_ids.length > 0) ? JSON.stringify(item.receta_base_ids) : null,
-        insumos_manuales: (item.insumos_manuales && item.insumos_manuales.length > 0) ? item.insumos_manuales : null,
-        extras: item.extras || []
+        receta_base_ids: (Array.isArray(item.receta_base_ids) && item.receta_base_ids.length > 0) ? JSON.stringify(item.receta_base_ids) : null,
+        insumos_manuales: (Array.isArray(item.insumos_manuales) && item.insumos_manuales.length > 0) ? item.insumos_manuales : null,
+        extras: Array.isArray(item.extras) ? item.extras : []
       };
     });
 
     // 4. Calcular los pagos y hacer las conversiones automáticas
     let totalPagadoCop = 0;
     let esVentaACredito = false;
-    
-    const pagosProcesados = (!isCortesia && pagos) ? pagos.map(p => {
-      const montoOriginal = parseFloat(p.monto_original);
-      const moneda = p.moneda.toUpperCase();
-      
-      if (p.metodo_pago === 'Crédito') {
-        esVentaACredito = true;
-      }
-      
-      // Determinar la tasa de cambio a aplicar
-      let tasaCambio = 1.0;
-      if (moneda === 'USD') {
-        tasaCambio = tasaDiaUsd;
-      } else if (moneda === 'VES') {
-        tasaCambio = tasaDiaVes;
-      } else if (moneda !== 'COP') {
-        throw new Error(`Moneda no soportada: ${moneda}`);
-      }
 
-      const montoBase = montoOriginal * tasaCambio;
-      totalPagadoCop += montoBase;
+    const pagosProcesados = [];
+    if (!isCortesia && pagos) {
+      for (const p of pagos) {
+        const montoOriginal = numeroValido(p.monto_original);
+        if (!Number.isFinite(montoOriginal) || montoOriginal < 0) {
+          return res.status(400).json({ error: 'Los montos de pago deben ser números positivos.' });
+        }
+        if (!p.metodo_pago || typeof p.moneda !== 'string') {
+          return res.status(400).json({ error: 'Cada pago debe indicar método de pago y moneda.' });
+        }
+        const moneda = p.moneda.toUpperCase();
 
-      return {
-        metodo_pago: p.metodo_pago,
-        moneda,
-        monto_original: montoOriginal,
-        tasa_cambio: tasaCambio,
-        monto_base: montoBase,
-        referencia: p.referencia || null
-      };
-    }) : [];
-    
+        if (p.metodo_pago === 'Crédito') {
+          esVentaACredito = true;
+        }
+
+        // Determinar la tasa de cambio a aplicar
+        let tasaCambio = 1.0;
+        if (moneda === 'USD') {
+          tasaCambio = tasaDiaUsd;
+        } else if (moneda === 'VES') {
+          tasaCambio = tasaDiaVes;
+        } else if (moneda !== 'COP') {
+          return res.status(400).json({ error: `Moneda no soportada: ${moneda}` });
+        }
+
+        const montoBase = montoOriginal * tasaCambio;
+        totalPagadoCop += montoBase;
+
+        pagosProcesados.push({
+          metodo_pago: p.metodo_pago,
+          moneda,
+          monto_original: montoOriginal,
+          tasa_cambio: tasaCambio,
+          monto_base: montoBase,
+          referencia: p.referencia || null
+        });
+      }
+    }
+
     if (esVentaACredito && !cliente_id) {
       return res.status(400).json({ error: 'Para ventas a Crédito, el cliente_id es obligatorio.' });
     }
-    
+
     if (cliente_id) {
-      const clientExists = await db.query('SELECT id, limite_credito, saldo_deudor FROM clientes WHERE id = $1', [cliente_id]);
+      const clientExists = await db.query('SELECT id FROM clientes WHERE id = $1', [cliente_id]);
       if (clientExists.length === 0) {
         return res.status(404).json({ error: 'El cliente especificado no existe.' });
-      }
-      
-      if (esVentaACredito) {
-        // Validar límite de crédito
-        const saldoActual = parseFloat(clientExists[0].saldo_deudor);
-        const limite = parseFloat(clientExists[0].limite_credito);
-        
-        // Sumar todos los pagos que sean a Crédito
-        const totalCreditoCop = pagosProcesados.filter(p => p.metodo_pago === 'Crédito').reduce((sum, p) => sum + p.monto_base, 0);
-        
-        if (limite > 0 && (saldoActual + totalCreditoCop) > limite) {
-          return res.status(400).json({ 
-            error: 'La venta excede el límite de crédito del cliente.',
-            limite_credito: limite,
-            saldo_actual: saldoActual,
-            nuevo_saldo_intentado: saldoActual + totalCreditoCop
-          });
-        }
       }
     }
 
@@ -165,14 +211,14 @@ export async function processSale(req, res) {
 
     // 6. Verificar existencias en inventario antes de realizar la venta (Alertas preventivas)
     const insumosRequeridos = {};
-    for (const item of items) {
+    for (const det of detallesVenta) {
       const recetasDB = await db.query(
         'SELECT insumo_id, cantidad FROM recetas WHERE producto_id = $1',
-        [item.producto_id]
+        [det.producto_id]
       );
       for (const rec of recetasDB) {
         const insumoId = rec.insumo_id;
-        const cantRequerida = parseFloat(rec.cantidad) * item.cantidad;
+        const cantRequerida = parseFloat(rec.cantidad) * det.cantidad;
         insumosRequeridos[insumoId] = (insumosRequeridos[insumoId] || 0) + cantRequerida;
       }
     }
@@ -205,25 +251,60 @@ export async function processSale(req, res) {
 
     // 8. Ejecutar la transacción en base de datos de manera atómica
     const resultVenta = await db.transaction(async (tx) => {
-      // Determinar si estamos usando Postgres para adaptar la sintaxis de RETURNING
-      const isPg = !process.env.DATABASE_URL && !process.env.PGHOST ? false : true;
+      const isPg = db.isPostgres();
+
+      // Validar límite de crédito dentro de la transacción (con bloqueo de fila en PG)
+      // para que dos ventas simultáneas no superen el límite.
+      if (esVentaACredito) {
+        const cli = await tx.query(
+          `SELECT limite_credito, saldo_deudor FROM clientes WHERE id = $1${isPg ? ' FOR UPDATE' : ''}`,
+          [cliente_id]
+        );
+        const saldoActual = parseFloat(cli[0].saldo_deudor) || 0;
+        const limite = parseFloat(cli[0].limite_credito) || 0;
+        const totalCreditoCop = pagosProcesados.filter(p => p.metodo_pago === 'Crédito').reduce((sum, p) => sum + p.monto_base, 0);
+        if (limite > 0 && (saldoActual + totalCreditoCop) > limite) {
+          throw httpError(400, 'La venta excede el límite de crédito del cliente.', {
+            limite_credito: limite,
+            saldo_actual: saldoActual,
+            nuevo_saldo_intentado: saldoActual + totalCreditoCop
+          });
+        }
+      }
 
       // A. Insertar cabecera de la venta
       const insertVentaSql = isPg
         ? 'INSERT INTO ventas (tipo_transaccion, total, tasa_cambio, cliente_id, notas) VALUES ($1, $2, $3, $4, $5) RETURNING id'
         : 'INSERT INTO ventas (tipo_transaccion, total, tasa_cambio, cliente_id, notas) VALUES ($1, $2, $3, $4, $5)';
-      
-      const resVenta = await tx.execute(insertVentaSql, [tipo_transaccion || 'Venta', totalVentaCop, tasaDiaUsd, cliente_id || null, notas || '']);
+
+      const resVenta = await tx.execute(insertVentaSql, [tipoTransaccion, totalVentaCop, tasaDiaUsd, cliente_id || null, notas || '']);
       const ventaId = resVenta[0].id;
 
       // B. Insertar detalle de productos vendidos (Activa el trigger de inventario)
       const insertDetalleSql = isPg
         ? 'INSERT INTO detalle_ventas (venta_id, producto_id, cantidad, precio_unitario, subtotal, costo_unitario, receta_base_ids, insumos_manuales) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id'
         : 'INSERT INTO detalle_ventas (venta_id, producto_id, cantidad, precio_unitario, subtotal, costo_unitario, receta_base_ids, insumos_manuales) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)';
-      
+
       const insertExtraSql = 'INSERT INTO detalle_ventas_extras (detalle_venta_id, insumo_id, cantidad, precio_adicional) VALUES ($1, $2, $3, $4)';
 
       for (const det of detallesVenta) {
+        // Registro exacto de lo que se descuenta en esta línea (sin contar extras,
+        // que quedan en detalle_ventas_extras). Se usa al anular la venta.
+        const consumo = {};
+        const descontar = async (insumoId, cantidad) => {
+          await tx.execute(
+            'UPDATE insumos SET stock_actual = stock_actual - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            [cantidad, insumoId]
+          );
+          consumo[insumoId] = (consumo[insumoId] || 0) + cantidad;
+        };
+
+        // La receta individual (tabla `recetas`) la descuenta el trigger; aquí solo se registra.
+        const recetasInd = await tx.query('SELECT insumo_id, cantidad FROM recetas WHERE producto_id = $1', [det.producto_id]);
+        for (const rec of recetasInd) {
+          consumo[rec.insumo_id] = (consumo[rec.insumo_id] || 0) + parseFloat(rec.cantidad) * det.cantidad;
+        }
+
         const insumosManualesJson = det.insumos_manuales ? JSON.stringify(det.insumos_manuales) : null;
         const resDetalle = await tx.execute(insertDetalleSql, [
           ventaId,
@@ -239,12 +320,11 @@ export async function processSale(req, res) {
 
         // Descontar stock de las recetas base seleccionadas (con lógica sola vs combinada)
         if (det.receta_base_ids) {
-          const baseIds = Array.isArray(det.receta_base_ids) ? det.receta_base_ids : JSON.parse(det.receta_base_ids);
+          const baseIds = JSON.parse(det.receta_base_ids);
           const numBases = baseIds.length; // 1 = sola, 2+ = combinada
 
           if (numBases >= 2) {
             // --- COMBINADO: recolectar todos los insumos, deduplicar comunes ---
-            // Map<insumo_id, { cantidad, es_sabor }> para comunes (solo 1 vez)
             const comunesMap = new Map(); // insumos NO sabor → solo 1 entrada
             const sabores = []; // insumos sabor → todos se descuentan
 
@@ -258,37 +338,26 @@ export async function processSale(req, res) {
               );
 
               for (const ins of insumosBase) {
-                const esSabor = (ins.es_sabor_batido === true || ins.es_sabor_batido === 1 || ins.es_sabor_batido === '1' || ins.es_sabor_batido === 'true') ? true : false;
                 const cantidadADescontar = parseFloat(ins.cantidad) || 1;
 
-                if (esSabor) {
+                if (esVerdadero(ins.es_sabor_batido)) {
                   // Frutas/sabores: cada receta base descuenta su fruta
                   sabores.push({ insumo_id: ins.insumo_id, cantidad: cantidadADescontar });
-                } else {
+                } else if (!comunesMap.has(ins.insumo_id)) {
                   // Comunes (vaso, pitillo, leche): solo guardar 1 vez (la primera aparición)
-                  if (!comunesMap.has(ins.insumo_id)) {
-                    comunesMap.set(ins.insumo_id, cantidadADescontar);
-                  }
+                  comunesMap.set(ins.insumo_id, cantidadADescontar);
                 }
               }
             }
 
-
-
             // Descontar insumos comunes (1 sola vez)
             for (const [insumoId, cantidad] of comunesMap) {
-              await tx.execute(
-                'UPDATE insumos SET stock_actual = stock_actual - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-                [cantidad * det.cantidad, insumoId]
-              );
+              await descontar(insumoId, cantidad * det.cantidad);
             }
 
             // Descontar sabores/frutas (cada uno por separado)
             for (const sab of sabores) {
-              await tx.execute(
-                'UPDATE insumos SET stock_actual = stock_actual - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-                [sab.cantidad * det.cantidad, sab.insumo_id]
-              );
+              await descontar(sab.insumo_id, sab.cantidad * det.cantidad);
             }
           } else {
             // --- SOLA (1 base): descontar todo normalmente ---
@@ -301,12 +370,7 @@ export async function processSale(req, res) {
               );
 
               for (const ins of insumosBase) {
-                const cantidadADescontar = parseFloat(ins.cantidad) || 1;
-
-                await tx.execute(
-                  'UPDATE insumos SET stock_actual = stock_actual - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-                  [cantidadADescontar * det.cantidad, ins.insumo_id]
-                );
+                await descontar(ins.insumo_id, (parseFloat(ins.cantidad) || 1) * det.cantidad);
               }
             }
           }
@@ -328,19 +392,14 @@ export async function processSale(req, res) {
             );
 
             for (const ins of insumosBase) {
-              const cantidadADescontar = parseFloat(ins.cantidad) || 1;
-
-              await tx.execute(
-                'UPDATE insumos SET stock_actual = stock_actual - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-                [cantidadADescontar * det.cantidad, ins.insumo_id]
-              );
+              await descontar(ins.insumo_id, (parseFloat(ins.cantidad) || 1) * det.cantidad);
             }
           }
         }
 
         // Descontar insumos manuales (batido combinado):
         // usa cantidad_combinada si está definida; si no, cantidad_sola; si no, 1.
-        if (det.insumos_manuales && det.insumos_manuales.length > 0) {
+        if (det.insumos_manuales) {
           for (const ins of det.insumos_manuales) {
             const info = await tx.query(
               'SELECT cantidad_combinada, cantidad_sola FROM insumos WHERE id = $1',
@@ -350,25 +409,24 @@ export async function processSale(req, res) {
             const sola = parseFloat(info[0]?.cantidad_sola) || 0;
             const cantidadADescontar = comb > 0 ? comb : (sola > 0 ? sola : 1);
 
-            await tx.execute(
-              'UPDATE insumos SET stock_actual = stock_actual - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-              [cantidadADescontar * det.cantidad, ins.insumo_id]
-            );
+            await descontar(ins.insumo_id, cantidadADescontar * det.cantidad);
           }
         }
 
         // Insertar insumos extras asociados a este detalle (Activa el trigger trg_descontar_extras_venta)
-        if (det.extras && det.extras.length > 0) {
-          for (const extra of det.extras) {
-            if (extra.origen === 'receta') continue;
-            await tx.execute(insertExtraSql, [
-              detalleId,
-              extra.insumo_id,
-              extra.cantidad * det.cantidad,
-              extra.precio_adicional || 0
-            ]);
-          }
+        for (const extra of det.extras) {
+          if (extra.origen === 'receta') continue;
+          const cantExtra = numeroValido(extra.cantidad);
+          if (!(cantExtra > 0)) continue;
+          await tx.execute(insertExtraSql, [
+            detalleId,
+            extra.insumo_id,
+            cantExtra * det.cantidad,
+            Math.max(0, numeroValido(extra.precio_adicional) || 0)
+          ]);
         }
+
+        await tx.execute('UPDATE detalle_ventas SET consumo_insumos = $1 WHERE id = $2', [JSON.stringify(consumo), detalleId]);
       }
 
       // C. Insertar los pagos asociados
@@ -386,7 +444,7 @@ export async function processSale(req, res) {
           pago.monto_base,
           pago.referencia
         ]);
-        
+
         // Si el pago es a Crédito, sumar a saldo_deudor del cliente
         if (pago.metodo_pago === 'Crédito' && cliente_id) {
           await tx.execute(
@@ -415,11 +473,100 @@ export async function processSale(req, res) {
     });
 
   } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ error: error.message, ...error.extra });
+    }
     console.error('Error al procesar la venta:', error);
     return res.status(500).json({
       error: 'Error interno del servidor al registrar la venta.',
       detalle: error.message
     });
+  }
+}
+
+/**
+ * Devuelve al inventario el consumo de una línea de venta antigua (sin `consumo_insumos`),
+ * recalculándolo con las recetas actuales.
+ */
+async function devolverConsumoLegacy(tx, det) {
+  const devolver = (insumoId, cantidad) => tx.execute(
+    'UPDATE insumos SET stock_actual = stock_actual + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+    [cantidad, insumoId]
+  );
+  const cantLinea = parseFloat(det.cantidad);
+
+  // Devolver insumos de la receta individual
+  const recetas = await tx.query('SELECT insumo_id, cantidad FROM recetas WHERE producto_id = $1', [det.producto_id]);
+  for (const rec of recetas) {
+    await devolver(rec.insumo_id, parseFloat(rec.cantidad) * cantLinea);
+  }
+
+  // Devolver insumos de recetas base (misma lógica sola/combinada que en la venta)
+  let baseIds = null;
+  if (det.receta_base_ids) {
+    try {
+      baseIds = Array.isArray(det.receta_base_ids) ? det.receta_base_ids : JSON.parse(det.receta_base_ids);
+    } catch (e) {
+      baseIds = null;
+    }
+  }
+
+  if (baseIds && baseIds.length >= 2) {
+    // --- COMBINADO: deduplicar comunes al devolver ---
+    const comunesMap = new Map();
+    const sabores = [];
+    for (const baseId of baseIds) {
+      const insumosBase = await tx.query(
+        `SELECT rbi.insumo_id, rbi.cantidad, i.es_sabor_batido
+         FROM recetas_base_insumos rbi
+         JOIN insumos i ON rbi.insumo_id = i.id
+         WHERE rbi.receta_base_id = $1`,
+        [baseId]
+      );
+      for (const ins of insumosBase) {
+        const cantidad = parseFloat(ins.cantidad) || 1;
+        if (esVerdadero(ins.es_sabor_batido)) {
+          sabores.push({ insumo_id: ins.insumo_id, cantidad });
+        } else if (!comunesMap.has(ins.insumo_id)) {
+          comunesMap.set(ins.insumo_id, cantidad);
+        }
+      }
+    }
+    for (const [insumoId, cantidad] of comunesMap) await devolver(insumoId, cantidad * cantLinea);
+    for (const sab of sabores) await devolver(sab.insumo_id, sab.cantidad * cantLinea);
+  } else if (baseIds && baseIds.length === 1) {
+    // --- SOLA (1 base): devolver todo normalmente ---
+    const insumosBase = await tx.query(
+      'SELECT rbi.insumo_id, rbi.cantidad FROM recetas_base_insumos rbi WHERE rbi.receta_base_id = $1',
+      [baseIds[0]]
+    );
+    for (const ins of insumosBase) await devolver(ins.insumo_id, (parseFloat(ins.cantidad) || 1) * cantLinea);
+  } else if (!det.receta_base_ids) {
+    // --- RECETA BASE FIJA asignada al producto ---
+    const prodBase = await tx.query('SELECT receta_base_id FROM productos WHERE id = $1', [det.producto_id]);
+    if (prodBase[0]?.receta_base_id) {
+      const insumosBase = await tx.query(
+        'SELECT rbi.insumo_id, rbi.cantidad FROM recetas_base_insumos rbi WHERE rbi.receta_base_id = $1',
+        [prodBase[0].receta_base_id]
+      );
+      for (const ins of insumosBase) await devolver(ins.insumo_id, (parseFloat(ins.cantidad) || 1) * cantLinea);
+    }
+  }
+
+  // Devolver insumos manuales (batido combinado)
+  if (det.insumos_manuales) {
+    let manuales = [];
+    try {
+      manuales = Array.isArray(det.insumos_manuales) ? det.insumos_manuales : JSON.parse(det.insumos_manuales);
+    } catch (e) {
+      manuales = [];
+    }
+    for (const ins of manuales) {
+      const info = await tx.query('SELECT cantidad_combinada, cantidad_sola FROM insumos WHERE id = $1', [ins.insumo_id]);
+      const comb = parseFloat(info[0]?.cantidad_combinada) || 0;
+      const sola = parseFloat(info[0]?.cantidad_sola) || 0;
+      await devolver(ins.insumo_id, (comb > 0 ? comb : (sola > 0 ? sola : 1)) * cantLinea);
+    }
   }
 }
 
@@ -437,184 +584,53 @@ export async function anularVenta(req, res) {
 
   try {
     // 1. Validar que la contraseña corresponda a un administrador
-    const admins = await db.query("SELECT id, password_hash FROM usuarios WHERE rol = 'Administrador'");
-    if (admins.length === 0) {
-      return res.status(500).json({ error: 'No hay administradores configurados en el sistema.' });
-    }
-
-    let authSuccess = false;
-    for (const admin of admins) {
-      if (admin.password_hash) {
-        const match = await bcrypt.compare(admin_password, admin.password_hash);
-        if (match) {
-          authSuccess = true;
-          break;
-        }
-      }
-    }
-
-    if (!authSuccess) {
+    if (!(await validarPasswordAdmin(admin_password))) {
       return res.status(401).json({ error: 'Contraseña de administrador incorrecta.' });
     }
 
     // 2. Ejecutar la anulación en una transacción
     await db.transaction(async (tx) => {
-      // a. Verificar que la venta exista y no esté anulada
-      const ventasDB = await tx.query('SELECT * FROM ventas WHERE id = $1', [id]);
+      const isPg = db.isPostgres();
+
+      // a. Verificar que la venta exista y no esté anulada (bloqueo de fila en PG
+      //    para que dos anulaciones simultáneas no reviertan dos veces)
+      const ventasDB = await tx.query(`SELECT * FROM ventas WHERE id = $1${isPg ? ' FOR UPDATE' : ''}`, [id]);
       if (ventasDB.length === 0) {
-        throw new Error('La venta no existe.');
+        throw httpError(404, 'La venta no existe.');
       }
       const venta = ventasDB[0];
       if (venta.tipo_transaccion === 'Anulada') {
-        throw new Error('Esta venta ya fue anulada previamente.');
+        throw httpError(400, 'Esta venta ya fue anulada previamente.');
       }
 
-      // b. Devolver inventario (Detalles principales + recetas base + insumos manuales)
-      const detalles = await tx.query('SELECT producto_id, cantidad, receta_base_ids, insumos_manuales FROM detalle_ventas WHERE venta_id = $1', [id]);
+      // b. Devolver inventario: exactamente lo que se descontó (consumo_insumos);
+      //    las ventas antiguas sin ese registro se recalculan con las recetas actuales.
+      const detalles = await tx.query('SELECT producto_id, cantidad, receta_base_ids, insumos_manuales, consumo_insumos FROM detalle_ventas WHERE venta_id = $1', [id]);
       for (const det of detalles) {
-        // Devolver insumos de la receta individual
-        const recetas = await tx.query('SELECT insumo_id, cantidad FROM recetas WHERE producto_id = $1', [det.producto_id]);
-        for (const rec of recetas) {
-          const cantidadADevolver = parseFloat(rec.cantidad) * parseFloat(det.cantidad);
-          await tx.execute(
-            'UPDATE insumos SET stock_actual = stock_actual + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-            [cantidadADevolver, rec.insumo_id]
-          );
+        let consumo = null;
+        if (det.consumo_insumos) {
+          try { consumo = JSON.parse(det.consumo_insumos); } catch (e) { consumo = null; }
         }
-
-        // Devolver insumos de recetas base (misma lógica sola/combinada que en la venta)
-        if (det.receta_base_ids) {
-          let baseIds;
-          try {
-            baseIds = Array.isArray(det.receta_base_ids) ? det.receta_base_ids : JSON.parse(det.receta_base_ids);
-          } catch(e) {
-            continue;
-          }
-          const numBases = baseIds.length;
-
-          if (numBases >= 2) {
-            // --- COMBINADO: deduplicar comunes al devolver ---
-            const comunesMap = new Map();
-            const sabores = [];
-
-            for (const baseId of baseIds) {
-              const insumosBase = await tx.query(
-                `SELECT rbi.insumo_id, rbi.cantidad, i.es_sabor_batido
-                 FROM recetas_base_insumos rbi
-                 JOIN insumos i ON rbi.insumo_id = i.id
-                 WHERE rbi.receta_base_id = $1`,
-                [baseId]
-              );
-
-              for (const ins of insumosBase) {
-                const esSabor = ins.es_sabor_batido ? true : false;
-                const cantidadADevolver = parseFloat(ins.cantidad) || 1;
-
-                if (esSabor) {
-                  sabores.push({ insumo_id: ins.insumo_id, cantidad: cantidadADevolver });
-                } else {
-                  if (!comunesMap.has(ins.insumo_id)) {
-                    comunesMap.set(ins.insumo_id, cantidadADevolver);
-                  }
-                }
-              }
-            }
-
-            // Devolver insumos comunes (1 sola vez)
-            for (const [insumoId, cantidad] of comunesMap) {
-              await tx.execute(
-                'UPDATE insumos SET stock_actual = stock_actual + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-                [cantidad * parseFloat(det.cantidad), insumoId]
-              );
-            }
-
-            // Devolver sabores/frutas (cada uno)
-            for (const sab of sabores) {
-              await tx.execute(
-                'UPDATE insumos SET stock_actual = stock_actual + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-                [sab.cantidad * parseFloat(det.cantidad), sab.insumo_id]
-              );
-            }
-          } else {
-            // --- SOLA (1 base): devolver todo normalmente ---
-            for (const baseId of baseIds) {
-              const insumosBase = await tx.query(
-                `SELECT rbi.insumo_id, rbi.cantidad
-                 FROM recetas_base_insumos rbi
-                 WHERE rbi.receta_base_id = $1`,
-                [baseId]
-              );
-
-              for (const ins of insumosBase) {
-                const cantidadADevolver = parseFloat(ins.cantidad) || 1;
-
-                await tx.execute(
-                  'UPDATE insumos SET stock_actual = stock_actual + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-                  [cantidadADevolver * parseFloat(det.cantidad), ins.insumo_id]
-                );
-              }
-            }
-          }
-        } else {
-          // --- RECETA BASE FIJA asignada al producto ---
-          const prodBase = await tx.query(
-            'SELECT receta_base_id FROM productos WHERE id = $1',
-            [det.producto_id]
-          );
-
-          if (prodBase[0]?.receta_base_id) {
-            const insumosBase = await tx.query(
-              `SELECT rbi.insumo_id, rbi.cantidad
-               FROM recetas_base_insumos rbi
-               WHERE rbi.receta_base_id = $1`,
-              [prodBase[0].receta_base_id]
-            );
-
-            for (const ins of insumosBase) {
-              const cantidadADevolver = parseFloat(ins.cantidad) || 1;
-
-              await tx.execute(
-                'UPDATE insumos SET stock_actual = stock_actual + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-                [cantidadADevolver * parseFloat(det.cantidad), ins.insumo_id]
-              );
-            }
-          }
-        }
-
-        // Devolver insumos manuales (batido combinado):
-        // usa cantidad_combinada si está definida; si no, cantidad_sola; si no, 1.
-        if (det.insumos_manuales) {
-          let manuales;
-          try {
-            manuales = Array.isArray(det.insumos_manuales) ? det.insumos_manuales : JSON.parse(det.insumos_manuales);
-          } catch(e) {
-            continue;
-          }
-          for (const ins of manuales) {
-            const info = await tx.query(
-              'SELECT cantidad_combinada, cantidad_sola FROM insumos WHERE id = $1',
-              [ins.insumo_id]
-            );
-            const comb = parseFloat(info[0]?.cantidad_combinada) || 0;
-            const sola = parseFloat(info[0]?.cantidad_sola) || 0;
-            const cantidadADevolver = comb > 0 ? comb : (sola > 0 ? sola : 1);
-
+        if (consumo) {
+          for (const [insumoId, cantidad] of Object.entries(consumo)) {
             await tx.execute(
               'UPDATE insumos SET stock_actual = stock_actual + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-              [cantidadADevolver * parseFloat(det.cantidad), ins.insumo_id]
+              [parseFloat(cantidad), Number(insumoId)]
             );
           }
+        } else {
+          await devolverConsumoLegacy(tx, det);
         }
       }
 
       // c. Devolver inventario (Extras)
       const detallesExtras = await tx.query(`
-        SELECT dxe.insumo_id, dxe.cantidad 
+        SELECT dxe.insumo_id, dxe.cantidad
         FROM detalle_ventas_extras dxe
         JOIN detalle_ventas dv ON dxe.detalle_venta_id = dv.id
         WHERE dv.venta_id = $1
       `, [id]);
-      
+
       for (const extra of detallesExtras) {
         await tx.execute(
           'UPDATE insumos SET stock_actual = stock_actual + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
@@ -625,23 +641,20 @@ export async function anularVenta(req, res) {
       // d. Revertir pagos y tesorería, y crédito si aplica
       const pagos = await tx.query('SELECT * FROM pagos_ventas WHERE venta_id = $1', [id]);
       for (const pago of pagos) {
-        // Solo revertir de tesorería si no es crédito y la cuenta existe
-        if (pago.metodo_pago !== 'Crédito') {
-          const cuentaExiste = await tx.query('SELECT id FROM cuentas_bancarias WHERE nombre = $1', [pago.metodo_pago]);
-          if (cuentaExiste.length > 0) {
-            // Usar monto_base (siempre en COP) para descontar de la cuenta bancaria
+        if (pago.metodo_pago === 'Crédito') {
+          // Si fue a crédito, descontar del saldo del cliente
+          if (venta.cliente_id) {
             await tx.execute(
-              'UPDATE cuentas_bancarias SET saldo = saldo - $1 WHERE nombre = $2',
-              [parseFloat(pago.monto_base), pago.metodo_pago]
+              'UPDATE clientes SET saldo_deudor = saldo_deudor - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+              [parseFloat(pago.monto_base), venta.cliente_id]
             );
           }
-        }
-
-        // Si fue a crédito, descontar del saldo del cliente
-        if (pago.metodo_pago === 'Crédito' && venta.cliente_id) {
+        } else {
+          // El trigger trg_tesoreria_venta_in sumó `monto_original` (en la moneda del
+          // pago) a la cuenta; se revierte exactamente ese mismo monto.
           await tx.execute(
-            'UPDATE clientes SET saldo_deudor = saldo_deudor - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-            [parseFloat(pago.monto_base), venta.cliente_id]
+            'UPDATE cuentas_bancarias SET saldo = saldo - $1 WHERE nombre = $2',
+            [parseFloat(pago.monto_original), pago.metodo_pago]
           );
         }
       }
@@ -658,7 +671,10 @@ export async function anularVenta(req, res) {
 
     res.json({ ok: true, mensaje: 'Venta anulada correctamente. Inventario, tesorería y créditos devueltos.' });
   } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ error: error.message });
+    }
     console.error('Error al anular venta:', error);
-    res.status(500).json({ error: error.message || 'Error interno al anular la venta.' });
+    res.status(500).json({ error: 'Error interno al anular la venta.' });
   }
 }

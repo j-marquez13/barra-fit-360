@@ -52,6 +52,7 @@ export async function cierreDiario(req, res) {
       SELECT COALESCE(SUM(monto_total_cop), 0) as total_abonos
       FROM abonos_credito a
       WHERE ${dateFilter.replace('v.fecha', 'a.fecha')}
+        AND a.monto_total_cop > 0 -- las deudas manuales se guardan en negativo; no son cobranza
     `, [fecha]);
     const totalAbonos = parseFloat(abonosResumen[0]?.total_abonos || 0);
 
@@ -377,6 +378,7 @@ export async function cierreRango(req, res) {
       SELECT COALESCE(SUM(monto_total_cop), 0) as total_abonos
       FROM abonos_credito a
       WHERE ${dateFilterAbonos}
+        AND a.monto_total_cop > 0 -- las deudas manuales se guardan en negativo; no son cobranza
     `, baseParams);
     const totalAbonos = parseFloat(abonosResumen[0]?.total_abonos || 0);
 

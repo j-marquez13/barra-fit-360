@@ -96,22 +96,25 @@ export async function estadoCaja(req, res) {
 // POST /api/caja/abrir
 export async function abrirCaja(req, res) {
   try {
-    const { usuario_id, fondo_inicial_cop, fondo_inicial_usd, turno, nombre_cajero } = req.body;
+    const { fondo_inicial_cop, fondo_inicial_usd, turno } = req.body;
 
+    // La caja se abre siempre a nombre del usuario autenticado (no del que venga en el body),
+    // para que nadie pueda abrir un turno a nombre de otro cajero.
+    const usuario_id = req.usuario && req.usuario.usuario_id;
     if (!usuario_id) {
-      return res.status(400).json({ error: 'El ID de usuario es obligatorio' });
+      return res.status(401).json({ error: 'No autorizado. Inicia sesión nuevamente.' });
     }
 
     // Verificar si el usuario existe
-    const usr = await db.query('SELECT id, permisos FROM usuarios WHERE id = $1', [usuario_id]);
+    const usr = await db.query('SELECT id, nombre, permisos FROM usuarios WHERE id = $1', [usuario_id]);
     if (usr.length === 0) {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
 
-    const fondo = parseFloat(fondo_inicial_cop) || 0;
-    const fondoUsd = parseFloat(fondo_inicial_usd) || 0;
+    const fondo = Math.max(0, parseFloat(fondo_inicial_cop) || 0);
+    const fondoUsd = Math.max(0, parseFloat(fondo_inicial_usd) || 0);
     const turnoValido = (turno === 'Tarde') ? 'Tarde' : (turno === 'Completo' ? 'Completo' : 'Mañana');
-    const cajero = nombre_cajero || 'Cajero';
+    const cajero = usr[0].nombre || 'Cajero';
 
     // Verificar si ya hay una caja abierta
     const openSession = await db.query('SELECT id FROM sesiones_caja WHERE fecha_cierre IS NULL AND estado = $1 LIMIT 1', ['Abierta']);

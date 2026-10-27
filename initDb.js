@@ -118,6 +118,43 @@ export async function initializeDatabase() {
         END $$;
       `);
 
+      // Consumo real de insumos por línea de venta (para anular exactamente lo descontado)
+      await db.execute('ALTER TABLE detalle_ventas ADD COLUMN IF NOT EXISTS consumo_insumos TEXT;');
+
+      // Las deudas manuales se guardan en abonos_credito con monto negativo:
+      // eliminar el CHECK (monto_total_cop > 0) si todavía existe.
+      await db.execute(`
+        DO $$
+        DECLARE r record;
+        BEGIN
+          FOR r IN
+            SELECT conname FROM pg_constraint
+            WHERE conrelid = 'abonos_credito'::regclass
+              AND contype = 'c'
+              AND pg_get_constraintdef(oid) ILIKE '%monto_total_cop%'
+          LOOP
+            EXECUTE 'ALTER TABLE abonos_credito DROP CONSTRAINT ' || quote_ident(r.conname);
+          END LOOP;
+        END $$;
+      `);
+
+      // Las transferencias mueven saldos SOLO por este trigger (el controlador ya no
+      // hace UPDATE manual). Se asegura que exista para no perder movimientos.
+      await db.execute(`
+        CREATE OR REPLACE FUNCTION func_tesoreria_transferencia()
+        RETURNS TRIGGER AS $$
+        BEGIN
+          UPDATE cuentas_bancarias SET saldo = saldo - NEW.monto_origen WHERE nombre = NEW.cuenta_origen;
+          UPDATE cuentas_bancarias SET saldo = saldo + NEW.monto_destino WHERE nombre = NEW.cuenta_destino;
+          RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+      `);
+      await db.execute('DROP TRIGGER IF EXISTS trg_tesoreria_transferencia ON movimientos_tesoreria;');
+      await db.execute(`CREATE TRIGGER trg_tesoreria_transferencia
+        AFTER INSERT ON movimientos_tesoreria
+        FOR EACH ROW EXECUTE FUNCTION func_tesoreria_transferencia();`);
+
       console.log('   ✅ Esquema PostgreSQL verificado y migrado.');
 
       // Tablas para WhatsApp (recordatorios automáticos + sesión persistente)
@@ -398,7 +435,7 @@ async function createTables() {
     CREATE TABLE IF NOT EXISTS abonos_credito (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       cliente_id INTEGER NOT NULL,
-      monto_total_cop REAL NOT NULL CHECK (monto_total_cop > 0.0),
+      monto_total_cop REAL NOT NULL CHECK (monto_total_cop <> 0.0),
       fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       notas TEXT,
       FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE
@@ -646,6 +683,25 @@ async function runMigrations() {
   try { await db.execute("ALTER TABLE usuarios ADD COLUMN debe_cambiar_password INTEGER DEFAULT 1"); } catch(e) {}
   try { await db.execute("ALTER TABLE usuarios ADD COLUMN intentos_fallidos INTEGER DEFAULT 0"); } catch(e) {}
   try { await db.execute("ALTER TABLE usuarios ADD COLUMN bloqueado_hasta BIGINT"); } catch(e) {}
+  // Consumo real de insumos por línea de venta (para anular exactamente lo descontado)
+  try { await db.execute("ALTER TABLE detalle_ventas ADD COLUMN consumo_insumos TEXT"); } catch(e) {}
+
+  // Las deudas manuales se registran en abonos_credito con monto NEGATIVO, pero la tabla
+  // original exigía monto > 0 y la operación fallaba siempre. SQLite no permite quitar un
+  // CHECK, así que se reconstruye la tabla conservando todos los datos.
+  const abonosDef = await db.query("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'abonos_credito'");
+  if (abonosDef.length > 0 && /monto_total_cop\s*>\s*0/i.test(abonosDef[0].sql)) {
+    const nuevaDef = abonosDef[0].sql
+      .replace(/monto_total_cop\s*>\s*0(\.0+)?/i, 'monto_total_cop <> 0.0')
+      .replace(/CREATE TABLE\s+(IF NOT EXISTS\s+)?"?abonos_credito"?/i, 'CREATE TABLE abonos_credito_nueva');
+    await db.transaction(async (tx) => {
+      await tx.execute(nuevaDef);
+      await tx.execute('INSERT INTO abonos_credito_nueva SELECT * FROM abonos_credito');
+      await tx.execute('DROP TABLE abonos_credito');
+      await tx.execute('ALTER TABLE abonos_credito_nueva RENAME TO abonos_credito');
+    });
+    console.log('   🔄 Migración: abonos_credito ahora acepta deudas manuales (monto negativo).');
+  }
   // La orden de compra ya no suma stock: columna para saber si una orden antigua sí lo hizo.
   try { await db.execute("ALTER TABLE ordenes_compra ADD COLUMN afecta_inventario INTEGER DEFAULT 1"); console.log('   🔄 Migración: columna afecta_inventario agregada a ordenes_compra.'); } catch(e) {}
   // Enlace entre el gasto (reposición) y su orden de compra para poder devolver la plata al borrar.

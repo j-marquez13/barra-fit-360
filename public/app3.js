@@ -5889,8 +5889,8 @@ window.showEditarUsuarioModal = function(id = null, nombre = '', turno = 'Mañan
       </select>
     </div>
     <div class="form-group">
-      <label>Contraseña ${id ? '(Dejar vacío para no cambiar)' : '(Por defecto 1234)'}</label>
-      <input type="password" id="edit-usr-pass" placeholder="${id ? '***' : '1234'}">
+      <label>Contraseña ${id ? '(Dejar vacío para no cambiar)' : '(Mínimo 6 caracteres; se pedirá cambiarla al entrar)'}</label>
+      <input type="password" id="edit-usr-pass" placeholder="${id ? '***' : 'Mínimo 6 caracteres'}">
     </div>
     <div class="form-group">
       <label>Permisos de Acceso</label>

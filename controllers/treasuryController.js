@@ -28,29 +28,31 @@ export async function transferirFondos(req, res) {
       return res.status(400).json({ error: 'La cuenta de origen y destino no pueden ser la misma.' });
     }
 
-    const monto_destino = monto_origen * tasa_cambio;
+    const montoOrigen = parseFloat(monto_origen);
+    const tasa = parseFloat(tasa_cambio);
+    if (!Number.isFinite(montoOrigen) || montoOrigen <= 0 || !Number.isFinite(tasa) || tasa <= 0) {
+      return res.status(400).json({ error: 'El monto y la tasa de cambio deben ser números mayores a 0.' });
+    }
+    const monto_destino = montoOrigen * tasa;
 
     await db.transaction(async (tx) => {
-      // Descontar de cuenta origen
+      const cuentas = await tx.query('SELECT nombre FROM cuentas_bancarias WHERE nombre IN ($1, $2)', [cuenta_origen, cuenta_destino]);
+      if (cuentas.length !== 2) {
+        throw Object.assign(new Error('La cuenta de origen o destino no existe.'), { status: 400 });
+      }
+      // Registrar el movimiento. Los saldos los actualiza el trigger
+      // `trg_tesoreria_transferencia` al insertar; no se debe hacer un UPDATE
+      // manual aquí para evitar mover el dinero dos veces.
       await tx.execute(
-        'UPDATE cuentas_bancarias SET saldo = saldo - $1 WHERE nombre = $2',
-        [monto_origen, cuenta_origen]
-      );
-      // Sumar a cuenta destino
-      await tx.execute(
-        'UPDATE cuentas_bancarias SET saldo = saldo + $1 WHERE nombre = $2',
-        [monto_destino, cuenta_destino]
-      );
-      // Registrar el movimiento
-      await tx.execute(
-        `INSERT INTO movimientos_tesoreria (cuenta_origen, cuenta_destino, monto_origen, monto_destino, tasa_cambio, motivo) 
+        `INSERT INTO movimientos_tesoreria (cuenta_origen, cuenta_destino, monto_origen, monto_destino, tasa_cambio, motivo)
          VALUES ($1, $2, $3, $4, $5, $6)`,
-        [cuenta_origen, cuenta_destino, monto_origen, monto_destino, tasa_cambio, motivo]
+        [cuenta_origen, cuenta_destino, montoOrigen, monto_destino, tasa, motivo]
       );
     });
 
     res.status(201).json({ mensaje: 'Transferencia realizada con éxito.' });
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
     console.error('Error al transferir fondos:', err);
     res.status(500).json({ error: 'Error interno al procesar la transferencia.' });
   }
