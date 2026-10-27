@@ -249,7 +249,15 @@ export async function cierreDia(req, res) {
         COALESCE(SUM(declarado_efectivo_pesos), 0) as declarado_efectivo_pesos,
         COALESCE(SUM(declarado_bancolombia), 0) as declarado_bancolombia,
         COALESCE(SUM(declarado_efectivo_usd), 0) as declarado_efectivo_usd,
-        COALESCE(SUM(diferencia_caja), 0) as diferencia_caja
+        COALESCE(SUM(diferencia_caja), 0) as diferencia_caja,
+        COALESCE(SUM(fondo_inicial_cop), 0) as fondo_inicial_cop,
+        COALESCE(SUM(fondo_inicial_usd), 0) as fondo_inicial_usd,
+        COALESCE(SUM(CASE WHEN fondo_completo = 1 THEN 1 ELSE 0 END), 0) as turnos_fondo_completo,
+        COUNT(declarado_ventas_cop) as turnos_con_desglose,
+        COALESCE(SUM(declarado_ventas_cop), 0) as declarado_ventas_cop,
+        COALESCE(SUM(declarado_abonos_cop), 0) as declarado_abonos_cop,
+        COALESCE(SUM(diferencia_ventas_cop), 0) as diferencia_ventas_cop,
+        COALESCE(SUM(diferencia_abonos_cop), 0) as diferencia_abonos_cop
       FROM sesiones_caja
       WHERE ${dateExpr('fecha_apertura')} = $1 AND estado = 'Cerrada'
     `, [fecha]);
@@ -314,6 +322,14 @@ export async function cierreDia(req, res) {
         declarado_bancolombia: parseFloat(r.declarado_bancolombia || 0),
         declarado_efectivo_usd: parseFloat(r.declarado_efectivo_usd || 0),
         diferencia_caja: parseFloat(r.diferencia_caja || 0),
+        fondo_inicial_cop: parseFloat(r.fondo_inicial_cop || 0),
+        fondo_inicial_usd: parseFloat(r.fondo_inicial_usd || 0),
+        turnos_fondo_completo: parseInt(r.turnos_fondo_completo || 0, 10),
+        turnos_con_desglose: parseInt(r.turnos_con_desglose || 0, 10),
+        declarado_ventas_cop: parseFloat(r.declarado_ventas_cop || 0),
+        declarado_abonos_cop: parseFloat(r.declarado_abonos_cop || 0),
+        diferencia_ventas_cop: parseFloat(r.diferencia_ventas_cop || 0),
+        diferencia_abonos_cop: parseFloat(r.diferencia_abonos_cop || 0),
         ventas_detalle: ventasDetalle,
         abonos_detalle: abonosDetalle
       }
@@ -510,13 +526,22 @@ export async function cerrarCaja(req, res) {
     const decFondoUsd = parseFloat(fondo_declarado_usd) || 0;
     const fondoCompleto = fondo_completo ? 1 : 0;
 
+    // Desglose del declarado entre ventas y abonos (lo calcula el frontend con las mismas
+    // tasas). Se guarda para que el cierre consolidado del día muestre el mismo arqueo
+    // que el ticket del turno.
+    const decVentasNum = parseFloat(req.body.declarado_ventas_cop);
+    const decAbonosNum = parseFloat(req.body.declarado_abonos_cop);
+    const hayDesglose = Number.isFinite(decVentasNum) && Number.isFinite(decAbonosNum);
+    const declaradoVentasCop = hayDesglose ? decVentasNum : null;
+    const declaradoAbonosCop = hayDesglose ? decAbonosNum : null;
+    const diferenciaVentasCop = hayDesglose ? decVentasNum - totalVentasCop : null;
+    const diferenciaAbonosCop = hayDesglose ? decAbonosNum - totalAbonosCop : null;
+
     // Cerrar la sesión
     const now = localNow();
-    const sqlUpdate = isPg
-      ? `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_pago_movil = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9, declarado_efectivo_usd = $10, costo_produccion = $11, utilidad_neta = $12, declarado_cop = $13, total_ventas_credito_cop = $14, fondo_declarado_cop = $15, fondo_declarado_usd = $16, fondo_completo = $17, total_abonos_cop = $18 WHERE id = $19 RETURNING *`
-      : `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_pago_movil = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9, declarado_efectivo_usd = $10, costo_produccion = $11, utilidad_neta = $12, declarado_cop = $13, total_ventas_credito_cop = $14, fondo_declarado_cop = $15, fondo_declarado_usd = $16, fondo_completo = $17, total_abonos_cop = $18 WHERE id = $19`;
-      
-    const result = await db.execute(sqlUpdate, [now, totalVentasReal, totalGastos, diferencia, decPagoMovil, decZelle, decBinance, decPesos, decBancolombia, decUsd, costoProduccion, utilidadNeta, declarado, totalVentasCreditoCop, decFondoPesos, decFondoUsd, fondoCompleto, totalAbonosCop, currentSession.id]);
+    const sqlUpdate = `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_pago_movil = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9, declarado_efectivo_usd = $10, costo_produccion = $11, utilidad_neta = $12, declarado_cop = $13, total_ventas_credito_cop = $14, fondo_declarado_cop = $15, fondo_declarado_usd = $16, fondo_completo = $17, total_abonos_cop = $18, declarado_ventas_cop = $19, declarado_abonos_cop = $20, diferencia_ventas_cop = $21, diferencia_abonos_cop = $22 WHERE id = $23${isPg ? ' RETURNING *' : ''}`;
+
+    const result = await db.execute(sqlUpdate, [now, totalVentasReal, totalGastos, diferencia, decPagoMovil, decZelle, decBinance, decPesos, decBancolombia, decUsd, costoProduccion, utilidadNeta, declarado, totalVentasCreditoCop, decFondoPesos, decFondoUsd, fondoCompleto, totalAbonosCop, declaradoVentasCop, declaradoAbonosCop, diferenciaVentasCop, diferenciaAbonosCop, currentSession.id]);
     
     let sessionRes = result;
     if (!isPg) {
@@ -552,6 +577,10 @@ export async function cerrarCaja(req, res) {
         declarado_efectivo_pesos: decPesos,
         declarado_bancolombia: decBancolombia,
         declarado_efectivo_usd: decUsd,
+        declarado_ventas_cop: declaradoVentasCop,
+        declarado_abonos_cop: declaradoAbonosCop,
+        diferencia_ventas_cop: diferenciaVentasCop,
+        diferencia_abonos_cop: diferenciaAbonosCop,
         tasas: { USD: tasaUsd, VES: tasaVes },
         ventas_detalle: ventasDetalle,
         abonos_detalle: abonosDetalle,

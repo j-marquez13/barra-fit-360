@@ -2099,14 +2099,47 @@
           <section class="ctd-card">
             <div class="ctd-card-head">
               <span class="ctd-card-icon ctd-icon-gold"><i data-lucide="wallet"></i></span>
-              <span class="ctd-card-title">Arqueo Final</span>
+              <span class="ctd-card-title">Fondo de Caja y Arqueo Final</span>
             </div>
+            <div class="ctd-row">
+              <span>Fondo de Caja Base</span>
+              <strong class="ctd-mono" id="dia-fondo-base">$0</strong>
+            </div>
+            <div class="ctd-row">
+              <span>Estado del Fondo</span>
+              <span class="ctd-badge" id="dia-fondo-completo">—</span>
+            </div>
+
+            <div class="ctd-divider"></div>
+
+            <div class="ctd-declare-grid">
+              <div class="ctd-declare-cell">
+                <span class="ctd-declare-label">Declarado Ventas</span>
+                <strong class="ctd-mono" id="dia-declarado-ventas">$0</strong>
+              </div>
+              <div class="ctd-declare-cell">
+                <span class="ctd-declare-label">Diferencia Ventas</span>
+                <strong class="ctd-mono" id="dia-diferencia-ventas">$0</strong>
+              </div>
+              <div class="ctd-declare-cell">
+                <span class="ctd-declare-label">Declarado Abonos</span>
+                <strong class="ctd-mono" id="dia-declarado-abonos">$0</strong>
+              </div>
+              <div class="ctd-declare-cell">
+                <span class="ctd-declare-label">Diferencia Abonos</span>
+                <strong class="ctd-mono" id="dia-diferencia-abonos">$0</strong>
+              </div>
+            </div>
+            <div class="ctd-row" id="dia-desglose-nota" style="display:none; font-size: 12px;">
+              <span class="text-muted">Algunos turnos se cerraron antes de guardar el desglose ventas/abonos; se incluyen solo en los totales.</span>
+            </div>
+
             <div class="ctd-foot-row ctd-foot-total">
               <span><i data-lucide="wallet"></i> Declarado Total (COP)</span>
               <strong class="ctd-mono" id="dia-declarado">$0</strong>
             </div>
             <div class="ctd-foot-row ctd-arqueo-final" id="dia-diff-row">
-              <span><i data-lucide="scale"></i> Diferencia de Caja</span>
+              <span><i data-lucide="scale"></i> Diferencia Total de Caja</span>
               <strong class="ctd-mono" id="dia-diferencia">$0</strong>
             </div>
           </section>

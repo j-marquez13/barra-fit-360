@@ -121,6 +121,12 @@ export async function initializeDatabase() {
       // Consumo real de insumos por línea de venta (para anular exactamente lo descontado)
       await db.execute('ALTER TABLE detalle_ventas ADD COLUMN IF NOT EXISTS consumo_insumos TEXT;');
 
+      // Desglose del arqueo de cada turno (ventas vs abonos) para el cierre consolidado
+      await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_ventas_cop DOUBLE PRECISION;');
+      await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_abonos_cop DOUBLE PRECISION;');
+      await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS diferencia_ventas_cop DOUBLE PRECISION;');
+      await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS diferencia_abonos_cop DOUBLE PRECISION;');
+
       // Las deudas manuales se guardan en abonos_credito con monto negativo:
       // eliminar el CHECK (monto_total_cop > 0) si todavía existe.
       await db.execute(`
@@ -685,6 +691,11 @@ async function runMigrations() {
   try { await db.execute("ALTER TABLE usuarios ADD COLUMN bloqueado_hasta BIGINT"); } catch(e) {}
   // Consumo real de insumos por línea de venta (para anular exactamente lo descontado)
   try { await db.execute("ALTER TABLE detalle_ventas ADD COLUMN consumo_insumos TEXT"); } catch(e) {}
+  // Desglose del arqueo de cada turno (ventas vs abonos) para el cierre consolidado
+  try { await db.execute("ALTER TABLE sesiones_caja ADD COLUMN declarado_ventas_cop REAL"); } catch(e) {}
+  try { await db.execute("ALTER TABLE sesiones_caja ADD COLUMN declarado_abonos_cop REAL"); } catch(e) {}
+  try { await db.execute("ALTER TABLE sesiones_caja ADD COLUMN diferencia_ventas_cop REAL"); } catch(e) {}
+  try { await db.execute("ALTER TABLE sesiones_caja ADD COLUMN diferencia_abonos_cop REAL"); } catch(e) {}
 
   // Las deudas manuales se registran en abonos_credito con monto NEGATIVO, pero la tabla
   // original exigía monto > 0 y la operación fallaba siempre. SQLite no permite quitar un

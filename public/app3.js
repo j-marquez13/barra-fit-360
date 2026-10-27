@@ -4630,6 +4630,8 @@ async function cerrarTurnoActual() {
           declarado_efectivo_pesos: decPesos,
           declarado_bancolombia: decBanco,
           declarado_efectivo_usd: decUsd,
+          declarado_ventas_cop: declaradoVentasCop,
+          declarado_abonos_cop: declaradoAbonosCop,
           tasas: { USD: rateUsd, VES: rateVes }
         })
       });
@@ -4777,13 +4779,7 @@ window.loadCierreDia = async function(fechaReq) {
 
     setMonto('dia-subtitle', `${d.fecha || fecha} · ${r.total_turnos || 0} turnos`);
 
-    const ventasContado = (r.total_ventas_contado_cop ?? r.total_ventas_cop ?? 0);
     const credito = (r.total_ventas_credito_cop || 0);
-    const abonosTotal = (r.total_abonos_cop || 0);
-    setMonto('dia-ventas-total', `$${fmt(ventasContado)}`);
-    setMonto('dia-credito', `$${fmt(credito)}`);
-    setMonto('dia-facturado', `$${fmt(ventasContado + credito)}`);
-    setMonto('dia-abonos-total', `$${fmt(abonosTotal)}`);
 
     const vDet = r.ventas_detalle || {};
     const aDet = r.abonos_detalle || {};
@@ -4806,9 +4802,14 @@ window.loadCierreDia = async function(fechaReq) {
     ];
     const fmtTasa = (t, moneda) => moneda === 'COP' ? '1' : (t > 0 ? t.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 4 }) : '—');
 
+    // Igual que en el ticket del turno: el total de cada tabla es la suma de sus filas.
+    let ventasContado = 0;
+    let abonosTotal = 0;
     metodos.forEach(m => {
       const v = pickDet(vDet, m.moneda, m.claves);
       const a = pickDet(aDet, m.moneda, m.claves);
+      ventasContado += v.cop;
+      abonosTotal += a.cop;
       const tasaV = v.monto > 0 ? (v.cop / v.monto) : 0;
       const tasaA = a.monto > 0 ? (a.cop / a.monto) : 0;
       setMonto(`dv-m-${m.key}`, `${m.simbolo}${fmt(v.monto)}`);
@@ -4819,11 +4820,53 @@ window.loadCierreDia = async function(fechaReq) {
       setMonto(`da-c-${m.key}`, `$${fmt(a.cop)}`);
     });
 
+    setMonto('dia-ventas-total', `$${fmt(ventasContado)}`);
+    setMonto('dia-abonos-total', `$${fmt(abonosTotal)}`);
+    setMonto('dia-credito', `$${fmt(credito)}`);
+    // Venta total facturada = suma del total real de ventas de los turnos (como en el ticket del turno)
+    setMonto('dia-facturado', `$${fmt(r.total_ventas_cop || (ventasContado + credito))}`);
+
     setMonto('dia-costo', `-$${fmt(r.costo_produccion || 0)}`);
     const utilidad = r.utilidad_neta || 0;
     setMonto('dia-utilidad', `${utilidad < 0 ? '-' : ''}$${fmt(Math.abs(utilidad))}`);
     const utilEl = document.getElementById('dia-utilidad');
     if (utilEl) utilEl.style.color = utilidad >= 0 ? 'var(--success)' : 'var(--danger)';
+
+    // Fondo de caja (suma de los fondos de todos los turnos del día)
+    setMonto('dia-fondo-base', `$${fmt(r.fondo_inicial_cop || 0)} COP + $${fmt(r.fondo_inicial_usd || 0)} USD`);
+    const fondoBadge = document.getElementById('dia-fondo-completo');
+    if (fondoBadge) {
+      const turnos = r.total_turnos || 0;
+      const completos = r.turnos_fondo_completo || 0;
+      const completo = turnos > 0 && completos === turnos;
+      fondoBadge.textContent = turnos === 0 ? '—' : (completo ? 'Completo' : `Incompleto (${completos}/${turnos} turnos)`);
+      fondoBadge.className = `ctd-badge ${completo ? 'ctd-badge-ok' : 'ctd-badge-no'}`;
+    }
+
+    // Declarado y diferencias separados por ventas y abonos (mismo arqueo que el ticket del turno).
+    // Los turnos cerrados antes de guardar este desglose solo cuentan en los totales.
+    const fmtDiff = (v) => (Math.abs(v) < 100 ? '$0' : (v < 0 ? '-$' : '+$') + fmt(Math.abs(v)));
+    const setDiff = (id, v) => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.textContent = fmtDiff(v);
+        el.style.color = (v < 0 && Math.abs(v) >= 100) ? 'var(--danger)' : 'var(--success)';
+      }
+    };
+    const conDesglose = r.turnos_con_desglose || 0;
+    if (conDesglose > 0) {
+      setMonto('dia-declarado-ventas', `$${fmt(r.declarado_ventas_cop || 0)}`);
+      setMonto('dia-declarado-abonos', `$${fmt(r.declarado_abonos_cop || 0)}`);
+      setDiff('dia-diferencia-ventas', r.diferencia_ventas_cop || 0);
+      setDiff('dia-diferencia-abonos', r.diferencia_abonos_cop || 0);
+    } else {
+      ['dia-declarado-ventas', 'dia-declarado-abonos', 'dia-diferencia-ventas', 'dia-diferencia-abonos'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { el.textContent = '—'; el.style.color = ''; }
+      });
+    }
+    const nota = document.getElementById('dia-desglose-nota');
+    if (nota) nota.style.display = (conDesglose < (r.total_turnos || 0)) ? 'flex' : 'none';
 
     setMonto('dia-declarado', `$${fmt(r.declarado_cop || 0)}`);
 
