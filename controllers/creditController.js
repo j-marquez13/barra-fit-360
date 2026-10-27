@@ -1,5 +1,6 @@
 import * as db from '../db.js';
 import { validarPasswordAdmin } from '../auth.js';
+import { resolverTasas } from '../tasas.js';
 
 /**
  * Controlador de Clientes y Líneas de Crédito (Cuentas por Cobrar)
@@ -153,14 +154,12 @@ export async function processAbono(req, res) {
     return res.status(400).json({ error: 'Debe ingresar al menos un pago para procesar el abono.' });
   }
 
-  const tasaDiaUsd = tasas && tasas.USD ? parseFloat(tasas.USD) : 4000.00;
-  const tasaDiaVes = tasas && tasas.VES ? parseFloat(tasas.VES) : 100.00;
-
-  if (!(tasaDiaUsd > 0) || !(tasaDiaVes > 0)) {
-    return res.status(400).json({ error: 'Las tasas de cambio deben ser números mayores a 0.' });
-  }
-
   try {
+    // Tasa del día: la del servidor (fijada por el admin), nunca la que envía la pantalla.
+    const tasasServidor = await resolverTasas(pagos, tasas);
+    const tasaDiaUsd = tasasServidor.USD;
+    const tasaDiaVes = tasasServidor.VES;
+
     // Calcular total del abono en COP
     let totalAbonoCop = 0;
     const pagosProcesados = [];

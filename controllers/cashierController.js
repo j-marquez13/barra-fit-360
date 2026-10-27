@@ -1,5 +1,6 @@
 import * as db from '../db.js';
 import { localNow, isPostgres, localDate, dateExpr } from '../db.js';
+import { obtenerTasas } from '../tasas.js';
 
 /**
  * Controlador de Arqueo y Sesiones de Caja (Turnos)
@@ -365,10 +366,13 @@ export async function cerrarCaja(req, res) {
     const fechaApertura = currentSession.fecha_apertura;
     const isPg = !!(process.env.DATABASE_URL || process.env.PGHOST);
 
-    // Tasas del día usadas para convertir a COP (las envía el frontend)
-    const tasas = req.body.tasas || {};
-    const tasaUsd = parseFloat(tasas.USD) || 4000.00;
-    const tasaVes = parseFloat(tasas.VES) || 100.00;
+    // Tasas para convertir a COP: la tasa del día del servidor (o la última fijada).
+    // Solo si nunca se ha fijado ninguna se usa la que envía la pantalla.
+    const { hoy, ultima } = await obtenerTasas();
+    const tasaRef = hoy || ultima;
+    const tasasCliente = req.body.tasas || {};
+    const tasaUsd = tasaRef ? tasaRef.USD : (parseFloat(tasasCliente.USD) || 4000.00);
+    const tasaVes = tasaRef ? tasaRef.VES : (parseFloat(tasasCliente.VES) || 100.00);
 
     // 1. Ingresos en efectivo de ventas por moneda (excluye crédito y ventas anuladas)
     const ventasQuery = `

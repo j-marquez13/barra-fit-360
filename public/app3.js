@@ -64,14 +64,11 @@ const STATE = {
   cart: [],
   currentCategory: 'todos',
   searchQuery: '',
-  tasas: (function() {
-    const today = localDateStr();
-    try {
-      const saved = JSON.parse(localStorage.getItem('barrafit_tasas'));
-      if (saved && saved.date === today && saved.rates) return saved.rates;
-    } catch(e) {}
-    return { USD: '', VES: '' };
-  })(),
+  // Tasa del día: la fija el administrador y se lee del servidor (ver cargarTasas).
+  // Vacía = no hay tasa de hoy → solo se puede cobrar en pesos.
+  tasas: { USD: '', VES: '' },
+  // Tasa de referencia para convertir en el cierre de caja: la de hoy o, si no hay, la última fijada.
+  tasasRef: { USD: '', VES: '' },
   apiOnline: false,
   currentView: 'pos',
   insumos: [],
@@ -162,9 +159,9 @@ document.addEventListener('DOMContentLoaded', () => {
   renderCategories();
   renderProducts();
   
-  if (DOM.rateUsd) DOM.rateUsd.value = STATE.tasas.USD;
-  if (DOM.rateVes) DOM.rateVes.value = STATE.tasas.VES;
-  
+  if (DOM.rateUsd) DOM.rateUsd.value = '';
+  if (DOM.rateVes) DOM.rateVes.value = '';
+
 checkApiHealth();
   updateTime();
   setInterval(updateTime, 1000);
@@ -370,24 +367,11 @@ checkApiHealth();
     });
   }
 
-  // Tasas de cambio
-  function saveTasasToStorage() {
-    const today = localDateStr();
-    localStorage.setItem('barrafit_tasas', JSON.stringify({ date: today, rates: STATE.tasas }));
-  }
-
-  DOM.rateUsd.addEventListener('input', (e) => {
-    STATE.tasas.USD = parseFloat(e.target.value) || 1;
-    saveTasasToStorage();
-    recalculatePayments();
-    renderCart();
-  });
-  DOM.rateVes.addEventListener('input', (e) => {
-    STATE.tasas.VES = parseFloat(e.target.value) || 1;
-    saveTasasToStorage();
-    recalculatePayments();
-    renderCart();
-  });
+  // Tasas de cambio: solo lectura; el administrador las fija con el botón "Fijar tasa del día"
+  const btnFijarTasa = document.getElementById('btn-fijar-tasa');
+  if (btnFijarTasa) btnFijarTasa.addEventListener('click', mostrarModalFijarTasa);
+  // Otro equipo (el admin) puede cambiar la tasa durante el día: refrescar cada 2 minutos
+  setInterval(() => { if (STATE.apiOnline) cargarTasas(); }, 2 * 60 * 1000);
 
   // Pago Rápido (One-click checkout)
   document.querySelectorAll('.quick-pay-btn').forEach(btn => {
@@ -617,7 +601,98 @@ function switchView(viewName) {
 // 4. FUNCIONES DE RENDERIZADO POS
 // ============================================
 
+// ==========================================
+// TASA DEL DÍA (la fija solo el administrador; se guarda en el servidor)
+// ==========================================
+function esUsuarioAdmin() {
+  try {
+    const auth = JSON.parse(sessionStorage.getItem('bf360_auth') || 'null');
+    const p = auth && auth.permisos;
+    return Array.isArray(p) && (p.includes('all') || p.includes('admin'));
+  } catch (e) { return false; }
+}
+
+function hayTasaHoy() {
+  return parseFloat(STATE.tasas.USD) > 0 && parseFloat(STATE.tasas.VES) > 0;
+}
+
+async function cargarTasas() {
+  try {
+    const res = await fetch('/api/tasas');
+    if (!res.ok) return;
+    const t = await res.json();
+    STATE.tasaInfo = t;
+    STATE.tasas = t.hoy ? { USD: t.hoy.USD, VES: t.hoy.VES } : { USD: '', VES: '' };
+    const ref = t.hoy || t.ultima;
+    STATE.tasasRef = ref ? { USD: ref.USD, VES: ref.VES } : { USD: '', VES: '' };
+  } catch (e) {
+    return;
+  }
+  pintarEstadoTasa();
+}
+
+function pintarEstadoTasa() {
+  if (DOM.rateUsd) DOM.rateUsd.value = STATE.tasas.USD;
+  if (DOM.rateVes) DOM.rateVes.value = STATE.tasas.VES;
+
+  const estado = document.getElementById('tasa-estado');
+  const t = STATE.tasaInfo;
+  if (estado && t) {
+    if (t.hoy) {
+      const hora = (t.hoy.fijada_en || '').slice(11, 16);
+      estado.textContent = `✅ Tasa de hoy${t.hoy.fijada_por ? ` · fijada por ${t.hoy.fijada_por}` : ''}${hora ? ` a las ${hora}` : ''}`;
+      estado.style.color = 'var(--color-muted)';
+    } else {
+      estado.textContent = '⚠️ Sin tasa de hoy: solo se puede cobrar en pesos (COP). El administrador debe fijarla.';
+      estado.style.color = 'var(--danger)';
+    }
+  }
+  const btn = document.getElementById('btn-fijar-tasa');
+  if (btn) btn.style.display = esUsuarioAdmin() ? 'inline-flex' : 'none';
+
+  // Sin tasa de hoy: deshabilitar cobros en USD/VES (pago rápido y modal de pago)
+  const sinTasa = !hayTasaHoy();
+  ['pay-usd-cash', 'pay-usd-zelle', 'pay-ves-movil', 'pay-binance'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      if (el.dataset.placeholderOriginal === undefined) el.dataset.placeholderOriginal = el.placeholder || '';
+      el.disabled = sinTasa;
+      if (sinTasa) el.value = '';
+      el.placeholder = sinTasa ? 'Sin tasa del día' : el.dataset.placeholderOriginal;
+    }
+  });
+  if (STATE.products.length) renderCart();
+}
+
+function mostrarModalFijarTasa() {
+  const ref = STATE.tasaInfo && (STATE.tasaInfo.hoy || STATE.tasaInfo.ultima);
+  openGenericModal('Fijar tasa del día', `
+    <p class="text-muted" style="margin-bottom: 12px;">Esta tasa se aplicará a todas las ventas y abonos en USD y Bs de hoy, en todos los equipos. Queda registrado quién la fijó.</p>
+    <div class="form-group"><label>Tasa USD (COP por 1 USD)</label><input type="number" step="any" min="0" id="inp-tasa-usd" value="${ref ? ref.USD : ''}"></div>
+    <div class="form-group"><label>Tasa VES (COP por 1 Bs)</label><input type="number" step="any" min="0" id="inp-tasa-ves" value="${ref ? ref.VES : ''}"></div>
+  `, async () => {
+    const USD = parseFloat(document.getElementById('inp-tasa-usd').value);
+    const VES = parseFloat(document.getElementById('inp-tasa-ves').value);
+    if (!(USD > 0) || !(VES > 0)) {
+      showToast('Ingresa tasas USD y VES mayores a 0.', 'warning');
+      return;
+    }
+    try {
+      const res = await fetch('/api/tasas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ USD, VES }) });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'No se pudo guardar la tasa');
+      closeGenericModal();
+      await cargarTasas();
+      recalculatePayments();
+      showToast(`Tasa del día fijada: USD ${USD} · VES ${VES}`, 'success');
+    } catch (e) {
+      showToast('Error: ' + e.message, 'danger');
+    }
+  });
+}
+
 async function loadInitialData() {
+  await cargarTasas();
   try {
     const [prodRes, rbRes, insRes, cliRes] = await Promise.all([
       fetch('/api/productos').then(r => r.ok ? r.json() : Promise.reject()),
@@ -798,22 +873,25 @@ function renderCart() {
     DOM.cartItemsContainer.appendChild(div);
   });
 
-  const tasaUsd = STATE.tasas.USD || 4000;
-  const tasaVes = STATE.tasas.VES || 100;
-  const totalUsd = totalCop / tasaUsd;
-  const totalVes = totalCop / tasaVes;
+  const conTasa = hayTasaHoy();
+  const totalUsd = conTasa ? totalCop / STATE.tasas.USD : 0;
+  const totalVes = conTasa ? totalCop / STATE.tasas.VES : 0;
 
   DOM.cartCount.textContent = `${totalItems} items`;
   DOM.summarySubtotal.textContent = `$${totalCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
   if(DOM.summaryTotalCop) DOM.summaryTotalCop.textContent = `$${totalCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
-  if(DOM.summaryTotalUsd) DOM.summaryTotalUsd.textContent = `$${totalUsd.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}`;
-  if(DOM.summaryTotalVes) DOM.summaryTotalVes.textContent = `Bs ${totalVes.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}`;
-  
+  if(DOM.summaryTotalUsd) DOM.summaryTotalUsd.textContent = conTasa ? `$${totalUsd.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}` : '— (sin tasa)';
+  if(DOM.summaryTotalVes) DOM.summaryTotalVes.textContent = conTasa ? `Bs ${totalVes.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}` : '— (sin tasa)';
+
   if(DOM.btnMixto) DOM.btnMixto.disabled = false;
   if(DOM.btnCreditoDirecto) DOM.btnCreditoDirecto.disabled = false;
   if(DOM.btnCortesiaDirecto) DOM.btnCortesiaDirecto.disabled = false;
   if(DOM.btnCortesiaGym) DOM.btnCortesiaGym.disabled = false;
-  document.querySelectorAll('.quick-pay-btn').forEach(b => b.disabled = false);
+  // Sin tasa del día solo se habilitan los cobros en pesos
+  document.querySelectorAll('.quick-pay-btn').forEach(b => {
+    b.disabled = !conTasa && b.dataset.currency !== 'COP';
+    b.title = b.disabled ? 'Sin tasa del día: el administrador debe fijarla' : '';
+  });
   lucide.createIcons();
 }
 
@@ -822,9 +900,12 @@ async function quickPay(method, currency) {
   const totalCop = calculateCartTotal();
   if (totalCop <= 0) return;
 
-  if (!STATE.tasas.USD || !STATE.tasas.VES || STATE.tasas.USD <= 0 || STATE.tasas.VES <= 0) {
-    alert('Por favor, establezca las tasas de cambio de USD y VES del día (presionando "Cobrar" -> Configurar Tasa) antes de cobrar.');
-    return;
+  if (currency !== 'COP') {
+    await cargarTasas(); // por si el admin la acaba de fijar o cambiar
+    if (!hayTasaHoy()) {
+      alert('No hay tasa del día. El administrador debe fijarla; mientras tanto solo se puede cobrar en pesos (COP).');
+      return;
+    }
   }
 
   const tasaUsd = STATE.tasas.USD || 0;
@@ -856,6 +937,7 @@ async function quickPay(method, currency) {
     
     if (!response.ok) {
       const data = await response.json();
+      if (response.status === 409 || data.sin_tasa) await cargarTasas(); // la tasa del día cambió o no existe
       throw new Error(data.error || 'Error al procesar el pago rápido');
     }
     
@@ -1136,6 +1218,7 @@ window.removeFromCart = function(index) {
 };
 
 function openPaymentModal() {
+  cargarTasas().then(() => recalculatePayments()); // tasa vigente por si el admin la cambió
   const totalCop = calculateCartTotal();
   DOM.modalTotalSale.textContent = `$${totalCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
   DOM.payInputs.forEach(i => i.value = '');
@@ -1236,9 +1319,11 @@ function recalculatePayments() {
     DOM.statusBoxIcon.setAttribute('data-lucide', 'check-circle-2');
     DOM.statusBoxTitle.textContent = 'Pago Completado';
     if (diff > 0.1) {
-      const changeUsd = diff / rateUsd;
       DOM.statusBoxDesc.textContent = 'Entregar vuelto al cliente:';
-      DOM.statusBoxValue.innerHTML = `$${diff.toLocaleString(undefined, {maximumFractionDigits: 0})} COP <span style="font-size:0.85rem; display:block; opacity:0.8;">(o $${changeUsd.toFixed(2)} USD)</span>`;
+      const vueltoUsd = hayTasaHoy()
+        ? ` <span style="font-size:0.85rem; display:block; opacity:0.8;">(o $${(diff / rateUsd).toFixed(2)} USD)</span>`
+        : '';
+      DOM.statusBoxValue.innerHTML = `$${diff.toLocaleString(undefined, {maximumFractionDigits: 0})} COP${vueltoUsd}`;
     } else {
       DOM.statusBoxDesc.textContent = 'Monto exacto recibido.';
       DOM.statusBoxValue.textContent = '$0 COP (Cambio)';
@@ -1254,16 +1339,10 @@ async function submitPayment() {
   DOM.btnConfirmPayment.disabled = true;
   DOM.btnConfirmPayment.innerHTML = `<span class="spinner"></span> Procesando...`;
 
-  const rateUsd = parseFloat(DOM.rateUsd.value) || 0;
-  const rateVes = parseFloat(DOM.rateVes.value) || 0;
-
-  if (rateUsd <= 0 || rateVes <= 0) {
-    alert('Por favor, establezca la tasa de cambio de USD y VES del día antes de continuar.');
-    DOM.btnConfirmPayment.disabled = false;
-    DOM.btnConfirmPayment.innerHTML = `<i data-lucide="check-circle-2"></i><span>Confirmar Venta</span>`;
-    lucide.createIcons();
-    return;
-  }
+  // La tasa la fija el admin; sin tasa de hoy los campos en USD/Bs están deshabilitados
+  // y el servidor rechaza cualquier pago en divisas.
+  const rateUsd = parseFloat(STATE.tasas.USD) || 0;
+  const rateVes = parseFloat(STATE.tasas.VES) || 0;
 
   const pagos = [];
   const inputMappings = [
@@ -1374,6 +1453,7 @@ async function submitPayment() {
         // Recargar productos del servidor
         await loadProductsFromAPI();
       } else {
+        if (res.status === 409 || data.sin_tasa) await cargarTasas(); // la tasa del día cambió o no existe
         showToast(`Error: ${data.error}`, 'danger');
         recalculatePayments();
       }
@@ -3983,8 +4063,9 @@ function renumberAbonoRows() {
 window.recalcAbonoTotal = function() {
   const totalEl = document.getElementById('abono-total');
   if (!totalEl) return;
-  const rateUsd = parseFloat(STATE.tasas?.USD) || 4000;
-  const rateVes = parseFloat(STATE.tasas?.VES) || 100;
+  // Sin tasa del día los abonos en USD/Bs no suman (el servidor los rechaza)
+  const rateUsd = parseFloat(STATE.tasas?.USD) || 0;
+  const rateVes = parseFloat(STATE.tasas?.VES) || 0;
   let totalCop = 0;
   document.querySelectorAll('.abono-pago-row').forEach(row => {
     const moneda = row.querySelector('.abono-moneda')?.value || 'COP';
@@ -4014,6 +4095,7 @@ function parseMontoAbono(raw) {
 }
 
 function showAbonoModal(clientId, clientName, saldoActual) {
+  cargarTasas().then(() => { if (typeof recalcAbonoTotal === 'function') recalcAbonoTotal(); });
   openGenericModal(`Registrar Abono — ${clientName}`, `
     <div class="abono-resumen">
       <span>Saldo deudor actual:</span>
@@ -4065,6 +4147,7 @@ function showAbonoModal(clientId, clientName, saldoActual) {
         loadClientesData();
         loadClientDetail(clientId);
       } else {
+        if (res.status === 409 || data.sin_tasa) { await cargarTasas(); recalcAbonoTotal(); } // la tasa del día cambió o no existe
         showToast(data.error, 'danger');
       }
     } catch (err) {
@@ -4421,8 +4504,8 @@ async function cerrarTurnoActual() {
     gastosCop = parseFloat(arqueo.total_gastos_cop) || 0;
     
     // Calcular totales convirtiendo a COP usando tasas actuales
-    const rateUsd = STATE.tasas.USD || 1;
-    const rateVes = STATE.tasas.VES || 1;
+    const rateUsd = parseFloat(STATE.tasasRef.USD) || 1;
+    const rateVes = parseFloat(STATE.tasasRef.VES) || 1;
     
     // El crédito (cuenta por cobrar) NO es dinero físico en caja: se excluye del
     // efectivo esperado, igual que hace el backend en POST /api/caja/cerrar.
@@ -4533,8 +4616,8 @@ async function cerrarTurnoActual() {
 
   const calcularDiferenciaReal = () => {
     const get = (id) => parseFloat(document.getElementById(id).value) || 0;
-    const rateUsd = STATE.tasas.USD || 1;
-    const rateVes = STATE.tasas.VES || 1;
+    const rateUsd = parseFloat(STATE.tasasRef.USD) || 1;
+    const rateVes = parseFloat(STATE.tasasRef.VES) || 1;
 
     const vPagoMovil = get('cc-dec-pago-movil');
     const vZelle = get('cc-dec-zelle');
@@ -4589,8 +4672,8 @@ async function cerrarTurnoActual() {
     
     try {
       const get = (id) => parseFloat(document.getElementById(id).value) || 0;
-      const rateUsd = STATE.tasas.USD || 1;
-      const rateVes = STATE.tasas.VES || 1;
+      const rateUsd = parseFloat(STATE.tasasRef.USD) || 1;
+      const rateVes = parseFloat(STATE.tasasRef.VES) || 1;
 
       const vPagoMovil = get('cc-dec-pago-movil');
       const vZelle = get('cc-dec-zelle');

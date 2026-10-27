@@ -1,5 +1,6 @@
 import * as db from '../db.js';
 import { validarPasswordAdmin } from '../auth.js';
+import { resolverTasas } from '../tasas.js';
 
 /**
  * Controlador de Ventas y Pagos Multimoneda
@@ -68,14 +69,12 @@ export async function processSale(req, res) {
     return res.status(400).json({ error: 'Debe registrar al menos un método de pago.' });
   }
 
-  // Establecer tasa del día por defecto (USD a COP)
-  const tasaDiaUsd = tasas && tasas.USD ? numeroValido(tasas.USD) : 4000.00;
-  const tasaDiaVes = tasas && tasas.VES ? numeroValido(tasas.VES) : 100.00;
-  if (!(tasaDiaUsd > 0) || !(tasaDiaVes > 0)) {
-    return res.status(400).json({ error: 'Las tasas de cambio deben ser números mayores a 0.' });
-  }
-
   try {
+    // Tasa del día: la del servidor (fijada por el admin), nunca la que envía la pantalla.
+    const tasasServidor = await resolverTasas(isCortesia ? [] : pagos, tasas);
+    const tasaDiaUsd = tasasServidor.USD;
+    const tasaDiaVes = tasasServidor.VES;
+
     // 2. Consultar catálogo de productos involucrados para evitar alteración de precios
     const productoIds = [...new Set(items.map(item => Number(item.producto_id)))];
     const placeholders = productoIds.map((_, i) => `$${i + 1}`).join(', ');

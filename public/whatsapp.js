@@ -12,10 +12,13 @@ function waEscapeHtml(str) {
 
 function waSleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
+// Los recordatorios de WhatsApp son del módulo de crédito: solo se consultan si el
+// usuario tiene ese permiso (el servidor responde 403 a los demás).
 function waIsLoggedIn() {
   try {
     const auth = JSON.parse(sessionStorage.getItem('bf360_auth') || 'null');
-    return !!(auth && auth.token);
+    const p = Array.isArray(auth && auth.permisos) ? auth.permisos : [];
+    return !!(auth && auth.token) && (p.includes('all') || p.includes('admin') || p.includes('credito'));
   } catch (e) { return false; }
 }
 

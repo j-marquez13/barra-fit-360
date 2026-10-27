@@ -121,6 +121,17 @@ export async function initializeDatabase() {
       // Consumo real de insumos por línea de venta (para anular exactamente lo descontado)
       await db.execute('ALTER TABLE detalle_ventas ADD COLUMN IF NOT EXISTS consumo_insumos TEXT;');
 
+      // Tasa de cambio del día fijada por el administrador (con historial)
+      await db.execute(`CREATE TABLE IF NOT EXISTS tasas_cambio (
+        id SERIAL PRIMARY KEY,
+        fecha TEXT NOT NULL,
+        usd DOUBLE PRECISION NOT NULL CHECK (usd > 0),
+        ves DOUBLE PRECISION NOT NULL CHECK (ves > 0),
+        usuario_id INT,
+        usuario_nombre TEXT,
+        creado_en TEXT
+      )`);
+
       // Desglose del arqueo de cada turno (ventas vs abonos) para el cierre consolidado
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_ventas_cop DOUBLE PRECISION;');
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_abonos_cop DOUBLE PRECISION;');
@@ -691,6 +702,16 @@ async function runMigrations() {
   try { await db.execute("ALTER TABLE usuarios ADD COLUMN bloqueado_hasta BIGINT"); } catch(e) {}
   // Consumo real de insumos por línea de venta (para anular exactamente lo descontado)
   try { await db.execute("ALTER TABLE detalle_ventas ADD COLUMN consumo_insumos TEXT"); } catch(e) {}
+  // Tasa de cambio del día fijada por el administrador (con historial)
+  await db.execute(`CREATE TABLE IF NOT EXISTS tasas_cambio (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha TEXT NOT NULL,
+    usd REAL NOT NULL CHECK (usd > 0),
+    ves REAL NOT NULL CHECK (ves > 0),
+    usuario_id INTEGER,
+    usuario_nombre TEXT,
+    creado_en TEXT
+  )`);
   // Desglose del arqueo de cada turno (ventas vs abonos) para el cierre consolidado
   try { await db.execute("ALTER TABLE sesiones_caja ADD COLUMN declarado_ventas_cop REAL"); } catch(e) {}
   try { await db.execute("ALTER TABLE sesiones_caja ADD COLUMN declarado_abonos_cop REAL"); } catch(e) {}

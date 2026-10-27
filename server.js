@@ -15,6 +15,7 @@ import { initializeDatabase } from './initDb.js';
 import * as db from './db.js';
 import { signToken, verifyToken, requireAuth, requireAdmin, requirePermiso, revokeToken, getTokenFromRequest, esAdmin, validarPasswordAdmin } from './auth.js';
 import * as whatsapp from './controllers/whatsappController.js';
+import { obtenerTasas, fijarTasa, historialTasas } from './tasas.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -76,6 +77,38 @@ const credito = requirePermiso('credito');
 const caja = requirePermiso('caja');
 const tesoreria = requirePermiso('tesoreria');
 const pos = requirePermiso('pos');
+
+// ============================================
+// TASA DE CAMBIO DEL DÍA (la fija solo el administrador)
+// ============================================
+app.get('/api/tasas', async (req, res) => {
+  try {
+    res.json(await obtenerTasas());
+  } catch (err) {
+    console.error('Error al obtener tasas:', err);
+    res.status(500).json({ error: 'Error al obtener la tasa del día.' });
+  }
+});
+
+app.post('/api/tasas', requireAdmin, async (req, res) => {
+  try {
+    const resultado = await fijarTasa(req.body || {}, req.usuario);
+    console.log(`💱 Tasa del día fijada por ${req.usuario.nombre}: USD ${resultado.hoy.USD} · VES ${resultado.hoy.VES}`);
+    res.status(201).json(resultado);
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('Error al fijar tasa:', err);
+    res.status(500).json({ error: 'Error al guardar la tasa del día.' });
+  }
+});
+
+app.get('/api/tasas/historial', requireAdmin, async (req, res) => {
+  try {
+    res.json(await historialTasas());
+  } catch (err) {
+    res.status(500).json({ error: 'Error al obtener el historial de tasas.' });
+  }
+});
 
 // Endpoint para descargar la base de datos (Backup)
 app.get('/api/backup-db', requireAdmin, (req, res) => {

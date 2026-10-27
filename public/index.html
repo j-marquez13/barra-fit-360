@@ -315,15 +315,22 @@
                 <label for="rate-usd" style="font-size: 0.75rem; color: var(--color-muted); margin-bottom: 4px; font-weight: 600;">Tasa USD (COP/USD)</label>
                 <div style="display: flex; align-items: center; background: var(--bg-surface); border: 1px solid var(--border-glass); border-radius: 6px; padding: 4px 8px;">
                   <span style="color: var(--color-muted); font-size: 0.85rem; margin-right: 4px;">$</span>
-                  <input type="number" id="rate-usd" min="1" step="any" style="background: transparent; border: none; color: var(--color-text); width: 100%; outline: none; font-size: 0.9rem;" placeholder="0">
+                  <input type="number" id="rate-usd" min="1" step="any" readonly title="La tasa del día la fija el administrador" style="background: transparent; border: none; color: var(--color-text); width: 100%; outline: none; font-size: 0.9rem;" placeholder="—">
                 </div>
               </div>
               <div class="rate-input-group" style="display: flex; flex-direction: column; flex: 1;">
                 <label for="rate-ves" style="font-size: 0.75rem; color: var(--color-muted); margin-bottom: 4px; font-weight: 600;">Tasa VES (COP/VES)</label>
                 <div style="display: flex; align-items: center; background: var(--bg-surface); border: 1px solid var(--border-glass); border-radius: 6px; padding: 4px 8px;">
                   <span style="color: var(--color-muted); font-size: 0.85rem; margin-right: 4px;">Bs</span>
-                  <input type="number" id="rate-ves" min="0.1" step="any" style="background: transparent; border: none; color: var(--color-text); width: 100%; outline: none; font-size: 0.9rem;" placeholder="0">
+                  <input type="number" id="rate-ves" min="0.1" step="any" readonly title="La tasa del día la fija el administrador" style="background: transparent; border: none; color: var(--color-text); width: 100%; outline: none; font-size: 0.9rem;" placeholder="—">
                 </div>
+              </div>
+              <!-- Estado de la tasa del día (la fija solo el administrador) -->
+              <div style="flex-basis: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
+                <span id="tasa-estado" style="font-size: 0.75rem; color: var(--color-muted);">Cargando tasa del día…</span>
+                <button type="button" id="btn-fijar-tasa" class="action-btn" style="display: none; padding: 4px 10px; font-size: 0.75rem;">
+                  <i data-lucide="pencil"></i> Fijar tasa del día
+                </button>
               </div>
             </div>
 
@@ -2356,8 +2363,8 @@
     </div>
   </div>
 
-  <script src="app3.js?v=51"></script>
-  <script src="whatsapp.js?v=4"></script>
+  <script src="app3.js?v=52"></script>
+  <script src="whatsapp.js?v=5"></script>
 <!-- Script to automatically replace commas with dots in number inputs -->
   <script>
     document.addEventListener('keydown', function(e) {

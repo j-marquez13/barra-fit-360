@@ -63,6 +63,19 @@ const batido = r.data.producto.id;
 r = await api('POST', '/api/caja/abrir', { usuario_id: 999, fondo_inicial_cop: 0, turno: 'Mañana' }, admin);
 check('abrir caja (ignora usuario_id del body)', r.status === 201 && r.data.sesion.nombre_cajero === 'Admin Principal', r);
 
+console.log('\n== Tasa del día ==');
+r = await api('GET', '/api/tasas', undefined, admin);
+check('al inicio no hay tasa de hoy', r.status === 200 && r.data.hoy === null, r.data);
+r = await api('POST', '/api/ventas', { items: [{ producto_id: batido, cantidad: 1 }], pagos: [{ metodo_pago: 'Zelle', moneda: 'USD', monto_original: 5 }], tasas: { USD: 4000, VES: 100 } }, admin);
+check('sin tasa de hoy: venta en USD rechazada', r.status === 400 && r.data.sin_tasa === true, r);
+r = await api('POST', '/api/ventas', { items: [{ producto_id: batido, cantidad: 1 }], pagos: [{ metodo_pago: 'Efectivo COP', moneda: 'COP', monto_original: 10000 }] }, admin);
+check('sin tasa de hoy: venta en pesos sí se permite', r.status === 201, r);
+r = await api('POST', '/api/tasas', { USD: -5, VES: 100 }, admin);
+check('tasa inválida -> 400', r.status === 400, r);
+r = await api('POST', '/api/tasas', { USD: 4000, VES: 100 }, admin);
+check('admin fija la tasa del día', r.status === 201 && r.data.hoy.USD === 4000 && r.data.hoy.VES === 100, r);
+check('queda registrado quién la fijó', r.data.hoy.fijada_por === 'Admin Principal', r.data.hoy);
+
 console.log('\n== Venta y anulación ==');
 const saldos = async () => Object.fromEntries((await api('GET', '/api/tesoreria/saldos', undefined, admin)).data.map(c => [c.nombre, Number(c.saldo)]));
 const s0 = await saldos();
@@ -100,8 +113,11 @@ r = await api('POST', '/api/ventas', { ...venta, items: [{ producto_id: agua, ca
 check('cantidad negativa -> 400', r.status === 400, r);
 r = await api('POST', '/api/ventas', { ...venta, pagos: [{ metodo_pago: 'Zelle', moneda: 'USD', monto_original: -5 }] }, admin);
 check('monto negativo -> 400', r.status === 400, r);
-r = await api('POST', '/api/ventas', { ...venta, tasas: { USD: -1, VES: 100 } }, admin);
-check('tasa negativa -> 400', r.status === 400, r);
+r = await api('POST', '/api/ventas', { ...venta, tasas: { USD: 9000, VES: 100 } }, admin);
+check('tasa distinta a la del día (manipulada o vieja) -> 409', r.status === 409 && r.data.tasas.USD === 4000, r);
+r = await api('POST', '/api/ventas', { ...venta, tasas: undefined }, admin);
+check('sin enviar tasa, el servidor usa la del día', r.status === 201 && r.data.pagos[0].tasa_cambio === 4000, r);
+await api('POST', `/api/ventas/${r.data.venta_id}/anular`, { admin_password: 'AdminPrueba1' }, admin);
 r = await api('POST', '/api/clientes', { nombre: 'Cliente <script>alert(1)</script>', identificacion: 'V-1', telefono: '', limite_credito: 0 }, admin);
 check('crear cliente', r.status === 201, r);
 const cli = r.data.cliente;
@@ -157,6 +173,9 @@ check('cajero NO crea insumos -> 403', (await api('POST', '/api/insumos', { nomb
 check('cajero NO ve reportes -> 403', (await api('GET', '/api/reportes/ventas', undefined, caj)).status === 403);
 check('cajero NO transfiere -> 403', (await api('POST', '/api/tesoreria/transferir', { cuenta_origen: 'Zelle', cuenta_destino: 'Binance', monto_origen: 1, tasa_cambio: 1, motivo: 'x' }, caj)).status === 403);
 check('cajero NO lista usuarios -> 403', (await api('GET', '/api/usuarios', undefined, caj)).status === 403);
+check('cajero NO puede fijar la tasa -> 403', (await api('POST', '/api/tasas', { USD: 1, VES: 1 }, caj)).status === 403);
+r = await api('GET', '/api/tasas', undefined, caj);
+check('cajero sí ve la tasa del día', r.status === 200 && r.data.hoy && r.data.hoy.USD === 4000, r.data);
 check('cajero sí registra gastos (permiso caja)', (await api('GET', '/api/gastos', undefined, caj)).status === 200);
 // Dar permiso de reportes: debe aplicar sin volver a iniciar sesión
 await api('PUT', `/api/usuarios/${cajeroId}`, { nombre: 'Cajero Prueba', turno: 'Mañana', permisos: ['pos', 'caja', 'reportes'] }, admin);
