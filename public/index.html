@@ -2025,19 +2025,29 @@
             <div class="ctd-header-icon"><i data-lucide="calendar-check"></i></div>
             <div>
               <div class="ctd-title">TICKET DEL DÍA</div>
-              <div class="ctd-subtitle">Resumen consolidado de turnos</div>
+              <div class="ctd-subtitle" id="dia-subtitle">—</div>
             </div>
           </div>
 
           <section class="ctd-card">
             <div class="ctd-card-head">
               <span class="ctd-card-icon ctd-icon-green"><i data-lucide="shopping-cart"></i></span>
-              <span class="ctd-card-title">Ventas del Día</span>
+              <span class="ctd-card-title">Ventas del Día (Contado)</span>
               <span class="ctd-card-total ctd-mono" id="dia-ventas-total">$0</span>
             </div>
-            <div class="ctd-row"><span>Fecha</span><strong class="ctd-mono" id="dia-fecha">—</strong></div>
-            <div class="ctd-row"><span>Turnos Incluidos</span><strong class="ctd-mono" id="dia-turnos">0</strong></div>
-            <div class="ctd-row"><span>Abonos (Cobranza)</span><strong class="ctd-mono" id="dia-abonos" style="color: var(--cyan-neon);">$0</strong></div>
+            <table class="ctd-table">
+              <thead>
+                <tr><th>Método</th><th>Monto</th><th>Tasa</th><th>Total</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Pago Móvil (Bs)</td><td class="ctd-mono" id="dv-m-pago-movil">Bs 0</td><td class="ctd-mono" id="dv-t-pago-movil">—</td><td class="ctd-mono" id="dv-c-pago-movil">$0</td></tr>
+                <tr><td>Zelle (USD)</td><td class="ctd-mono" id="dv-m-zelle">$0</td><td class="ctd-mono" id="dv-t-zelle">—</td><td class="ctd-mono" id="dv-c-zelle">$0</td></tr>
+                <tr><td>Binance (USD)</td><td class="ctd-mono" id="dv-m-binance">$0</td><td class="ctd-mono" id="dv-t-binance">—</td><td class="ctd-mono" id="dv-c-binance">$0</td></tr>
+                <tr><td>Efectivo (USD)</td><td class="ctd-mono" id="dv-m-usd">$0</td><td class="ctd-mono" id="dv-t-usd">—</td><td class="ctd-mono" id="dv-c-usd">$0</td></tr>
+                <tr><td>Pesos Efectivo (COP)</td><td class="ctd-mono" id="dv-m-pesos">$0</td><td class="ctd-mono" id="dv-t-pesos">1</td><td class="ctd-mono" id="dv-c-pesos">$0</td></tr>
+                <tr><td>Bancolombia (COP)</td><td class="ctd-mono" id="dv-m-bancolombia">$0</td><td class="ctd-mono" id="dv-t-bancolombia">1</td><td class="ctd-mono" id="dv-c-bancolombia">$0</td></tr>
+              </tbody>
+            </table>
             <div class="ctd-foot-row ctd-foot-danger">
               <span><i data-lucide="credit-card"></i> Cuentas por Cobrar (Crédito)</span>
               <strong class="ctd-mono" id="dia-credito">$0</strong>
@@ -2046,6 +2056,27 @@
               <span><i data-lucide="receipt"></i> Venta Total Facturada</span>
               <strong class="ctd-mono" id="dia-facturado">$0</strong>
             </div>
+          </section>
+
+          <section class="ctd-card">
+            <div class="ctd-card-head">
+              <span class="ctd-card-icon ctd-icon-cyan"><i data-lucide="hand-coins"></i></span>
+              <span class="ctd-card-title">Cobranzas / Abonos</span>
+              <span class="ctd-card-total ctd-mono" id="dia-abonos-total">$0</span>
+            </div>
+            <table class="ctd-table">
+              <thead>
+                <tr><th>Método</th><th>Monto</th><th>Tasa</th><th>Total</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Pago Móvil (Bs)</td><td class="ctd-mono" id="da-m-pago-movil">Bs 0</td><td class="ctd-mono" id="da-t-pago-movil">—</td><td class="ctd-mono" id="da-c-pago-movil">$0</td></tr>
+                <tr><td>Zelle (USD)</td><td class="ctd-mono" id="da-m-zelle">$0</td><td class="ctd-mono" id="da-t-zelle">—</td><td class="ctd-mono" id="da-c-zelle">$0</td></tr>
+                <tr><td>Binance (USD)</td><td class="ctd-mono" id="da-m-binance">$0</td><td class="ctd-mono" id="da-t-binance">—</td><td class="ctd-mono" id="da-c-binance">$0</td></tr>
+                <tr><td>Efectivo (USD)</td><td class="ctd-mono" id="da-m-usd">$0</td><td class="ctd-mono" id="da-t-usd">—</td><td class="ctd-mono" id="da-c-usd">$0</td></tr>
+                <tr><td>Pesos Efectivo (COP)</td><td class="ctd-mono" id="da-m-pesos">$0</td><td class="ctd-mono" id="da-t-pesos">1</td><td class="ctd-mono" id="da-c-pesos">$0</td></tr>
+                <tr><td>Bancolombia (COP)</td><td class="ctd-mono" id="da-m-bancolombia">$0</td><td class="ctd-mono" id="da-t-bancolombia">1</td><td class="ctd-mono" id="da-c-bancolombia">$0</td></tr>
+              </tbody>
+            </table>
           </section>
 
           <section class="ctd-card">
@@ -2067,22 +2098,9 @@
 
           <section class="ctd-card">
             <div class="ctd-card-head">
-              <span class="ctd-card-icon ctd-icon-cyan"><i data-lucide="wallet"></i></span>
-              <span class="ctd-card-title">Declaración y Arqueo</span>
+              <span class="ctd-card-icon ctd-icon-gold"><i data-lucide="wallet"></i></span>
+              <span class="ctd-card-title">Arqueo Final</span>
             </div>
-            <table class="ctd-table">
-              <thead>
-                <tr><th>Método</th><th>Declarado</th></tr>
-              </thead>
-              <tbody>
-                <tr><td>Pago Móvil (Bs)</td><td class="ctd-mono" id="dia-pago-movil">Bs 0</td></tr>
-                <tr><td>Zelle (USD)</td><td class="ctd-mono" id="dia-zelle">$0</td></tr>
-                <tr><td>Binance (USD)</td><td class="ctd-mono" id="dia-binance">$0</td></tr>
-                <tr><td>Efectivo (USD)</td><td class="ctd-mono" id="dia-efectivo-usd">$0</td></tr>
-                <tr><td>Pesos Efectivo (COP)</td><td class="ctd-mono" id="dia-efectivo-pesos">$0</td></tr>
-                <tr><td>Bancolombia (COP)</td><td class="ctd-mono" id="dia-bancolombia">$0</td></tr>
-              </tbody>
-            </table>
             <div class="ctd-foot-row ctd-foot-total">
               <span><i data-lucide="wallet"></i> Declarado Total (COP)</span>
               <strong class="ctd-mono" id="dia-declarado">$0</strong>

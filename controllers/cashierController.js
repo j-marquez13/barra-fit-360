@@ -251,6 +251,46 @@ export async function cierreDia(req, res) {
       WHERE ${dateExpr('fecha_apertura')} = $1 AND estado = 'Cerrada'
     `, [fecha]);
 
+    // Desglose por método de pago (ventas de contado y abonos) del día
+    const ventasDetalleQuery = `
+      SELECT pv.moneda, pv.metodo_pago,
+             SUM(pv.monto_original) as total_original,
+             SUM(pv.monto_base) as total_base
+      FROM pagos_ventas pv JOIN ventas v ON pv.venta_id = v.id
+      WHERE ${dateExpr('pv.fecha')} = $1 AND pv.metodo_pago != 'Crédito' AND v.tipo_transaccion != 'Anulada'
+      GROUP BY pv.moneda, pv.metodo_pago
+    `;
+    const ventasDetalleData = await db.query(ventasDetalleQuery, [fecha]);
+
+    const abonosDetalleQuery = `
+      SELECT pa.moneda, pa.metodo_pago,
+             SUM(pa.monto_original) as total_original,
+             SUM(pa.monto_base) as total_base
+      FROM pagos_abonos pa
+      WHERE ${dateExpr('pa.fecha')} = $1
+      GROUP BY pa.moneda, pa.metodo_pago
+    `;
+    const abonosDetalleData = await db.query(abonosDetalleQuery, [fecha]);
+
+    const ventasDetalle = {};
+    const abonosDetalle = {};
+    ventasDetalleData.forEach(r => {
+      const moneda = (r.moneda || '').toUpperCase();
+      if (!ventasDetalle[moneda]) ventasDetalle[moneda] = {};
+      ventasDetalle[moneda][r.metodo_pago] = {
+        monto: parseFloat(r.total_original || 0),
+        total_cop: parseFloat(r.total_base || 0)
+      };
+    });
+    abonosDetalleData.forEach(r => {
+      const moneda = (r.moneda || '').toUpperCase();
+      if (!abonosDetalle[moneda]) abonosDetalle[moneda] = {};
+      abonosDetalle[moneda][r.metodo_pago] = {
+        monto: parseFloat(r.total_original || 0),
+        total_cop: parseFloat(r.total_base || 0)
+      };
+    });
+
     const r = rows[0] || {};
     return res.json({
       fecha,
@@ -270,7 +310,9 @@ export async function cierreDia(req, res) {
         declarado_efectivo_pesos: parseFloat(r.declarado_efectivo_pesos || 0),
         declarado_bancolombia: parseFloat(r.declarado_bancolombia || 0),
         declarado_efectivo_usd: parseFloat(r.declarado_efectivo_usd || 0),
-        diferencia_caja: parseFloat(r.diferencia_caja || 0)
+        diferencia_caja: parseFloat(r.diferencia_caja || 0),
+        ventas_detalle: ventasDetalle,
+        abonos_detalle: abonosDetalle
       }
     });
   } catch (error) {

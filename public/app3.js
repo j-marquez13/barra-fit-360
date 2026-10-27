@@ -4760,42 +4760,72 @@ async function cerrarTurnoActual() {
   };
 }
 
-window.loadCierreDia = async function() {
+window.loadCierreDia = async function(fechaReq) {
   if (!STATE.apiOnline) {
     showToast('Modo Local. Conecta al servidor para ver el cierre diario.', 'warning');
     return;
   }
   try {
-    const fecha = localDateStr();
-    const res = await fetch(`/api/caja/cierre-dia?fecha=${fecha}`);
+    const fecha = fechaReq || localDateStr();
+    const res = await fetch(`/api/caja/cierre-dia?fecha=${encodeURIComponent(fecha)}`);
     const d = await res.json();
     if (!res.ok) throw new Error(d.error || 'Error al cargar el cierre diario');
 
     const r = d.resumen || {};
     const fmt = (v) => Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 });
+    const setMonto = (id, texto) => { const el = document.getElementById(id); if (el) el.textContent = texto; };
 
-    document.getElementById('dia-fecha').textContent = d.fecha || '';
-    document.getElementById('dia-turnos').textContent = r.total_turnos || 0;
+    setMonto('dia-subtitle', `${d.fecha || fecha} · ${r.total_turnos || 0} turnos`);
+
     const ventasContado = (r.total_ventas_contado_cop ?? r.total_ventas_cop ?? 0);
     const credito = (r.total_ventas_credito_cop || 0);
-    document.getElementById('dia-ventas-total').textContent = `$${fmt(ventasContado)}`;
-    document.getElementById('dia-abonos').textContent = `$${fmt(r.total_abonos_cop || 0)}`;
-    document.getElementById('dia-credito').textContent = `$${fmt(credito)}`;
-    document.getElementById('dia-facturado').textContent = `$${fmt(ventasContado + credito)}`;
+    const abonosTotal = (r.total_abonos_cop || 0);
+    setMonto('dia-ventas-total', `$${fmt(ventasContado)}`);
+    setMonto('dia-credito', `$${fmt(credito)}`);
+    setMonto('dia-facturado', `$${fmt(ventasContado + credito)}`);
+    setMonto('dia-abonos-total', `$${fmt(abonosTotal)}`);
 
-    document.getElementById('dia-costo').textContent = `-$${fmt(r.costo_produccion || 0)}`;
+    const vDet = r.ventas_detalle || {};
+    const aDet = r.abonos_detalle || {};
+    const pickDet = (detalle, moneda, claves) => {
+      let monto = 0, cop = 0;
+      (claves || []).forEach(k => {
+        const d = detalle?.[moneda]?.[k];
+        monto += parseFloat(d?.monto || 0);
+        cop += parseFloat(d?.total_cop || 0);
+      });
+      return { monto, cop };
+    };
+    const metodos = [
+      { key: 'pago-movil', moneda: 'VES', claves: ['Pago Móvil', 'Pago Movil'], simbolo: 'Bs ' },
+      { key: 'zelle', moneda: 'USD', claves: ['Zelle'], simbolo: '$' },
+      { key: 'binance', moneda: 'USD', claves: ['Binance'], simbolo: '$' },
+      { key: 'usd', moneda: 'USD', claves: ['Efectivo USD', 'Efectivo'], simbolo: '$' },
+      { key: 'pesos', moneda: 'COP', claves: ['Efectivo COP', 'Efectivo'], simbolo: '$' },
+      { key: 'bancolombia', moneda: 'COP', claves: ['Bancolombia'], simbolo: '$' }
+    ];
+    const fmtTasa = (t, moneda) => moneda === 'COP' ? '1' : (t > 0 ? t.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 4 }) : '—');
+
+    metodos.forEach(m => {
+      const v = pickDet(vDet, m.moneda, m.claves);
+      const a = pickDet(aDet, m.moneda, m.claves);
+      const tasaV = v.monto > 0 ? (v.cop / v.monto) : 0;
+      const tasaA = a.monto > 0 ? (a.cop / a.monto) : 0;
+      setMonto(`dv-m-${m.key}`, `${m.simbolo}${fmt(v.monto)}`);
+      setMonto(`dv-t-${m.key}`, fmtTasa(tasaV, m.moneda));
+      setMonto(`dv-c-${m.key}`, `$${fmt(v.cop)}`);
+      setMonto(`da-m-${m.key}`, `${m.simbolo}${fmt(a.monto)}`);
+      setMonto(`da-t-${m.key}`, fmtTasa(tasaA, m.moneda));
+      setMonto(`da-c-${m.key}`, `$${fmt(a.cop)}`);
+    });
+
+    setMonto('dia-costo', `-$${fmt(r.costo_produccion || 0)}`);
     const utilidad = r.utilidad_neta || 0;
+    setMonto('dia-utilidad', `${utilidad < 0 ? '-' : ''}$${fmt(Math.abs(utilidad))}`);
     const utilEl = document.getElementById('dia-utilidad');
-    utilEl.textContent = `$${fmt(utilidad)}`;
-    utilEl.style.color = utilidad >= 0 ? 'var(--success)' : 'var(--danger)';
+    if (utilEl) utilEl.style.color = utilidad >= 0 ? 'var(--success)' : 'var(--danger)';
 
-    document.getElementById('dia-pago-movil').textContent = `Bs ${fmt(r.declarado_pago_movil || 0)}`;
-    document.getElementById('dia-zelle').textContent = `$${fmt(r.declarado_zelle || 0)}`;
-    document.getElementById('dia-binance').textContent = `$${fmt(r.declarado_binance || 0)}`;
-    document.getElementById('dia-efectivo-usd').textContent = `$${fmt(r.declarado_efectivo_usd || 0)}`;
-    document.getElementById('dia-efectivo-pesos').textContent = `$${fmt(r.declarado_efectivo_pesos || 0)}`;
-    document.getElementById('dia-bancolombia').textContent = `$${fmt(r.declarado_bancolombia || 0)}`;
-    document.getElementById('dia-declarado').textContent = `$${fmt(r.declarado_cop || 0)}`;
+    setMonto('dia-declarado', `$${fmt(r.declarado_cop || 0)}`);
 
     const diff = r.diferencia_caja || 0;
     const diffEl = document.getElementById('dia-diferencia');
@@ -4891,54 +4921,7 @@ async function loadCierresAdmin() {
 window.verTicketCierre = function(idx) {
   const c = cierresCache[idx];
   if (!c) return;
-  const fmt = (v) => Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-
-  document.getElementById('dia-fecha').textContent = c.fecha;
-  document.getElementById('dia-turnos').textContent = c.total_turnos || 0;
-  const ventasContado = (c.total_ventas_contado_cop ?? c.total_ventas_cop ?? 0);
-  const credito = (c.total_ventas_credito_cop || 0);
-  document.getElementById('dia-ventas-total').textContent = `$${fmt(ventasContado)}`;
-  document.getElementById('dia-abonos').textContent = `$${fmt(c.total_abonos_cop)}`;
-  document.getElementById('dia-credito').textContent = `$${fmt(credito)}`;
-  document.getElementById('dia-facturado').textContent = `$${fmt(ventasContado + credito)}`;
-
-  document.getElementById('dia-costo').textContent = `-$${fmt(c.costo_produccion)}`;
-
-  document.getElementById('dia-declarado').textContent = `$${fmt(c.declarado_cop)}`;
-  document.getElementById('dia-pago-movil').textContent = `Bs ${fmt(c.declarado_pago_movil)}`;
-  document.getElementById('dia-zelle').textContent = `$${fmt(c.declarado_zelle)}`;
-  document.getElementById('dia-binance').textContent = `$${fmt(c.declarado_binance)}`;
-  document.getElementById('dia-efectivo-usd').textContent = `$${fmt(c.declarado_efectivo_usd)}`;
-  document.getElementById('dia-efectivo-pesos').textContent = `$${fmt(c.declarado_efectivo_pesos)}`;
-  document.getElementById('dia-bancolombia').textContent = `$${fmt(c.declarado_bancolombia)}`;
-
-  const utilEl = document.getElementById('dia-utilidad');
-  utilEl.textContent = `$${fmt(c.utilidad_neta)}`;
-  utilEl.style.color = c.utilidad_neta >= 0 ? 'var(--success)' : 'var(--danger)';
-
-  const diff = c.diferencia_caja || 0;
-  const diffEl = document.getElementById('dia-diferencia');
-  const diffRow = document.getElementById('dia-diff-row');
-  if (Math.abs(diff) < 100) {
-    diffEl.textContent = '$0';
-    diffRow.style.color = 'var(--success)';
-  } else if (diff < 0) {
-    diffEl.textContent = `-$${Math.abs(diff).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
-    diffRow.style.color = 'var(--danger)';
-  } else {
-    diffEl.textContent = `+$${diff.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
-    diffRow.style.color = 'var(--success)';
-  }
-
-  document.getElementById('cierre-dia-overlay').classList.add('open');
-  lucide.createIcons();
-
-  document.getElementById('btn-dia-cerrar').onclick = () => {
-    document.getElementById('cierre-dia-overlay').classList.remove('open');
-  };
-  document.getElementById('btn-dia-imprimir').onclick = () => {
-    window.print();
-  };
+  loadCierreDia(c.fecha);
 };
 
 function exportarCierresCSV() {
