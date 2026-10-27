@@ -1742,7 +1742,7 @@ async function loadInventarioData() {
     renderProductosTable(productosRes.productos || []);
   } catch (err) {
     console.error('Error cargando inventario:', err);
-    showOfflineMessage('tbody-insumos', 10);
+    showOfflineMessage('tbody-insumos', 13);
     showOfflineMessage('tbody-mermas', 5);
     showOfflineMessage('tbody-productos', 8);
   }
@@ -2084,9 +2084,12 @@ window.filtrarTabla = function(inputId, tbodyId) {
 function renderInsumosTable(insumos) {
   const tbody = document.getElementById('tbody-insumos');
   if (!insumos || insumos.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="10" class="loading-cell">No hay insumos registrados.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="13" class="loading-cell">No hay insumos registrados.</td></tr>';
     return;
   }
+  // Mismo cálculo que el total "Costo Reposición" (/api/inventario/valorizacion):
+  // costo × (stock fijo − stock actual); si sobra stock, el excedente resta.
+  const reposicionDe = (i) => ((parseFloat(i.stock_fijo) || 0) - (parseFloat(i.stock_actual) || 0)) * (parseFloat(i.costo_unitario) || 0);
   // Ordenar según el selector
   const sortVal = document.getElementById('sort-insumos-select')?.value || 'nombre-asc';
   const sortFn = (a, b) => {
@@ -2099,6 +2102,8 @@ function renderInsumosTable(insumos) {
       case 'costo-desc': return (parseFloat(b.costo_unitario)||0) - (parseFloat(a.costo_unitario)||0);
       case 'valor-fijo-asc': return ((parseFloat(a.stock_fijo)||0)*(parseFloat(a.costo_unitario)||0)) - ((parseFloat(b.stock_fijo)||0)*(parseFloat(b.costo_unitario)||0));
       case 'valor-fijo-desc': return ((parseFloat(b.stock_fijo)||0)*(parseFloat(b.costo_unitario)||0)) - ((parseFloat(a.stock_fijo)||0)*(parseFloat(a.costo_unitario)||0));
+      case 'reposicion-asc': return reposicionDe(a) - reposicionDe(b);
+      case 'reposicion-desc': return reposicionDe(b) - reposicionDe(a);
       default: return a.nombre.localeCompare(b.nombre);
     }
   };
@@ -2112,6 +2117,13 @@ function renderInsumosTable(insumos) {
     const stockFijo = parseFloat(ins.stock_fijo) || 0;
     const costoUnit = parseFloat(ins.costo_unitario) || 0;
     const valorFijo = stockFijo * costoUnit;
+    // Como el total "Capital Actual": el stock negativo no suma
+    const valorActual = Math.max(0, stock || 0) * costoUnit;
+    const porComprar = stockFijo - (stock || 0);
+    const reposicion = reposicionDe(ins);
+    const fmtNum = (v) => v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 });
+    const reposicionTxt = reposicion < 0 ? `-$${fmtNum(Math.abs(reposicion))}` : `$${fmtNum(reposicion)}`;
+    const reposicionColor = reposicion > 0 ? 'var(--warning)' : (reposicion < 0 ? 'var(--success)' : 'var(--text-muted)');
     let statusClass = 'status-ok', statusText = 'OK';
     if (stock <= 0) { statusClass = 'status-critical'; statusText = 'Agotado'; }
     else if (stock <= min) { statusClass = 'status-warn'; statusText = 'Bajo'; }
@@ -2124,8 +2136,11 @@ function renderInsumosTable(insumos) {
         <td class="font-outfit">${stock.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
         <td>${min.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
         <td>${stockFijo.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+        <td class="font-outfit">${fmtNum(porComprar)}</td>
         <td>$${costoUnit.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+        <td class="font-outfit">$${fmtNum(valorActual)}</td>
         <td style="color:var(--accent-cyan); font-weight:bold;">$${valorFijo.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
+        <td class="font-outfit" style="color:${reposicionColor}; font-weight:bold;">${reposicionTxt}</td>
         <td><span class="status-pill ${statusClass}">${statusText}</span></td>
         <td>
           <div class="table-actions">

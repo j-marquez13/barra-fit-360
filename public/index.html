@@ -451,7 +451,7 @@
                 <div class="kpi-data">
                   <span class="kpi-label">Costo Reposición</span>
                   <span class="kpi-value" id="val-reposicion" style="color: var(--warning)">$0</span>
-                  <span class="kpi-sub">Para llegar al mínimo</span>
+                  <span class="kpi-sub">Para llegar al stock fijo</span>
                 </div>
               </div>
               <div class="kpi-card" style="background: rgba(0, 230, 118, 0.05); border: 1px solid rgba(0, 230, 118, 0.2);">
@@ -478,6 +478,8 @@
                 <option value="costo-asc">Costo ↑ (menor)</option>
                 <option value="valor-fijo-desc">Valor Fijo ↓ (mayor)</option>
                 <option value="valor-fijo-asc">Valor Fijo ↑ (menor)</option>
+                <option value="reposicion-desc">Costo Reposición ↓ (mayor)</option>
+                <option value="reposicion-asc">Costo Reposición ↑ (menor)</option>
               </select>
             </div>
             <div class="data-table-wrapper">
@@ -490,14 +492,17 @@
                     <th>Stock Actual</th>
                     <th>Stock Mínimo</th>
                     <th>Stock Fijo</th>
+                    <th>Por Comprar</th>
                     <th>Costo Unit.</th>
+                    <th>Valor Actual</th>
                     <th>Valor Fijo</th>
+                    <th>Costo Reposición</th>
                     <th>Estado</th>
                     <th>Acciones</th>
                   </tr>
                 </thead>
                 <tbody id="tbody-insumos">
-                  <tr><td colspan="10" class="loading-cell">Cargando insumos...</td></tr>
+                  <tr><td colspan="13" class="loading-cell">Cargando insumos...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -2363,7 +2368,7 @@
     </div>
   </div>
 
-  <script src="app3.js?v=52"></script>
+  <script src="app3.js?v=53"></script>
   <script src="whatsapp.js?v=5"></script>
 <!-- Script to automatically replace commas with dots in number inputs -->
   <script>
