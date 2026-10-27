@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import bcrypt from 'bcryptjs';
 import * as db from './db.js';
 
 /**
@@ -137,6 +138,58 @@ export function requireAdmin(req, res, next) {
     return res.status(403).json({ error: 'Se requieren permisos de administrador.' });
   }
   next();
+}
+
+// ============================================
+// Contraseña de administrador para autorizar acciones (anular venta, eliminar abono,
+// restaurar BD). Con límite de intentos: sin él, cualquier usuario con sesión podría
+// probar claves sin fin hasta dar con la del administrador.
+// ============================================
+const MAX_INTENTOS_ADMIN = 5;
+const BLOQUEO_ADMIN_MS = 15 * 60 * 1000;
+const intentosAdmin = new Map(); // clave (usuario o IP) → { fallos, bloqueadoHasta }
+
+function claveIntentos(req) {
+  if (req.usuario && req.usuario.usuario_id) return `u:${req.usuario.usuario_id}`;
+  return `ip:${req.ip || (req.socket && req.socket.remoteAddress) || 'desconocida'}`;
+}
+
+/**
+ * Verifica que `password` sea la contraseña de algún administrador.
+ * Devuelve { ok: true } o { ok: false, status, error } listo para responder.
+ */
+export async function validarPasswordAdmin(req, password) {
+  const clave = claveIntentos(req);
+  const ahora = Date.now();
+  const estado = intentosAdmin.get(clave) || { fallos: 0, bloqueadoHasta: 0 };
+
+  if (estado.bloqueadoHasta > ahora) {
+    const minutos = Math.ceil((estado.bloqueadoHasta - ahora) / 60000);
+    return { ok: false, status: 429, error: `Demasiados intentos con la contraseña de administrador. Intenta de nuevo en ${minutos} minuto(s).` };
+  }
+  if (!password) {
+    return { ok: false, status: 400, error: 'Se requiere la contraseña de administrador.' };
+  }
+
+  const admins = await db.query("SELECT id, password_hash FROM usuarios WHERE rol = 'Administrador'");
+  if (admins.length === 0) {
+    return { ok: false, status: 500, error: 'No hay administradores configurados en el sistema.' };
+  }
+  for (const admin of admins) {
+    if (admin.password_hash && await bcrypt.compare(String(password), admin.password_hash)) {
+      intentosAdmin.delete(clave);
+      return { ok: true };
+    }
+  }
+
+  estado.fallos += 1;
+  if (estado.fallos >= MAX_INTENTOS_ADMIN) {
+    estado.fallos = 0;
+    estado.bloqueadoHasta = ahora + BLOQUEO_ADMIN_MS;
+    console.log(`🔒 Bloqueo de 15 min por intentos fallidos de contraseña de administrador (${clave}).`);
+  }
+  intentosAdmin.set(clave, estado);
+  return { ok: false, status: 401, error: 'Contraseña de administrador incorrecta.' };
 }
 
 /**

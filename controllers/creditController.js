@@ -1,5 +1,5 @@
 import * as db from '../db.js';
-import bcrypt from 'bcryptjs';
+import { validarPasswordAdmin } from '../auth.js';
 
 /**
  * Controlador de Clientes y Líneas de Crédito (Cuentas por Cobrar)
@@ -342,18 +342,10 @@ export async function deleteAbono(req, res) {
   }
 
   try {
-    // 1. Validar contraseña
-    const admins = await db.query("SELECT id, password_hash FROM usuarios WHERE rol = 'Administrador'");
-    let authSuccess = false;
-    for (const admin of admins) {
-      if (admin.password_hash && await bcrypt.compare(String(admin_password), admin.password_hash)) {
-        authSuccess = true;
-        break;
-      }
-    }
-
-    if (!authSuccess) {
-      return res.status(401).json({ error: 'Contraseña de administrador incorrecta.' });
+    // 1. Validar contraseña de administrador (con límite de intentos)
+    const auth = await validarPasswordAdmin(req, admin_password);
+    if (!auth.ok) {
+      return res.status(auth.status).json({ error: auth.error });
     }
 
     const isPg = db.isPostgres();

@@ -10,6 +10,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
+    "test": "node tests/run.mjs",
     "dev:tunnel": "npx concurrently \"npm run dev\" \"npx localtunnel --port 3000 --subdomain barrafit360\""
   },
   "dependencies": {

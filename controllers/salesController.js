@@ -1,5 +1,5 @@
 import * as db from '../db.js';
-import bcrypt from 'bcryptjs';
+import { validarPasswordAdmin } from '../auth.js';
 
 /**
  * Controlador de Ventas y Pagos Multimoneda
@@ -21,17 +21,6 @@ function numeroValido(v) {
 // Error con código HTTP para lanzarlo desde dentro de una transacción.
 function httpError(status, message, extra = {}) {
   return Object.assign(new Error(message), { status, extra });
-}
-
-// Valida que la contraseña corresponda a algún administrador.
-async function validarPasswordAdmin(password) {
-  const admins = await db.query("SELECT id, password_hash FROM usuarios WHERE rol = 'Administrador'");
-  for (const admin of admins) {
-    if (admin.password_hash && await bcrypt.compare(String(password), admin.password_hash)) {
-      return true;
-    }
-  }
-  return false;
 }
 
 /**
@@ -583,9 +572,10 @@ export async function anularVenta(req, res) {
   }
 
   try {
-    // 1. Validar que la contraseña corresponda a un administrador
-    if (!(await validarPasswordAdmin(admin_password))) {
-      return res.status(401).json({ error: 'Contraseña de administrador incorrecta.' });
+    // 1. Validar que la contraseña corresponda a un administrador (con límite de intentos)
+    const auth = await validarPasswordAdmin(req, admin_password);
+    if (!auth.ok) {
+      return res.status(auth.status).json({ error: auth.error });
     }
 
     // 2. Ejecutar la anulación en una transacción

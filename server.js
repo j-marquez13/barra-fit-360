@@ -13,7 +13,7 @@ import { estadoCaja, abrirCaja, cerrarCaja, cierreDia, listarCierresAdmin } from
 import { getSaldos, transferirFondos } from './controllers/treasuryController.js';
 import { initializeDatabase } from './initDb.js';
 import * as db from './db.js';
-import { signToken, verifyToken, requireAuth, requireAdmin, requirePermiso, revokeToken, getTokenFromRequest, esAdmin } from './auth.js';
+import { signToken, verifyToken, requireAuth, requireAdmin, requirePermiso, revokeToken, getTokenFromRequest, esAdmin, validarPasswordAdmin } from './auth.js';
 import * as whatsapp from './controllers/whatsappController.js';
 
 const app = express();
@@ -404,13 +404,11 @@ app.post('/api/restore-db', express.raw({ type: '*/*', limit: '100mb' }), async 
   if (!isAdmin) {
     const pwd = req.headers['x-admin-password'];
     if (pwd) {
-      const admins = await db.query("SELECT id, password_hash FROM usuarios WHERE rol = 'Administrador'");
-      for (const a of admins) {
-        if (a.password_hash && await bcrypt.compare(pwd, a.password_hash)) {
-          isAdmin = true;
-          break;
-        }
-      }
+      // Los intentos se cuentan por usuario (si trae token) o por IP (restaurar.html)
+      if (tokenPayload) req.usuario = { usuario_id: tokenPayload.usuario_id };
+      const auth = await validarPasswordAdmin(req, pwd);
+      if (auth.status === 429) return res.status(429).send(auth.error);
+      isAdmin = auth.ok;
     }
   }
   if (!isAdmin) {
