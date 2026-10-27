@@ -31,8 +31,83 @@ let reconnectTimer = null;
 let connectStartedAt = null;
 let lastDisconnectReason = null;
 
+// Socket vigente aunque ya se haya cerrado (`sock` queda en null al desconectarse);
+// se usa para cerrar la conexión anterior antes de abrir otra.
+let socketActual = null;
+// Guarda de inmediato las claves pendientes de la sesión actual (ver useNeonAuthState).
+let flushAuthPendiente = async () => {};
+// Deja de guardar las claves de la sesión actual (otra instancia tomó la sesión).
+let desactivarAuthActual = () => {};
+
 // Job de envío en curso
 let sendJob = null;
+
+// ============================================
+// MENSAJES ENVIADOS (reintentos de descifrado)
+// Cuando el teléfono del cliente no logra descifrar un mensaje, le pide a este
+// sistema que lo reenvíe. Si no podemos entregarle el contenido original (getMessage),
+// el cliente se queda para siempre con "Esperando el mensaje. Esto puede demorar un poco".
+// Se guardan en memoria y en la BD para que sobrevivan a reinicios del servidor.
+// ============================================
+const mensajesEnviados = new Map(); // id del mensaje → proto.IMessage
+const MAX_MENSAJES_MEMORIA = 2000;
+const DIAS_CONSERVAR_MENSAJES = 14;
+
+// Contador de reintentos fuera del socket, para que no se reinicie en cada reconexión.
+const msgRetryCounterCache = (() => {
+  const m = new Map();
+  return { get: (k) => m.get(k), set: (k, v) => { m.set(k, v); }, del: (k) => { m.delete(k); }, flushAll: () => m.clear() };
+})();
+
+export async function guardarMensajeEnviado(enviado) {
+  const id = enviado?.key?.id;
+  const contenido = enviado?.message;
+  if (!id || !contenido) return;
+  mensajesEnviados.set(id, contenido);
+  if (mensajesEnviados.size > MAX_MENSAJES_MEMORIA) {
+    mensajesEnviados.delete(mensajesEnviados.keys().next().value);
+  }
+  try {
+    await db.execute(
+      'INSERT INTO whatsapp_mensajes (id, jid, contenido) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING',
+      [id, enviado.key.remoteJid || null, JSON.stringify(contenido, BufferJSON.replacer)]
+    );
+  } catch (e) {
+    logger.error('Error guardando mensaje WA enviado:', e.message);
+  }
+}
+
+export async function obtenerMensajeEnviado(key) {
+  const id = key?.id;
+  if (!id) return undefined;
+  if (mensajesEnviados.has(id)) return mensajesEnviados.get(id);
+  try {
+    const rows = await db.query('SELECT contenido FROM whatsapp_mensajes WHERE id = $1', [id]);
+    const obj = rows.length ? revive(rows[0].contenido) : null;
+    if (obj) return proto.Message.fromObject(obj);
+  } catch (e) {
+    logger.error('Error leyendo mensaje WA para reintento:', e.message);
+  }
+  return undefined;
+}
+
+async function limpiarMensajesViejos() {
+  try {
+    const sql = db.isPostgres()
+      ? `DELETE FROM whatsapp_mensajes WHERE fecha < NOW() - INTERVAL '${DIAS_CONSERVAR_MENSAJES} days'`
+      : `DELETE FROM whatsapp_mensajes WHERE fecha < datetime('now', '-${DIAS_CONSERVAR_MENSAJES} days')`;
+    await db.execute(sql);
+  } catch (e) {
+    logger.error('Error limpiando mensajes WA viejos:', e.message);
+  }
+}
+
+// Envía un texto y guarda el mensaje para poder atender reintentos de descifrado.
+async function enviarTexto(phone, texto) {
+  const enviado = await sock.sendMessage(toJid(phone), { text: texto });
+  await guardarMensajeEnviado(enviado);
+  return enviado;
+}
 
 // ============================================
 // UTILIDADES
@@ -142,18 +217,35 @@ async function useNeonAuthState() {
   let creds = (stored && stored.creds && stored.creds.me && stored.creds.me.id) ? stored.creds : initAuthCreds();
   const keys = (stored && stored.keys) ? stored.keys : {};
 
+  // Las escrituras se encadenan para que nunca se pisen ni lleguen en desorden:
+  // si las claves de cifrado guardadas quedan atrasadas, los clientes reciben
+  // "Esperando el mensaje" en vez del texto.
   let saveTimer = null;
+  let cadenaGuardado = Promise.resolve();
+  let activo = true; // false cuando otra instancia tomó la sesión: ya no se debe guardar nada
+  const guardar = () => {
+    if (!activo) return cadenaGuardado;
+    cadenaGuardado = cadenaGuardado
+      .then(() => persistSession({ creds, keys }))
+      .catch((e) => logger.error('Error guardando sesión WA:', e.message));
+    return cadenaGuardado;
+  };
   const scheduleSave = () => {
     if (saveTimer) return;
-    saveTimer = setTimeout(() => {
-      saveTimer = null;
-      persistSession({ creds, keys }).catch((e) => logger.error('Error guardando claves WA:', e.message));
-    }, 3000);
+    saveTimer = setTimeout(() => { saveTimer = null; guardar(); }, 1000);
+  };
+  // Guarda ya lo que esté pendiente (antes de reconectar o de apagar el servidor)
+  const flush = async () => {
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    await guardar();
+  };
+  // Descarta lo pendiente sin guardarlo (las claves de esta instancia quedaron atrasadas)
+  const desactivar = () => {
+    activo = false;
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
   };
 
-  const saveCreds = async () => {
-    try { await persistSession({ creds, keys }); } catch (e) { logger.error('Error guardando credenciales WA:', e.message); }
-  };
+  const saveCreds = () => guardar();
 
   return {
     state: {
@@ -184,7 +276,9 @@ async function useNeonAuthState() {
         }
       }
     },
-    saveCreds
+    saveCreds,
+    flush,
+    desactivar
   };
 }
 
@@ -201,14 +295,23 @@ function scheduleReconnect(delayMs) {
 }
 
 async function startSocket() {
-  sock = null; // abandona cualquier socket previo (su close se ignorará)
+  // Cerrar la conexión anterior y guardar sus claves ANTES de abrir otra.
+  // Antes solo se "abandonaba": quedaban dos conexiones vivas con la misma cuenta,
+  // cada una con sus claves en memoria, y al guardarse se pisaban entre sí.
+  const anterior = socketActual;
+  socketActual = null;
+  sock = null; // el evento close del socket anterior se ignorará
+  if (anterior) { try { anterior.end(undefined); } catch (e) { /* ya estaba cerrado */ } }
+  await flushAuthPendiente();
 
   status = 'conectando';
   connectStartedAt = Date.now();
   currentQR = null;
   currentQRDataURL = null;
 
-  const { state, saveCreds } = await useNeonAuthState();
+  const { state, saveCreds, flush, desactivar } = await useNeonAuthState();
+  flushAuthPendiente = flush;
+  desactivarAuthActual = desactivar;
 
   let version = [2, 3000, 1015901307];
   try { ({ version } = await fetchLatestBaileysVersion()); } catch (e) { /* usar fallback */ }
@@ -222,9 +325,13 @@ async function startSocket() {
     markOnlineOnConnect: false,
     syncFullHistory: false,
     generateHighQualityLinkPreview: false,
-    connectTimeoutMs: 60000
+    connectTimeoutMs: 60000,
+    // Permite reenviar un mensaje cuando el teléfono del cliente no pudo descifrarlo
+    getMessage: obtenerMensajeEnviado,
+    msgRetryCounterCache
   });
   sock = thisSocket;
+  socketActual = thisSocket;
 
   thisSocket.ev.on('creds.update', saveCreds);
 
@@ -271,6 +378,15 @@ async function startSocket() {
         return;
       }
 
+      // Otra instancia del servidor abrió la misma sesión (p. ej. el servidor nuevo durante
+      // un despliegue en Render). Reconectar aquí provocaría un bucle en el que ambos se
+      // expulsan mutuamente y corrompen las claves: se cede la sesión a la otra instancia.
+      if (code === DisconnectReason.connectionReplaced) {
+        logger.warn('WhatsApp abierto desde otra instancia del servidor; esta deja de reconectar.');
+        desactivarAuthActual(); // sus claves quedaron atrasadas: no sobrescribir las de la otra
+        return;
+      }
+
       logger.warn('WhatsApp desconectado (code=' + code + '). Reintentando en 5s...');
       scheduleReconnect(5000);
     }
@@ -286,9 +402,40 @@ function startWatchdog() {
   }, 15000);
 }
 
+// Al apagar el servidor (Render envía SIGTERM en cada despliegue o al dormir la instancia):
+// guardar las claves pendientes y cerrar la conexión sin cerrar la sesión de WhatsApp.
+async function apagarWhatsApp() {
+  try { await flushAuthPendiente(); } catch (e) {}
+  const s = socketActual;
+  socketActual = null;
+  sock = null;
+  if (s) { try { s.end(undefined); } catch (e) {} }
+}
+
+let apagadoRegistrado = false;
+function registrarApagado() {
+  if (apagadoRegistrado) return;
+  apagadoRegistrado = true;
+  for (const senal of ['SIGTERM', 'SIGINT']) {
+    process.once(senal, async () => {
+      logger.info(`${senal} recibido: guardando sesión de WhatsApp antes de salir.`);
+      const limite = setTimeout(() => process.exit(0), 5000); // no colgar el apagado
+      await apagarWhatsApp();
+      clearTimeout(limite);
+      process.exit(0);
+    });
+  }
+}
+
+// Espera antes de conectar al arrancar: durante un despliegue el servidor anterior sigue
+// vivo unos segundos; así alcanza a guardar sus claves antes de que este las cargue.
+const ESPERA_INICIO_MS = parseInt(process.env.WA_ESPERA_INICIO_MS || '15000', 10);
+
 export function initWhatsApp() {
   startWatchdog();
   startReporteSemanalScheduler();
+  registrarApagado();
+  limpiarMensajesViejos();
   (async () => {
     try {
       const stored = await hasStoredSession();
@@ -297,6 +444,8 @@ export function initWhatsApp() {
         logger.info('Sin sesión de WhatsApp guardada. A la espera de conexión manual.');
         return;
       }
+      await sleep(ESPERA_INICIO_MS);
+      if (socketActual) return; // ya se conectó manualmente mientras esperaba
       await startSocket();
     } catch (e) {
       logger.error('Error iniciando WhatsApp:', e.message);
@@ -409,6 +558,8 @@ export async function conectar(req, res) {
 export async function desconectar(req, res) {
   try {
     if (sock) { try { await sock.logout(); } catch (e) {} sock = null; }
+    socketActual = null;
+    desactivarAuthActual(); // la sesión se borra: no volver a guardarla
     status = 'desconectado';
     currentQR = null;
     currentQRDataURL = null;
@@ -511,7 +662,7 @@ async function runSendJob(job) {
     }
 
     try {
-      await sock.sendMessage(toJid(item.telefono), { text: item.mensaje });
+      await enviarTexto(item.telefono, item.mensaje);
       await logEnvio(item.telefono, item.mensaje, 'enviado');
       item.estado = 'enviado';
       job.enviados++;
@@ -639,7 +790,7 @@ async function enviarReporteSemanal() {
   const { inicio, fin } = getSemanaAnterior();
   const pagos = await getPagosSemana(inicio, fin);
   const mensaje = buildReporteSemanal(pagos, inicio, fin);
-  await sock.sendMessage(toJid(phone), { text: mensaje });
+  await enviarTexto(phone, mensaje);
   await logEnvio(phone, mensaje, 'enviado');
   await setConfig('reporte_semanal_ultimo_envio', localDateTime().toISOString().slice(0, 10));
   return { inicio, fin, total: pagos.length, mensaje };

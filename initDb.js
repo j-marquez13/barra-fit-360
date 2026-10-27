@@ -187,6 +187,13 @@ export async function initializeDatabase() {
         estado VARCHAR(20),
         fecha TIMESTAMP DEFAULT NOW()
       )`);
+      // Mensajes enviados, para reenviarlos si el teléfono del cliente no logró descifrarlos
+      await db.execute(`CREATE TABLE IF NOT EXISTS whatsapp_mensajes (
+        id TEXT PRIMARY KEY,
+        jid TEXT,
+        contenido TEXT NOT NULL,
+        fecha TIMESTAMP DEFAULT NOW()
+      )`);
       await db.execute(`CREATE TABLE IF NOT EXISTS configuracion (
         clave VARCHAR(255) PRIMARY KEY,
         valor TEXT
@@ -381,6 +388,15 @@ async function createTables() {
       telefono TEXT,
       mensaje TEXT,
       estado TEXT,
+      fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  // Mensajes enviados, para reenviarlos si el teléfono del cliente no logró descifrarlos
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS whatsapp_mensajes (
+      id TEXT PRIMARY KEY,
+      jid TEXT,
+      contenido TEXT NOT NULL,
       fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
