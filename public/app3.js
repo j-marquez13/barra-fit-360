@@ -896,6 +896,7 @@ function renderCart() {
 }
 
 async function quickPay(method, currency) {
+  if (!hayTurnoAbierto()) { avisarSinTurno(); return; }
   if (STATE.cart.length === 0) return;
   const totalCop = calculateCartTotal();
   if (totalCop <= 0) return;
@@ -1218,6 +1219,7 @@ window.removeFromCart = function(index) {
 };
 
 function openPaymentModal() {
+  if (!hayTurnoAbierto()) { avisarSinTurno(); return; }
   cargarTasas().then(() => recalculatePayments()); // tasa vigente por si el admin la cambió
   const totalCop = calculateCartTotal();
   DOM.modalTotalSale.textContent = `$${totalCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
@@ -1626,6 +1628,7 @@ async function obtenerClienteGym() {
 }
 
 async function submitCortesiaGym() {
+  if (!hayTurnoAbierto()) { avisarSinTurno(); return; }
   if (!STATE.cart || STATE.cart.length === 0) {
     showToast('Agrega productos al carrito primero.', 'warning');
     return;
@@ -4110,6 +4113,7 @@ function parseMontoAbono(raw) {
 }
 
 function showAbonoModal(clientId, clientName, saldoActual) {
+  if (!hayTurnoAbierto()) { avisarSinTurno(); return; }
   cargarTasas().then(() => { if (typeof recalcAbonoTotal === 'function') recalcAbonoTotal(); });
   openGenericModal(`Registrar Abono — ${clientName}`, `
     <div class="abono-resumen">
@@ -5601,16 +5605,65 @@ async function cerrarSesion() {
  * Si la hay pero NO se autenticó, muestra Quick Login.
  * Si no hay sesión, muestra pantalla completa de turno.
  */
+// Consulta si hay un turno abierto, con aviso de carga y reintentos: si el servidor tarda
+// (p. ej. Render despertando) no se muestra un formulario equivocado ni una pantalla vacía.
+async function obtenerEstadoCajaInicial() {
+  const card = document.getElementById('turno-cargando-card');
+  const texto = document.getElementById('turno-cargando-texto');
+  const btn = document.getElementById('btn-turno-reintentar');
+  if (card) card.style.display = '';
+  if (btn) btn.style.display = 'none';
+  if (texto) texto.textContent = 'Conectando con el servidor…';
+  const inicio = Date.now();
+  while (Date.now() - inicio < 90000) {
+    try {
+      const opciones = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? { signal: AbortSignal.timeout(15000) } : {};
+      const res = await fetch('/api/caja/estado', opciones);
+      if (res.ok) {
+        const data = await res.json();
+        if (card) card.style.display = 'none';
+        return data;
+      }
+    } catch (e) { /* sin respuesta todavía */ }
+    if (texto) texto.textContent = 'El servidor está despertando, puede tardar hasta un minuto…';
+    await new Promise(r => setTimeout(r, 3000));
+  }
+  if (texto) texto.textContent = 'No se pudo conectar con el servidor. Revisa tu internet y vuelve a intentar.';
+  if (btn) {
+    btn.style.display = 'inline-block';
+    btn.onclick = () => initTurnoSystem();
+  }
+  return null;
+}
+
+// ¿El usuario guardado entró como administrador sin abrir caja, y su sesión sigue vigente?
+async function restaurarAdminSinCaja() {
+  try {
+    const auth = JSON.parse(sessionStorage.getItem('bf360_auth') || 'null');
+    if (!auth || auth.modo !== 'admin-sin-caja' || !auth.token) return null;
+    const res = await fetch('/api/tasas'); // requiere sesión válida
+    if (!res.ok) { sessionStorage.removeItem('bf360_auth'); return null; }
+    return auth;
+  } catch (e) { return null; }
+}
+
 async function initTurnoSystem() {
   const turnoScreen = document.getElementById('turno-screen');
-  
+
   try {
-    const res = await fetch('/api/caja/estado');
-    const data = await res.json();
-    
+    const data = await obtenerEstadoCajaInicial();
+    if (!data) return; // se muestra el botón "Reintentar"
+
     if (data.abierta) {
       TURNO_STATE.sesionActiva = data.sesion;
-      
+
+      // Administrador que había entrado sin abrir caja: sigue adentro (ahora con el turno abierto)
+      const adminSinCaja = await restaurarAdminSinCaja();
+      if (adminSinCaja) {
+        hideTurnoScreen({ ...data.sesion, permisos: adminSinCaja.permisos }, adminSinCaja.nombre);
+        return;
+      }
+
       // Verificar si este dispositivo ya se autenticó
       const savedAuth = sessionStorage.getItem('bf360_auth');
       if (savedAuth) {
@@ -5635,14 +5688,80 @@ async function initTurnoSystem() {
       // Dispositivo no autenticado → mostrar Quick Login
       showQuickLogin(data.sesion);
     } else {
-      // Sin sesión: mostrar pantalla completa de turno
+      // Sin turno abierto. Si un administrador había entrado sin abrir caja, sigue adentro.
+      const adminSinCaja = await restaurarAdminSinCaja();
+      if (adminSinCaja) {
+        entrarComoAdminSinCaja(adminSinCaja);
+        return;
+      }
+      // Si no: mostrar pantalla completa de turno
       sessionStorage.removeItem('bf360_auth');
-      setupTurnoForm();
+      mostrarFormularioTurno();
     }
   } catch (err) {
     console.warn('No se pudo verificar estado de caja:', err);
-    setupTurnoForm();
+    mostrarFormularioTurno();
   }
+}
+
+function mostrarFormularioTurno() {
+  const card = document.getElementById('turno-form-card');
+  if (card) card.style.display = 'block';
+  if (!mostrarFormularioTurno._listo) {
+    mostrarFormularioTurno._listo = true; // los listeners se registran una sola vez
+    setupTurnoForm();
+    document.getElementById('btn-entrar-sin-caja')?.addEventListener('click', entrarSinCaja);
+  }
+}
+
+// Administrador: entra a revisar el sistema sin abrir un turno de caja.
+// No puede vender ni registrar abonos (ese dinero no quedaría en ningún cierre).
+async function entrarSinCaja() {
+  const errorEl = document.getElementById('turno-error');
+  const btn = document.getElementById('btn-entrar-sin-caja');
+  const usuario = (document.getElementById('turno-usuario-input')?.value || '').trim();
+  const password = document.getElementById('turno-password')?.value || '';
+  const mostrarError = (msg) => { if (errorEl) { errorEl.textContent = msg; errorEl.classList.add('visible'); } };
+  if (errorEl) errorEl.classList.remove('visible');
+  if (!usuario || !password) { mostrarError('Ingresa tu usuario y contraseña de administrador.'); return; }
+
+  const textoOriginal = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Entrando…'; }
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario, password })
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'No se pudo iniciar sesión');
+    const permisos = d.usuario.permisos || [];
+    if (!(permisos.includes('all') || permisos.includes('admin'))) {
+      throw new Error('Solo un administrador puede entrar sin abrir caja. Para vender, inicia un turno.');
+    }
+    const auth = { usuario_id: d.usuario.id, nombre: d.usuario.nombre, permisos, token: d.token, sesion_id: null, modo: 'admin-sin-caja' };
+    sessionStorage.setItem('bf360_auth', JSON.stringify(auth));
+    if (d.debe_cambiar_password && !(await pedirCambioPassword())) return;
+    entrarComoAdminSinCaja(auth);
+    showToast(`Bienvenido/a ${d.usuario.nombre}. Estás sin turno de caja: puedes revisar todo, pero para vender hay que iniciar un turno.`, 'info');
+  } catch (e) {
+    mostrarError(e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = textoOriginal; lucide.createIcons(); }
+  }
+}
+
+function entrarComoAdminSinCaja(auth) {
+  TURNO_STATE.sesionActiva = null;
+  hideTurnoScreen({ turno: 'Sin turno', nombre_cajero: auth.nombre, permisos: auth.permisos }, auth.nombre);
+}
+
+// Sin turno de caja abierto no se puede cobrar (el dinero no quedaría en ningún cierre)
+function hayTurnoAbierto() {
+  return !!TURNO_STATE.sesionActiva;
+}
+function avisarSinTurno() {
+  showToast('No hay un turno de caja abierto. Para vender o cobrar, cierra sesión e inicia un turno.', 'warning');
 }
 
 /**
@@ -6088,7 +6207,7 @@ function hideTurnoScreen(sesion, nombreOverride) {
   // Actualizar badge del header
   const headerBadge = document.getElementById('header-turno-badge');
   if (headerBadge) {
-    const emoji = turno === 'Tarde' ? '🌆' : '🌅';
+    const emoji = turno === 'Tarde' ? '🌆' : (turno === 'Sin turno' ? '🛡️' : '🌅');
     const cls = turno === 'Tarde' ? 'badge-tarde' : 'badge-manana';
     headerBadge.innerHTML = `<span class="turno-badge ${cls}">${emoji} ${turno} — ${cajero}</span>`;
     headerBadge.style.display = 'inline-block';
@@ -6156,7 +6275,7 @@ async function showTurnoScreen() {
   const qlCard = document.getElementById('quick-login-card');
   if (qlCard) qlCard.style.display = 'none';
   const turnoCard = document.querySelector('.turno-card:not(.quick-login-card)');
-  if (turnoCard) turnoCard.style.display = 'block';
+  mostrarFormularioTurno(); // muestra el formulario y registra sus botones (una sola vez)
   const brandP = document.querySelector('.turno-brand p');
   if (brandP) brandP.textContent = 'Selecciona tu turno para iniciar la jornada';
 

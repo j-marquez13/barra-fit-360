@@ -1,6 +1,7 @@
 import * as db from '../db.js';
 import { validarPasswordAdmin } from '../auth.js';
 import { resolverTasas } from '../tasas.js';
+import { hayTurnoAbierto } from './salesController.js';
 
 /**
  * Controlador de Clientes y Líneas de Crédito (Cuentas por Cobrar)
@@ -155,6 +156,11 @@ export async function processAbono(req, res) {
   }
 
   try {
+    // Sin turno de caja abierto no se cobran abonos: el dinero no quedaría en ningún cierre.
+    if (!(await hayTurnoAbierto())) {
+      return res.status(400).json({ error: 'No hay un turno de caja abierto. Inicia un turno para cobrar abonos.', sin_turno: true });
+    }
+
     // Tasa del día: la del servidor (fijada por el admin), nunca la que envía la pantalla.
     const tasasServidor = await resolverTasas(pagos, tasas);
     const tasaDiaUsd = tasasServidor.USD;

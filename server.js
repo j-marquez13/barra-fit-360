@@ -45,6 +45,9 @@ app.use((req, res, next) => {
 });
 
 // Servir archivos estáticos del frontend
+// Librerías con la versión en el nombre (p. ej. vendor/lucide-1.57.0.min.js): nunca cambian,
+// así que el navegador puede guardarlas un año sin volver a pedirlas.
+app.use('/vendor', express.static('public/vendor', { maxAge: '365d', immutable: true }));
 app.use(express.static('public'));
 
 // ============================================

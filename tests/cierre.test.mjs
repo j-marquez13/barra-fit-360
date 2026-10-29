@@ -52,6 +52,14 @@ check('cerrar turno 3 sin desglose (compatibilidad)', r.status === 200 && r.data
 dia = (await api('GET', '/api/caja/cierre-dia', null, t)).data.resumen;
 check('consolidado: 3 turnos, 2 con desglose', dia.total_turnos === 3 && dia.turnos_con_desglose === 2, dia);
 
+// Sin turno abierto no se puede vender ni cobrar abonos (el dinero no quedaría en ningún cierre)
+r = await api('POST', '/api/ventas', { items: [{ producto_id: agua, cantidad: 1 }], pagos: [{ metodo_pago: 'Efectivo COP', moneda: 'COP', monto_original: 5000 }], tasas }, t);
+check('sin turno abierto: la venta se rechaza', r.status === 400 && r.data.sin_turno === true, r);
+const clis = (await api('GET', '/api/clientes', null, t)).data;
+const conDeuda = clis.find(c => parseFloat(c.saldo_deudor) > 0) || clis[0];
+r = await api('POST', '/api/abonos', { cliente_id: conDeuda.id, pagos: [{ metodo_pago: 'Efectivo COP', moneda: 'COP', monto_original: 1000 }], tasas }, t);
+check('sin turno abierto: el abono se rechaza', r.status === 400 && r.data.sin_turno === true, r);
+
 // Dejar una caja abierta con una venta y un abono, para revisar la interfaz.
 await api('POST', '/api/caja/abrir', { fondo_inicial_cop: 20000, turno: 'Tarde' }, t);
 console.log(`\nRESULTADO: ${fallos ? fallos + ' FALLAS' : 'todo OK'}`);

@@ -19,6 +19,12 @@ function numeroValido(v) {
   return Number.isFinite(n) ? n : NaN;
 }
 
+// ¿Hay un turno de caja abierto? (ventas y abonos solo se registran dentro de un turno)
+export async function hayTurnoAbierto() {
+  const rows = await db.query("SELECT id FROM sesiones_caja WHERE fecha_cierre IS NULL AND estado = 'Abierta' LIMIT 1");
+  return rows.length > 0;
+}
+
 // Error con código HTTP para lanzarlo desde dentro de una transacción.
 function httpError(status, message, extra = {}) {
   return Object.assign(new Error(message), { status, extra });
@@ -70,6 +76,11 @@ export async function processSale(req, res) {
   }
 
   try {
+    // Sin turno de caja abierto no se vende: el dinero no quedaría en ningún cierre.
+    if (!(await hayTurnoAbierto())) {
+      return res.status(400).json({ error: 'No hay un turno de caja abierto. Inicia un turno para vender.', sin_turno: true });
+    }
+
     // Tasa del día: la del servidor (fijada por el admin), nunca la que envía la pantalla.
     const tasasServidor = await resolverTasas(isCortesia ? [] : pagos, tasas);
     const tasaDiaUsd = tasasServidor.USD;

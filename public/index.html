@@ -11,7 +11,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- Lucide Icons para iconografía limpia y moderna -->
-  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Íconos Lucide: copia local con versión fija (antes se descargaba "@latest" de unpkg en cada carga,
+       bloqueando la página ~3 s y cambiando de versión sin aviso) -->
+  <script src="vendor/lucide-1.57.0.min.js"></script>
   <!-- Estilos CSS -->
   <link rel="stylesheet" href="index.css?v=23">
   <!-- PWA: instalable como aplicación en Chrome/Android/escritorio -->
@@ -37,8 +39,8 @@
       <p>Selecciona tu turno para iniciar la jornada</p>
     </div>
 
-    <!-- Card del formulario -->
-    <div class="turno-card">
+    <!-- Card del formulario (se muestra cuando se sabe que no hay turno abierto) -->
+    <div class="turno-card" id="turno-form-card" style="display:none;">
       <h2>¿Cuál es tu turno hoy?</h2>
 
       <!-- Selector visual de turno -->
@@ -101,6 +103,12 @@
         Iniciar Turno
       </button>
 
+      <!-- Administrador: entrar a revisar sin abrir caja (no permite vender) -->
+      <button type="button" id="btn-entrar-sin-caja" style="width:100%; margin-top:10px; padding:10px; border-radius:12px; background:transparent; border:1px solid var(--border-glass); color:var(--text-muted); font-size:0.85rem; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;">
+        <i data-lucide="shield-check" style="width:16px; height:16px;"></i>
+        Entrar sin abrir caja (solo administrador)
+      </button>
+
       <!-- Error message -->
       <div class="turno-error" id="turno-error"></div>
 
@@ -109,6 +117,15 @@
         <strong>✅ Turno activo detectado.</strong><br>
         Reanudando sesión en curso...
       </div>
+    </div>
+
+    <!-- Mientras se consulta al servidor si hay un turno abierto -->
+    <div class="turno-card" id="turno-cargando-card" style="text-align:center; order:5;">
+      <span class="spinner" style="display:inline-block; margin-bottom:12px;"></span>
+      <p id="turno-cargando-texto" style="margin:0; color:var(--text-muted);">Conectando con el servidor…</p>
+      <button type="button" id="btn-turno-reintentar" style="display:none; margin:14px auto 0; padding:10px 18px; border-radius:10px; border:none; background:var(--primary); color:white; cursor:pointer;">
+        Reintentar
+      </button>
     </div>
 
     <!-- Quick Login Card (cuando ya hay caja abierta) -->
@@ -2430,7 +2447,7 @@
     </div>
   </div>
 
-  <script src="app3.js?v=56"></script>
+  <script src="app3.js?v=57"></script>
   <script src="whatsapp.js?v=6"></script>
 <!-- Script to automatically replace commas with dots in number inputs -->
   <script>
