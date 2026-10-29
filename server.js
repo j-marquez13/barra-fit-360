@@ -9,7 +9,7 @@ import { createClient, getClients, getClientDetails, processAbono, registrarDeud
 import { getInsumos, createInsumo, updateInsumo, restockInsumo, getMermas, createMerma, toggleMermaGanancia, getProductos, createProducto, updateProducto, deleteProducto, deleteInsumo, getValorizacionInventario, getOrdenCompra, confirmarOrdenCompra, listarOrdenesCompra, getOrdenCompraDetalle, recibirOrdenCompra, borrarOrdenCompra, getProductoReceta, getRecetasBase, createRecetaBase, updateRecetaBase, deleteRecetaBase, toggleRecetaBaseBatido } from './controllers/inventoryController.js';
 import { cierreDiario, cierreSemanal, cierreRango, historialVentas } from './controllers/reportsController.js';
 import { listarGastos, registrarGasto } from './controllers/expensesController.js';
-import { estadoCaja, abrirCaja, cerrarCaja, cierreDia, listarCierresAdmin } from './controllers/cashierController.js';
+import { estadoCaja, abrirCaja, cerrarCaja, cierreDia, listarCierresAdmin, ticketTurnoAdmin } from './controllers/cashierController.js';
 import { getSaldos, transferirFondos } from './controllers/treasuryController.js';
 import { initializeDatabase } from './initDb.js';
 import * as db from './db.js';
@@ -201,6 +201,7 @@ app.get('/api/caja/cierre-dia', cierreDia);
 
 // Histórico de cierres diarios (solo administrador)
 app.get('/api/admin/cierres', requireAdmin, listarCierresAdmin);
+app.get('/api/admin/cierres/turno/:id', requireAdmin, ticketTurnoAdmin);
 
 // ============================================
 // RUTAS DE USUARIOS Y AUTENTICACIÓN

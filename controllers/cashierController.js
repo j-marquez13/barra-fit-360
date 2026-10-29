@@ -220,13 +220,132 @@ export async function listarCierresAdmin(req, res) {
       declarado_efectivo_pesos: parseFloat(r.declarado_efectivo_pesos || 0),
       declarado_bancolombia: parseFloat(r.declarado_bancolombia || 0),
       declarado_efectivo_usd: parseFloat(r.declarado_efectivo_usd || 0),
-      diferencia_caja: parseFloat(r.diferencia_caja || 0)
+      diferencia_caja: parseFloat(r.diferencia_caja || 0),
+      turnos: []
     }));
+
+    // Turnos de cada día, para poder abrir el ticket de cada uno por separado
+    const turnos = await db.query(`
+      SELECT id, ${fechaExpr} as fecha, turno, nombre_cajero, fecha_apertura, fecha_cierre,
+             total_ventas_cop, total_ventas_credito_cop, total_abonos_cop, declarado_cop, diferencia_caja
+      FROM sesiones_caja
+      ${where}
+      ORDER BY fecha_apertura ASC
+    `, params);
+    const porFecha = new Map(cierres.map(c => [c.fecha, c]));
+    for (const t of turnos) {
+      const dia = porFecha.get(t.fecha);
+      if (!dia) continue;
+      dia.turnos.push({
+        id: t.id,
+        turno: t.turno,
+        cajero: t.nombre_cajero || 'Cajero',
+        apertura: t.fecha_apertura,
+        cierre: t.fecha_cierre,
+        hora_apertura: horaLocal(t.fecha_apertura),
+        hora_cierre: horaLocal(t.fecha_cierre),
+        total_ventas_cop: parseFloat(t.total_ventas_cop || 0),
+        diferencia_caja: parseFloat(t.diferencia_caja || 0)
+      });
+    }
 
     return res.json({ cierres });
   } catch (error) {
     console.error('Error al listar cierres admin:', error);
     return res.status(500).json({ error: 'Error al obtener el histórico de cierres.', detalle: error.message });
+  }
+}
+
+// Hora local de Venezuela (HH:MM) de una fecha de sesiones_caja, venga como venga:
+// - Date (PostgreSQL): se formatea en America/Caracas.
+// - Texto con 'T' (localNow, ya en hora local): se toma la hora tal cual.
+// - Texto 'YYYY-MM-DD HH:MM:SS' (CURRENT_TIMESTAMP de SQLite, en UTC): se convierte a local.
+function horaLocal(v) {
+  if (!v) return null;
+  const enCaracas = (d) => d.toLocaleTimeString('es-VE', { timeZone: 'America/Caracas', hour: '2-digit', minute: '2-digit', hour12: false });
+  if (v instanceof Date) return enCaracas(v);
+  const s = String(v);
+  if (s.includes('T')) return s.slice(11, 16);
+  const d = new Date(s.replace(' ', 'T') + 'Z');
+  return isNaN(d) ? s.slice(11, 16) : enCaracas(d);
+}
+
+// GET /api/admin/cierres/turno/:id — Ticket de un turno ya cerrado (solo administrador).
+// Lo guardado al cerrar (fondo, declarado, diferencias, costo, utilidad) + el desglose por
+// método de pago, reconstruido con los pagos registrados entre la apertura y el cierre.
+export async function ticketTurnoAdmin(req, res) {
+  try {
+    const rows = await db.query("SELECT * FROM sesiones_caja WHERE id = $1 AND estado = 'Cerrada'", [req.params.id]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Turno no encontrado o aún abierto.' });
+    const s = rows[0];
+
+    // fecha_cierre se guarda en hora local (localNow). En PostgreSQL los pagos también están en
+    // hora local; en SQLite están en UTC, así que el límite se pasa a UTC (+4 h).
+    const hastaExpr = isPostgres()
+      ? '$2::timestamp'
+      : "datetime(replace(substr($2, 1, 19), 'T', ' '), '+4 hours')";
+    const params = [s.fecha_apertura, s.fecha_cierre];
+
+    const detalle = async (sqlTexto) => {
+      const filas = await db.query(sqlTexto, params);
+      const out = {};
+      let totalCop = 0;
+      for (const r of filas) {
+        const moneda = (r.moneda || '').toUpperCase();
+        if (!out[moneda]) out[moneda] = {};
+        const cop = parseFloat(r.total_base || 0);
+        out[moneda][r.metodo_pago] = { monto: parseFloat(r.total_original || 0), total_cop: cop };
+        totalCop += cop;
+      }
+      return { out, totalCop };
+    };
+
+    const ventas = await detalle(`
+      SELECT pv.moneda, pv.metodo_pago, SUM(pv.monto_original) AS total_original, SUM(pv.monto_base) AS total_base
+      FROM pagos_ventas pv JOIN ventas v ON pv.venta_id = v.id
+      WHERE pv.fecha >= $1 AND pv.fecha <= ${hastaExpr}
+        AND pv.metodo_pago != 'Crédito' AND v.tipo_transaccion != 'Anulada'
+      GROUP BY pv.moneda, pv.metodo_pago
+    `);
+    const abonos = await detalle(`
+      SELECT pa.moneda, pa.metodo_pago, SUM(pa.monto_original) AS total_original, SUM(pa.monto_base) AS total_base
+      FROM pagos_abonos pa
+      WHERE pa.fecha >= $1 AND pa.fecha <= ${hastaExpr}
+      GROUP BY pa.moneda, pa.metodo_pago
+    `);
+
+    const num = (v) => (v === null || v === undefined ? null : parseFloat(v));
+    return res.json({
+      turno: {
+        id: s.id,
+        turno: s.turno,
+        cajero: s.nombre_cajero || 'Cajero',
+        apertura: s.fecha_apertura,
+        cierre: s.fecha_cierre,
+        hora_apertura: horaLocal(s.fecha_apertura),
+        hora_cierre: horaLocal(s.fecha_cierre),
+        fondo_inicial_cop: num(s.fondo_inicial_cop) || 0,
+        fondo_inicial_usd: num(s.fondo_inicial_usd) || 0,
+        fondo_completo: [1, true, '1', 't'].includes(s.fondo_completo)
+      },
+      ventas_detalle: ventas.out,
+      abonos_detalle: abonos.out,
+      total_ventas_contado_cop: ventas.totalCop,
+      total_abonos_cop: abonos.totalCop,
+      total_ventas_credito_cop: num(s.total_ventas_credito_cop) || 0,
+      total_ventas_real_cop: num(s.total_ventas_cop) || 0,
+      costo_produccion: num(s.costo_produccion) || 0,
+      utilidad_neta: num(s.utilidad_neta) || 0,
+      declarado_cop: num(s.declarado_cop) || 0,
+      declarado_ventas_cop: num(s.declarado_ventas_cop),
+      declarado_abonos_cop: num(s.declarado_abonos_cop),
+      diferencia_ventas_cop: num(s.diferencia_ventas_cop),
+      diferencia_abonos_cop: num(s.diferencia_abonos_cop),
+      diferencia_caja: num(s.diferencia_caja) || 0
+    });
+  } catch (error) {
+    console.error('Error al obtener ticket del turno:', error);
+    return res.status(500).json({ error: 'Error al obtener el ticket del turno.' });
   }
 }
 

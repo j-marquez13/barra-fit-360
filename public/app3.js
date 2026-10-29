@@ -4849,7 +4849,7 @@ async function cerrarTurnoActual() {
   };
   
   document.getElementById('btn-cierre-imprimir').onclick = () => {
-    window.print(); // Solución simple de impresión, idealmente conectada a un thermal printer handler
+    imprimirTicket(document.querySelector('#cierre-caja-view-success .cierre-ticket-dashboard'));
   };
 
   document.getElementById('btn-cierre-consolidado').onclick = () => {
@@ -4989,7 +4989,7 @@ window.loadCierreDia = async function(fechaReq) {
       loadCajaData();
     };
     document.getElementById('btn-dia-imprimir').onclick = () => {
-      window.print();
+      imprimirTicket(document.querySelector('#cierre-dia-overlay .cierre-ticket-dashboard'));
     };
 
     lucide.createIcons();
@@ -5044,11 +5044,17 @@ async function loadCierresAdmin() {
         <td class="font-outfit" style="color:var(--warning)">-$${fmt(c.reposicion)}</td>
         <td class="font-outfit" style="color:${utilColor}">$${fmt(c.utilidad_neta)}</td>
         <td class="font-outfit">$${fmt(c.declarado_cop)}</td>
-        <td class="font-outfit" style="color:${diffColor}">$${fmt(c.diferencia_caja)}</td>
+        <td class="font-outfit" style="color:${diffColor}">${c.diferencia_caja < 0 ? '-' : ''}$${fmt(Math.abs(c.diferencia_caja))}</td>
         <td style="text-align:right;">
-          <button class="action-btn" style="padding:5px 10px; font-size:12px;" onclick="verTicketCierre(${idx})">
-            <i data-lucide="receipt"></i> Ver ticket
-          </button>
+          <div style="display:flex; gap:6px; justify-content:flex-end; flex-wrap:wrap;">
+            ${(c.turnos || []).map(t => `
+              <button class="action-btn" style="padding:5px 10px; font-size:12px;" onclick="verTicketTurno(${t.id}, '${c.fecha}')" title="Ticket del turno ${escHtml(t.turno)} de ${escHtml(t.cajero)} (${escHtml(t.hora_apertura || '—')} a ${escHtml(t.hora_cierre || '—')})">
+                <i data-lucide="receipt"></i> ${escHtml(t.turno)} · ${escHtml(t.cajero)}
+              </button>`).join('')}
+            <button class="action-btn" style="padding:5px 10px; font-size:12px; background: linear-gradient(135deg, #6366f1, #8b5cf6); color:white; border:none;" onclick="verTicketCierre(${idx})" title="Ticket consolidado del día">
+              <i data-lucide="calendar-check"></i> Día
+            </button>
+          </div>
         </td>
       </tr>`;
     }).join('');
@@ -5063,6 +5069,110 @@ window.verTicketCierre = function(idx) {
   const c = cierresCache[idx];
   if (!c) return;
   loadCierreDia(c.fecha);
+};
+
+function escHtml(v) {
+  return String(v ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+}
+
+// Imprime solo el ticket indicado (ver @media print en index.css), no la página entera.
+function imprimirTicket(el) {
+  if (!el) { window.print(); return; }
+  el.classList.add('ticket-imprimible');
+  const quitar = () => { el.classList.remove('ticket-imprimible'); window.removeEventListener('afterprint', quitar); };
+  window.addEventListener('afterprint', quitar);
+  window.print();
+}
+
+// Ticket de un turno ya cerrado (historial de cierres), con el mismo diseño del ticket de cierre.
+window.verTicketTurno = async function(turnoId, fecha) {
+  try {
+    const res = await fetch(`/api/admin/cierres/turno/${turnoId}`);
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'No se pudo cargar el ticket del turno');
+
+    const fmt = (v) => Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 });
+    const fmtTasa = (t) => t > 0 ? t.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 4 }) : '—';
+    const fmtDiff = (v) => (v === null || v === undefined) ? '—' : (Math.abs(v) < 100 ? '$0' : (v < 0 ? '-$' : '+$') + fmt(Math.abs(v)));
+    const colorDiff = (v) => (v !== null && v !== undefined && v < 0 && Math.abs(v) >= 100) ? 'var(--danger)' : 'var(--success)';
+    const metodos = [
+      { nombre: 'Pago Móvil (Bs)', moneda: 'VES', claves: ['Pago Móvil', 'Pago Movil'], simbolo: 'Bs ' },
+      { nombre: 'Zelle (USD)', moneda: 'USD', claves: ['Zelle'], simbolo: '$' },
+      { nombre: 'Binance (USD)', moneda: 'USD', claves: ['Binance'], simbolo: '$' },
+      { nombre: 'Efectivo (USD)', moneda: 'USD', claves: ['Efectivo USD', 'Efectivo'], simbolo: '$' },
+      { nombre: 'Pesos Efectivo (COP)', moneda: 'COP', claves: ['Efectivo COP', 'Efectivo'], simbolo: '$' },
+      { nombre: 'Bancolombia (COP)', moneda: 'COP', claves: ['Bancolombia'], simbolo: '$' }
+    ];
+    const tabla = (detalle) => metodos.map(m => {
+      let monto = 0, cop = 0;
+      m.claves.forEach(k => { const x = detalle?.[m.moneda]?.[k]; monto += parseFloat(x?.monto || 0); cop += parseFloat(x?.total_cop || 0); });
+      const tasa = m.moneda === 'COP' ? '1' : fmtTasa(monto > 0 ? cop / monto : 0);
+      return `<tr><td>${m.nombre}</td><td class="ctd-mono">${m.simbolo}${fmt(monto)}</td><td class="ctd-mono">${tasa}</td><td class="ctd-mono">$${fmt(cop)}</td></tr>`;
+    }).join('');
+    const t = d.turno;
+    const utilidad = d.utilidad_neta || 0;
+    const hayDesglose = d.declarado_ventas_cop !== null && d.declarado_ventas_cop !== undefined;
+
+    document.getElementById('turno-ticket-contenido').innerHTML = `
+      <div class="ctd-header">
+        <div class="ctd-header-icon"><i data-lucide="receipt"></i></div>
+        <div>
+          <div class="ctd-title">TICKET DE CIERRE · TURNO ${escHtml(t.turno).toUpperCase()}</div>
+          <div class="ctd-subtitle">${escHtml(fecha || '')} · ${escHtml(t.cajero)} · ${escHtml(t.hora_apertura || '—')} a ${escHtml(t.hora_cierre || '—')}</div>
+        </div>
+      </div>
+      <section class="ctd-card">
+        <div class="ctd-card-head">
+          <span class="ctd-card-icon ctd-icon-green"><i data-lucide="shopping-cart"></i></span>
+          <span class="ctd-card-title">Ventas del Turno (Contado)</span>
+          <span class="ctd-card-total ctd-mono">$${fmt(d.total_ventas_contado_cop)}</span>
+        </div>
+        <table class="ctd-table"><thead><tr><th>Método</th><th>Monto</th><th>Tasa</th><th>Total</th></tr></thead>
+          <tbody>${tabla(d.ventas_detalle)}</tbody></table>
+        <div class="ctd-foot-row ctd-foot-danger"><span><i data-lucide="credit-card"></i> Cuentas por Cobrar (Crédito)</span><strong class="ctd-mono">$${fmt(d.total_ventas_credito_cop)}</strong></div>
+        <div class="ctd-foot-row ctd-foot-total"><span><i data-lucide="receipt"></i> Venta Total Facturada</span><strong class="ctd-mono">$${fmt(d.total_ventas_real_cop)}</strong></div>
+      </section>
+      <section class="ctd-card">
+        <div class="ctd-card-head">
+          <span class="ctd-card-icon ctd-icon-cyan"><i data-lucide="hand-coins"></i></span>
+          <span class="ctd-card-title">Cobranzas / Abonos</span>
+          <span class="ctd-card-total ctd-mono">$${fmt(d.total_abonos_cop)}</span>
+        </div>
+        <table class="ctd-table"><thead><tr><th>Método</th><th>Monto</th><th>Tasa</th><th>Total</th></tr></thead>
+          <tbody>${tabla(d.abonos_detalle)}</tbody></table>
+      </section>
+      <section class="ctd-card">
+        <div class="ctd-card-head"><span class="ctd-card-icon ctd-icon-gold"><i data-lucide="trending-up"></i></span><span class="ctd-card-title">Rendimiento</span></div>
+        <div class="ctd-kpi">
+          <div class="ctd-kpi-item ctd-kpi-cost"><span>Costo de Producción</span><strong class="ctd-mono">-$${fmt(d.costo_produccion)}</strong></div>
+          <div class="ctd-kpi-item ctd-kpi-profit"><span>Utilidad Neta</span><strong class="ctd-mono" style="color:${utilidad >= 0 ? 'var(--success)' : 'var(--danger)'}">${utilidad < 0 ? '-' : ''}$${fmt(Math.abs(utilidad))}</strong></div>
+        </div>
+      </section>
+      <section class="ctd-card">
+        <div class="ctd-card-head"><span class="ctd-card-icon ctd-icon-gold"><i data-lucide="wallet"></i></span><span class="ctd-card-title">Fondo de Caja y Arqueo Final</span></div>
+        <div class="ctd-row"><span>Fondo de Caja Base</span><strong class="ctd-mono">$${fmt(t.fondo_inicial_cop)} COP + $${fmt(t.fondo_inicial_usd)} USD</strong></div>
+        <div class="ctd-row"><span>Estado del Fondo</span><span class="ctd-badge ${t.fondo_completo ? 'ctd-badge-ok' : 'ctd-badge-no'}">${t.fondo_completo ? 'Completo' : 'Incompleto'}</span></div>
+        <div class="ctd-divider"></div>
+        <div class="ctd-declare-grid">
+          <div class="ctd-declare-cell"><span class="ctd-declare-label">Declarado Ventas</span><strong class="ctd-mono">${hayDesglose ? '$' + fmt(d.declarado_ventas_cop) : '—'}</strong></div>
+          <div class="ctd-declare-cell"><span class="ctd-declare-label">Diferencia Ventas</span><strong class="ctd-mono" style="color:${colorDiff(d.diferencia_ventas_cop)}">${fmtDiff(d.diferencia_ventas_cop)}</strong></div>
+          <div class="ctd-declare-cell"><span class="ctd-declare-label">Declarado Abonos</span><strong class="ctd-mono">${hayDesglose ? '$' + fmt(d.declarado_abonos_cop) : '—'}</strong></div>
+          <div class="ctd-declare-cell"><span class="ctd-declare-label">Diferencia Abonos</span><strong class="ctd-mono" style="color:${colorDiff(d.diferencia_abonos_cop)}">${fmtDiff(d.diferencia_abonos_cop)}</strong></div>
+        </div>
+        ${hayDesglose ? '' : '<div class="ctd-row" style="font-size:12px;"><span class="text-muted">Turno cerrado antes de guardar el desglose ventas/abonos: solo hay total.</span></div>'}
+        <div class="ctd-foot-row ctd-foot-total"><span><i data-lucide="wallet"></i> Declarado Total (COP)</span><strong class="ctd-mono">$${fmt(d.declarado_cop)}</strong></div>
+        <div class="ctd-foot-row ctd-arqueo-final"><span><i data-lucide="scale"></i> Diferencia Total de Caja</span><strong class="ctd-mono" style="color:${colorDiff(d.diferencia_caja)}">${fmtDiff(d.diferencia_caja)}</strong></div>
+      </section>`;
+
+    const overlay = document.getElementById('cierre-turno-overlay');
+    document.getElementById('btn-turno-cerrar').onclick = () => overlay.classList.remove('open');
+    document.getElementById('btn-turno-imprimir').onclick = () => imprimirTicket(document.getElementById('turno-ticket-contenido'));
+    document.getElementById('btn-turno-ver-dia').onclick = () => { overlay.classList.remove('open'); loadCierreDia(fecha); };
+    overlay.classList.add('open');
+    lucide.createIcons();
+  } catch (e) {
+    showToast(e.message || 'Error al cargar el ticket del turno', 'danger');
+  }
 };
 
 function exportarCierresCSV() {

@@ -3950,3 +3950,22 @@ select.receta-insumo option {
   gap: 10px;
 }
 
+
+/* ============================================
+   IMPRESIÓN DE TICKETS DE CIERRE
+   Al imprimir, solo se muestra el ticket marcado con .ticket-imprimible
+   (turno, día consolidado o cierre recién hecho), no la página entera.
+   ============================================ */
+@media print {
+  body * { visibility: hidden !important; }
+  .ticket-imprimible, .ticket-imprimible * { visibility: visible !important; }
+  .ticket-imprimible {
+    position: absolute !important;
+    left: 0; top: 0;
+    width: 100% !important;
+    max-width: 100% !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .ticket-imprimible * { color: #000 !important; background: transparent !important; box-shadow: none !important; }
+}

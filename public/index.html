@@ -13,7 +13,7 @@
   <!-- Lucide Icons para iconografía limpia y moderna -->
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- Estilos CSS -->
-  <link rel="stylesheet" href="index.css?v=20">
+  <link rel="stylesheet" href="index.css?v=21">
   <!-- PWA: instalable como aplicación en Chrome/Android/escritorio -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#0b0f1a">
@@ -2021,6 +2021,28 @@
 
 
   <!-- ============================================ -->
+  <!-- MODAL TICKET DE UN TURNO (historial)         -->
+  <!-- ============================================ -->
+  <div class="modal-overlay" id="cierre-turno-overlay" style="z-index: 3100;">
+    <div class="modal-box cierre-caja-box">
+      <div style="text-align: center; padding: 20px;">
+        <div class="cierre-ticket-dashboard" id="turno-ticket-contenido"></div>
+        <div style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap; margin-top: 16px;">
+          <button class="action-btn btn-primary" id="btn-turno-imprimir">
+            <i data-lucide="printer"></i> Imprimir Ticket
+          </button>
+          <button class="action-btn" id="btn-turno-ver-dia" style="background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; border: none;">
+            <i data-lucide="calendar-check"></i> Ver Cierre del Día
+          </button>
+          <button class="action-btn secondary" id="btn-turno-cerrar">
+            <i data-lucide="x"></i> Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================ -->
   <!-- MODAL CIERRE DIARIO CONSOLIDADO              -->
   <!-- ============================================ -->
   <div class="modal-overlay" id="cierre-dia-overlay" style="z-index: 3100;">
@@ -2368,7 +2390,7 @@
     </div>
   </div>
 
-  <script src="app3.js?v=53"></script>
+  <script src="app3.js?v=54"></script>
   <script src="whatsapp.js?v=5"></script>
 <!-- Script to automatically replace commas with dots in number inputs -->
   <script>
