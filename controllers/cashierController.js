@@ -274,6 +274,15 @@ function horaLocal(v) {
   return isNaN(d) ? s.slice(11, 16) : enCaracas(d);
 }
 
+// Tasa de los pagos de un método: la guardada en cada pago. Si todos usaron la misma, esa;
+// si hubo varias en el periodo, el promedio ponderado. En COP siempre es 1.
+function tasaDePagos(r) {
+  const min = parseFloat(r.tasa_min), max = parseFloat(r.tasa_max);
+  if (Number.isFinite(min) && Number.isFinite(max) && Math.abs(max - min) < 1e-9) return min;
+  const monto = parseFloat(r.total_original || 0), base = parseFloat(r.total_base || 0);
+  return monto > 0 ? base / monto : null;
+}
+
 // GET /api/admin/cierres/turno/:id — Ticket de un turno ya cerrado (solo administrador).
 // Lo guardado al cerrar (fondo, declarado, diferencias, costo, utilidad) + el desglose por
 // método de pago, reconstruido con los pagos registrados entre la apertura y el cierre.
@@ -306,7 +315,7 @@ export async function ticketTurnoAdmin(req, res) {
         const monto = parseFloat(r.total_original || 0);
         const tasa = tasaDe(moneda);
         const cop = tasa ? monto * tasa : parseFloat(r.total_base || 0);
-        out[moneda][r.metodo_pago] = { monto, total_cop: cop };
+        out[moneda][r.metodo_pago] = { monto, total_cop: cop, tasa: moneda === 'COP' ? 1 : (tasa || tasaDePagos(r)) };
         totalCop += cop;
       }
       return { out, totalCop };
@@ -321,14 +330,14 @@ export async function ticketTurnoAdmin(req, res) {
     `, params);
 
     const ventas = await detalle(`
-      SELECT pv.moneda, pv.metodo_pago, SUM(pv.monto_original) AS total_original, SUM(pv.monto_base) AS total_base
+      SELECT pv.moneda, pv.metodo_pago, SUM(pv.monto_original) AS total_original, SUM(pv.monto_base) AS total_base, MIN(pv.tasa_cambio) AS tasa_min, MAX(pv.tasa_cambio) AS tasa_max
       FROM pagos_ventas pv JOIN ventas v ON pv.venta_id = v.id
       WHERE pv.fecha >= $1 AND pv.fecha <= ${hastaExpr}
         AND pv.metodo_pago != 'Crédito' AND v.tipo_transaccion != 'Anulada'
       GROUP BY pv.moneda, pv.metodo_pago
     `);
     const abonos = await detalle(`
-      SELECT pa.moneda, pa.metodo_pago, SUM(pa.monto_original) AS total_original, SUM(pa.monto_base) AS total_base
+      SELECT pa.moneda, pa.metodo_pago, SUM(pa.monto_original) AS total_original, SUM(pa.monto_base) AS total_base, MIN(pa.tasa_cambio) AS tasa_min, MAX(pa.tasa_cambio) AS tasa_max
       FROM pagos_abonos pa
       WHERE pa.fecha >= $1 AND pa.fecha <= ${hastaExpr}
       GROUP BY pa.moneda, pa.metodo_pago
@@ -415,7 +424,7 @@ export async function cierreDia(req, res) {
     // Desglose por método de pago (ventas de contado y abonos) del día
     const ventasDetalleQuery = `
       SELECT pv.moneda, pv.metodo_pago,
-             SUM(pv.monto_original) as total_original,
+             SUM(pv.monto_original) as total_original, MIN(pv.tasa_cambio) as tasa_min, MAX(pv.tasa_cambio) as tasa_max,
              SUM(pv.monto_base) as total_base
       FROM pagos_ventas pv JOIN ventas v ON pv.venta_id = v.id
       WHERE ${dateExpr('pv.fecha')} = $1 AND pv.metodo_pago != 'Crédito' AND v.tipo_transaccion != 'Anulada'
@@ -425,7 +434,7 @@ export async function cierreDia(req, res) {
 
     const abonosDetalleQuery = `
       SELECT pa.moneda, pa.metodo_pago,
-             SUM(pa.monto_original) as total_original,
+             SUM(pa.monto_original) as total_original, MIN(pa.tasa_cambio) as tasa_min, MAX(pa.tasa_cambio) as tasa_max,
              SUM(pa.monto_base) as total_base
       FROM pagos_abonos pa
       WHERE ${dateExpr('pa.fecha')} = $1
@@ -440,7 +449,8 @@ export async function cierreDia(req, res) {
       if (!ventasDetalle[moneda]) ventasDetalle[moneda] = {};
       ventasDetalle[moneda][r.metodo_pago] = {
         monto: parseFloat(r.total_original || 0),
-        total_cop: parseFloat(r.total_base || 0)
+        total_cop: parseFloat(r.total_base || 0),
+        tasa: moneda === 'COP' ? 1 : tasaDePagos(r)
       };
     });
     abonosDetalleData.forEach(r => {
@@ -448,7 +458,8 @@ export async function cierreDia(req, res) {
       if (!abonosDetalle[moneda]) abonosDetalle[moneda] = {};
       abonosDetalle[moneda][r.metodo_pago] = {
         monto: parseFloat(r.total_original || 0),
-        total_cop: parseFloat(r.total_base || 0)
+        total_cop: parseFloat(r.total_base || 0),
+        tasa: moneda === 'COP' ? 1 : tasaDePagos(r)
       };
     });
 

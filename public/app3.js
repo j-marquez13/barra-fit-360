@@ -4744,9 +4744,9 @@ async function cerrarTurnoActual() {
       viewArqueo.style.display = 'none';
       viewSuccess.style.display = 'block';
       
-      const fmtMoney = (v) => Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 });
+      const fmtMoney = (v) => numTicket(v);
       const setMonto = (id, texto) => { const el = document.getElementById(id); if (el) el.textContent = texto; };
-      const fmtTasa = (t) => Number(t || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 4 });
+      const fmtTasa = (t) => numTicket(t);
 
       const tasas = d.resumen.tasas || { USD: rateUsd, VES: rateVes };
       const rateUsdTicket = parseFloat(tasas.USD) || 1;
@@ -4876,7 +4876,7 @@ window.loadCierreDia = async function(fechaReq) {
     if (!res.ok) throw new Error(d.error || 'Error al cargar el cierre diario');
 
     const r = d.resumen || {};
-    const fmt = (v) => Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 });
+    const fmt = (v) => numTicket(v);
     const setMonto = (id, texto) => { const el = document.getElementById(id); if (el) el.textContent = texto; };
 
     setMonto('dia-subtitle', `${d.fecha || fecha} · ${r.total_turnos || 0} turnos`);
@@ -4886,13 +4886,14 @@ window.loadCierreDia = async function(fechaReq) {
     const vDet = r.ventas_detalle || {};
     const aDet = r.abonos_detalle || {};
     const pickDet = (detalle, moneda, claves) => {
-      let monto = 0, cop = 0;
+      let monto = 0, cop = 0, tasa = null;
       (claves || []).forEach(k => {
         const d = detalle?.[moneda]?.[k];
         monto += parseFloat(d?.monto || 0);
         cop += parseFloat(d?.total_cop || 0);
+        if (d && d.tasa) tasa = d.tasa; // tasa real guardada en los pagos
       });
-      return { monto, cop };
+      return { monto, cop, tasa };
     };
     const metodos = [
       { key: 'pago-movil', moneda: 'VES', claves: ['Pago Móvil', 'Pago Movil'], simbolo: 'Bs ' },
@@ -4902,7 +4903,7 @@ window.loadCierreDia = async function(fechaReq) {
       { key: 'pesos', moneda: 'COP', claves: ['Efectivo COP', 'Efectivo'], simbolo: '$' },
       { key: 'bancolombia', moneda: 'COP', claves: ['Bancolombia'], simbolo: '$' }
     ];
-    const fmtTasa = (t, moneda) => moneda === 'COP' ? '1' : (t > 0 ? t.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 4 }) : '—');
+    const fmtTasa = (t, moneda) => moneda === 'COP' ? '1' : (t > 0 ? numTicket(t) : '—');
 
     // Igual que en el ticket del turno: el total de cada tabla es la suma de sus filas.
     let ventasContado = 0;
@@ -4912,8 +4913,8 @@ window.loadCierreDia = async function(fechaReq) {
       const a = pickDet(aDet, m.moneda, m.claves);
       ventasContado += v.cop;
       abonosTotal += a.cop;
-      const tasaV = v.monto > 0 ? (v.cop / v.monto) : 0;
-      const tasaA = a.monto > 0 ? (a.cop / a.monto) : 0;
+      const tasaV = v.tasa || (v.monto > 0 ? (v.cop / v.monto) : 0);
+      const tasaA = a.tasa || (a.monto > 0 ? (a.cop / a.monto) : 0);
       setMonto(`dv-m-${m.key}`, `${m.simbolo}${fmt(v.monto)}`);
       setMonto(`dv-t-${m.key}`, fmtTasa(tasaV, m.moneda));
       setMonto(`dv-c-${m.key}`, `$${fmt(v.cop)}`);
@@ -5047,7 +5048,7 @@ async function loadCierresAdmin() {
       return;
     }
 
-    const fmt = (v) => Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    const fmt = (v) => numTicket(v, 0);
 
     tbody.innerHTML = cierresCache.map((c, idx) => {
       const diffColor = Math.abs(c.diferencia_caja) < 100 ? 'var(--success)' : 'var(--danger)';
@@ -5109,6 +5110,12 @@ window.verTicketCierre = function(idx) {
   loadCierreDia(c.fecha);
 };
 
+// Números de los tickets de cierre: punto de miles siempre (5.000, no 5000) y coma decimal.
+// El formato "es" del navegador no agrupa los números de 4 cifras; "de-DE" sí, con el mismo estilo.
+function numTicket(v, maxDecimales = 2) {
+  return Number(v || 0).toLocaleString("de-DE", { minimumFractionDigits: 0, maximumFractionDigits: maxDecimales });
+}
+
 function escHtml(v) {
   return String(v ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 }
@@ -5131,7 +5138,7 @@ function htmlArqueoMetodos(ventasDet, abonosDet, declarados) {
     const x = det?.[m.moneda]?.[k];
     return s + (typeof x === 'number' ? x : parseFloat(x?.monto || 0));
   }, 0);
-  const fmt = (v) => Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  const fmt = (v) => numTicket(v);
   const filas = METODOS_ARQUEO.map(m => {
     const esperado = monto(ventasDet, m) + monto(abonosDet, m);
     const declarado = parseFloat(declarados?.[m.declarado] || 0);
@@ -5170,8 +5177,8 @@ window.verTicketTurno = async function(turnoId, fecha) {
     const d = await res.json();
     if (!res.ok) throw new Error(d.error || 'No se pudo cargar el ticket del turno');
 
-    const fmt = (v) => Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 });
-    const fmtTasa = (t) => t > 0 ? t.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 4 }) : '—';
+    const fmt = (v) => numTicket(v);
+    const fmtTasa = (t) => t > 0 ? numTicket(t) : '—';
     const fmtDiff = (v) => (v === null || v === undefined) ? '—' : (Math.abs(v) < 100 ? '$0' : (v < 0 ? '-$' : '+$') + fmt(Math.abs(v)));
     const colorDiff = (v) => (v !== null && v !== undefined && v < 0 && Math.abs(v) >= 100) ? 'var(--danger)' : 'var(--success)';
     const metodos = [
@@ -5183,9 +5190,10 @@ window.verTicketTurno = async function(turnoId, fecha) {
       { nombre: 'Bancolombia (COP)', moneda: 'COP', claves: ['Bancolombia'], simbolo: '$' }
     ];
     const tabla = (detalle) => metodos.map(m => {
-      let monto = 0, cop = 0;
-      m.claves.forEach(k => { const x = detalle?.[m.moneda]?.[k]; monto += parseFloat(x?.monto || 0); cop += parseFloat(x?.total_cop || 0); });
-      const tasa = m.moneda === 'COP' ? '1' : fmtTasa(monto > 0 ? cop / monto : 0);
+      let monto = 0, cop = 0, tasaPago = null;
+      m.claves.forEach(k => { const x = detalle?.[m.moneda]?.[k]; monto += parseFloat(x?.monto || 0); cop += parseFloat(x?.total_cop || 0); if (x && x.tasa) tasaPago = x.tasa; });
+      // Tasa real guardada en los pagos (no total ÷ monto, que con redondeos da cosas como 3144,6541)
+      const tasa = m.moneda === 'COP' ? '1' : fmtTasa(tasaPago || (monto > 0 ? cop / monto : 0));
       return `<tr><td>${m.nombre}</td><td class="ctd-mono">${m.simbolo}${fmt(monto)}</td><td class="ctd-mono">${tasa}</td><td class="ctd-mono">$${fmt(cop)}</td></tr>`;
     }).join('');
     const t = d.turno;

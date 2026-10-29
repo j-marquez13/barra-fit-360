@@ -3787,9 +3787,22 @@ select.receta-insumo option {
 /* ============================================
    CIERRE DIARIO CONSOLIDADO — SCROLL INTERNO
    ============================================ */
-#cierre-dia-overlay .cierre-caja-box {
+#cierre-dia-overlay .cierre-caja-box,
+#cierre-turno-overlay .cierre-caja-box {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  /* El recuadro del ancho del ticket: sin márgenes vacíos a los lados */
+  width: 620px !important;
+  max-width: 95vw !important;
+  max-height: 92vh !important;
+}
+#cierre-dia-overlay .cierre-ticket-dashboard,
+#cierre-turno-overlay .cierre-ticket-dashboard {
+  max-width: 100%;
+}
+@media (max-width: 600px) {
+  #cierre-dia-overlay .cierre-caja-box > div,
+  #cierre-turno-overlay .cierre-caja-box > div { padding: 12px !important; }
 }
 
 
