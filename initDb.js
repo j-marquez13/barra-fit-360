@@ -137,6 +137,9 @@ export async function initializeDatabase() {
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_abonos_cop DOUBLE PRECISION;');
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS diferencia_ventas_cop DOUBLE PRECISION;');
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS diferencia_abonos_cop DOUBLE PRECISION;');
+      // Tasa con la que se cerró cada turno (para reconstruir su ticket tal cual)
+      await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS tasa_usd DOUBLE PRECISION;');
+      await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS tasa_ves DOUBLE PRECISION;');
 
       // Las deudas manuales se guardan en abonos_credito con monto negativo:
       // eliminar el CHECK (monto_total_cop > 0) si todavía existe.
@@ -733,6 +736,9 @@ async function runMigrations() {
   try { await db.execute("ALTER TABLE sesiones_caja ADD COLUMN declarado_abonos_cop REAL"); } catch(e) {}
   try { await db.execute("ALTER TABLE sesiones_caja ADD COLUMN diferencia_ventas_cop REAL"); } catch(e) {}
   try { await db.execute("ALTER TABLE sesiones_caja ADD COLUMN diferencia_abonos_cop REAL"); } catch(e) {}
+  // Tasa con la que se cerró cada turno (para reconstruir su ticket tal cual)
+  try { await db.execute("ALTER TABLE sesiones_caja ADD COLUMN tasa_usd REAL"); } catch(e) {}
+  try { await db.execute("ALTER TABLE sesiones_caja ADD COLUMN tasa_ves REAL"); } catch(e) {}
 
   // Las deudas manuales se registran en abonos_credito con monto NEGATIVO, pero la tabla
   // original exigía monto > 0 y la operación fallaba siempre. SQLite no permite quitar un

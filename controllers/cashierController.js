@@ -286,6 +286,12 @@ export async function ticketTurnoAdmin(req, res) {
       : "datetime(replace(substr($2, 1, 19), 'T', ' '), '+4 hours')";
     const params = [s.fecha_apertura, s.fecha_cierre];
 
+    // Tasa con la que se cerró el turno (guardada desde esta versión). Con ella el ticket
+    // sale idéntico al del cierre; en turnos más viejos se usa la tasa de cada pago.
+    const tasaUsd = parseFloat(s.tasa_usd) || null;
+    const tasaVes = parseFloat(s.tasa_ves) || null;
+    const tasaDe = (moneda) => (moneda === 'USD' ? tasaUsd : moneda === 'VES' ? tasaVes : 1);
+
     const detalle = async (sqlTexto) => {
       const filas = await db.query(sqlTexto, params);
       const out = {};
@@ -293,12 +299,22 @@ export async function ticketTurnoAdmin(req, res) {
       for (const r of filas) {
         const moneda = (r.moneda || '').toUpperCase();
         if (!out[moneda]) out[moneda] = {};
-        const cop = parseFloat(r.total_base || 0);
-        out[moneda][r.metodo_pago] = { monto: parseFloat(r.total_original || 0), total_cop: cop };
+        const monto = parseFloat(r.total_original || 0);
+        const tasa = tasaDe(moneda);
+        const cop = tasa ? monto * tasa : parseFloat(r.total_base || 0);
+        out[moneda][r.metodo_pago] = { monto, total_cop: cop };
         totalCop += cop;
       }
       return { out, totalCop };
     };
+
+    // Ventas registradas y anuladas en el turno (control)
+    const [conteo] = await db.query(`
+      SELECT
+        COALESCE(SUM(CASE WHEN tipo_transaccion != 'Anulada' THEN 1 ELSE 0 END), 0) AS ventas,
+        COALESCE(SUM(CASE WHEN tipo_transaccion = 'Anulada' THEN 1 ELSE 0 END), 0) AS anuladas
+      FROM ventas WHERE fecha >= $1 AND fecha <= ${hastaExpr}
+    `, params);
 
     const ventas = await detalle(`
       SELECT pv.moneda, pv.metodo_pago, SUM(pv.monto_original) AS total_original, SUM(pv.monto_base) AS total_base
@@ -341,7 +357,17 @@ export async function ticketTurnoAdmin(req, res) {
       declarado_abonos_cop: num(s.declarado_abonos_cop),
       diferencia_ventas_cop: num(s.diferencia_ventas_cop),
       diferencia_abonos_cop: num(s.diferencia_abonos_cop),
-      diferencia_caja: num(s.diferencia_caja) || 0
+      diferencia_caja: num(s.diferencia_caja) || 0,
+      // Lo que el cajero contó por método (ventas + abonos, en la moneda de cada método)
+      declarado_pago_movil: num(s.declarado_pago_movil) || 0,
+      declarado_zelle: num(s.declarado_zelle) || 0,
+      declarado_binance: num(s.declarado_binance) || 0,
+      declarado_efectivo_usd: num(s.declarado_efectivo_usd) || 0,
+      declarado_efectivo_pesos: num(s.declarado_efectivo_pesos) || 0,
+      declarado_bancolombia: num(s.declarado_bancolombia) || 0,
+      tasas: tasaUsd || tasaVes ? { USD: tasaUsd, VES: tasaVes } : null,
+      cantidad_ventas: parseInt(conteo?.ventas || 0, 10),
+      cantidad_anuladas: parseInt(conteo?.anuladas || 0, 10)
     });
   } catch (error) {
     console.error('Error al obtener ticket del turno:', error);
@@ -662,9 +688,9 @@ export async function cerrarCaja(req, res) {
 
     // Cerrar la sesión
     const now = localNow();
-    const sqlUpdate = `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_pago_movil = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9, declarado_efectivo_usd = $10, costo_produccion = $11, utilidad_neta = $12, declarado_cop = $13, total_ventas_credito_cop = $14, fondo_declarado_cop = $15, fondo_declarado_usd = $16, fondo_completo = $17, total_abonos_cop = $18, declarado_ventas_cop = $19, declarado_abonos_cop = $20, diferencia_ventas_cop = $21, diferencia_abonos_cop = $22 WHERE id = $23${isPg ? ' RETURNING *' : ''}`;
+    const sqlUpdate = `UPDATE sesiones_caja SET fecha_cierre = $1, total_ventas_cop = $2, total_gastos_cop = $3, diferencia_caja = $4, estado = 'Cerrada', declarado_pago_movil = $5, declarado_zelle = $6, declarado_binance = $7, declarado_efectivo_pesos = $8, declarado_bancolombia = $9, declarado_efectivo_usd = $10, costo_produccion = $11, utilidad_neta = $12, declarado_cop = $13, total_ventas_credito_cop = $14, fondo_declarado_cop = $15, fondo_declarado_usd = $16, fondo_completo = $17, total_abonos_cop = $18, declarado_ventas_cop = $19, declarado_abonos_cop = $20, diferencia_ventas_cop = $21, diferencia_abonos_cop = $22, tasa_usd = $23, tasa_ves = $24 WHERE id = $25${isPg ? ' RETURNING *' : ''}`;
 
-    const result = await db.execute(sqlUpdate, [now, totalVentasReal, totalGastos, diferencia, decPagoMovil, decZelle, decBinance, decPesos, decBancolombia, decUsd, costoProduccion, utilidadNeta, declarado, totalVentasCreditoCop, decFondoPesos, decFondoUsd, fondoCompleto, totalAbonosCop, declaradoVentasCop, declaradoAbonosCop, diferenciaVentasCop, diferenciaAbonosCop, currentSession.id]);
+    const result = await db.execute(sqlUpdate, [now, totalVentasReal, totalGastos, diferencia, decPagoMovil, decZelle, decBinance, decPesos, decBancolombia, decUsd, costoProduccion, utilidadNeta, declarado, totalVentasCreditoCop, decFondoPesos, decFondoUsd, fondoCompleto, totalAbonosCop, declaradoVentasCop, declaradoAbonosCop, diferenciaVentasCop, diferenciaAbonosCop, tasaUsd, tasaVes, currentSession.id]);
     
     let sessionRes = result;
     if (!isPg) {

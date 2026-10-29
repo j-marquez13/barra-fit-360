@@ -13,7 +13,7 @@
   <!-- Lucide Icons para iconografía limpia y moderna -->
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- Estilos CSS -->
-  <link rel="stylesheet" href="index.css?v=21">
+  <link rel="stylesheet" href="index.css?v=22">
   <!-- PWA: instalable como aplicación en Chrome/Android/escritorio -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#0b0f1a">
@@ -1543,6 +1543,8 @@
             </div>
           </div>
 
+          <!-- Turno abierto ahora (los cierres solo muestran turnos ya cerrados) -->
+          <div id="cierres-turno-en-curso" style="display:none; margin-bottom:12px; padding:10px 14px; border-radius:10px; border:1px solid rgba(0,230,118,0.3); background:rgba(0,230,118,0.06); font-size:0.9rem;"></div>
           <div class="data-table-container">
             <table class="data-table">
               <thead>
@@ -1553,7 +1555,7 @@
                   <th>Crédito</th>
                   <th>Costo Prod.</th>
                   <th>Gastos</th>
-                  <th>Reposición</th>
+                  <th title="Compras de inventario registradas ese día">Compras de stock</th>
                   <th>Utilidad</th>
                   <th>Declarado</th>
                   <th>Diferencia</th>
@@ -1925,6 +1927,23 @@
 
           <section class="ctd-card">
             <div class="ctd-card-head">
+              <span class="ctd-card-icon ctd-icon-gold"><i data-lucide="trending-up"></i></span>
+              <span class="ctd-card-title">Rendimiento</span>
+            </div>
+            <div class="ctd-kpi">
+              <div class="ctd-kpi-item ctd-kpi-cost">
+                <span>Costo de Producción</span>
+                <strong class="ctd-mono" id="ticket-costo">-$0</strong>
+              </div>
+              <div class="ctd-kpi-item ctd-kpi-profit">
+                <span>Utilidad Neta</span>
+                <strong class="ctd-mono" id="ticket-utilidad">$0</strong>
+              </div>
+            </div>
+          </section>
+
+          <section class="ctd-card">
+            <div class="ctd-card-head">
               <span class="ctd-card-icon ctd-icon-cyan"><i data-lucide="hand-coins"></i></span>
               <span class="ctd-card-title">Cobranzas / Abonos</span>
               <span class="ctd-card-total ctd-mono" id="ticket-abonos-total">$0</span>
@@ -1944,22 +1963,9 @@
             </table>
           </section>
 
-          <section class="ctd-card">
-            <div class="ctd-card-head">
-              <span class="ctd-card-icon ctd-icon-gold"><i data-lucide="trending-up"></i></span>
-              <span class="ctd-card-title">Rendimiento</span>
-            </div>
-            <div class="ctd-kpi">
-              <div class="ctd-kpi-item ctd-kpi-cost">
-                <span>Costo de Producción</span>
-                <strong class="ctd-mono" id="ticket-costo">-$0</strong>
-              </div>
-              <div class="ctd-kpi-item ctd-kpi-profit">
-                <span>Utilidad Neta</span>
-                <strong class="ctd-mono" id="ticket-utilidad">$0</strong>
-              </div>
-            </div>
-          </section>
+          <!-- Arqueo por método: declarado vs esperado (lo llena app3.js) -->
+
+          <div id="ticket-arqueo-metodos"></div>
 
           <section class="ctd-card">
             <div class="ctd-card-head">
@@ -2094,6 +2100,23 @@
 
           <section class="ctd-card">
             <div class="ctd-card-head">
+              <span class="ctd-card-icon ctd-icon-gold"><i data-lucide="trending-up"></i></span>
+              <span class="ctd-card-title">Rendimiento</span>
+            </div>
+            <div class="ctd-kpi">
+              <div class="ctd-kpi-item ctd-kpi-cost">
+                <span>Costo de Producción</span>
+                <strong class="ctd-mono" id="dia-costo">-$0</strong>
+              </div>
+              <div class="ctd-kpi-item ctd-kpi-profit">
+                <span>Utilidad Neta</span>
+                <strong class="ctd-mono" id="dia-utilidad">$0</strong>
+              </div>
+            </div>
+          </section>
+
+          <section class="ctd-card">
+            <div class="ctd-card-head">
               <span class="ctd-card-icon ctd-icon-cyan"><i data-lucide="hand-coins"></i></span>
               <span class="ctd-card-title">Cobranzas / Abonos</span>
               <span class="ctd-card-total ctd-mono" id="dia-abonos-total">$0</span>
@@ -2113,22 +2136,9 @@
             </table>
           </section>
 
-          <section class="ctd-card">
-            <div class="ctd-card-head">
-              <span class="ctd-card-icon ctd-icon-gold"><i data-lucide="trending-up"></i></span>
-              <span class="ctd-card-title">Rendimiento</span>
-            </div>
-            <div class="ctd-kpi">
-              <div class="ctd-kpi-item ctd-kpi-cost">
-                <span>Costo de Producción</span>
-                <strong class="ctd-mono" id="dia-costo">-$0</strong>
-              </div>
-              <div class="ctd-kpi-item ctd-kpi-profit">
-                <span>Utilidad Neta</span>
-                <strong class="ctd-mono" id="dia-utilidad">$0</strong>
-              </div>
-            </div>
-          </section>
+          <!-- Arqueo por método: declarado vs esperado (lo llena app3.js) -->
+
+          <div id="dia-arqueo-metodos"></div>
 
           <section class="ctd-card">
             <div class="ctd-card-head">
@@ -2390,7 +2400,7 @@
     </div>
   </div>
 
-  <script src="app3.js?v=54"></script>
+  <script src="app3.js?v=55"></script>
   <script src="whatsapp.js?v=5"></script>
 <!-- Script to automatically replace commas with dots in number inputs -->
   <script>

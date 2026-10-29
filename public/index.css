@@ -3969,3 +3969,19 @@ select.receta-insumo option {
   }
   .ticket-imprimible * { color: #000 !important; background: transparent !important; box-shadow: none !important; }
 }
+
+/* Tesorería, Usuarios y Cierres reutilizan .app-body (la cuadrícula del POS, en fila):
+   ahí el contenido va en columna, para que el título y los filtros no queden en una
+   columna aparte y la tabla ocupe todo el ancho. */
+#view-tesoreria > .app-body,
+#view-usuarios > .app-body,
+#view-cierres > .app-body {
+  flex-direction: column;
+  overflow: auto;
+}
+#view-cierres .view-header-row h2 { margin: 0; }
+@media (max-width: 700px) {
+  #view-cierres .view-header-row { flex-direction: column; align-items: stretch !important; }
+  #view-cierres .view-header-row > div { width: 100%; }
+  #view-cierres .date-picker { flex: 1; min-width: 0; }
+}

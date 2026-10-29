@@ -4831,6 +4831,10 @@ async function cerrarTurnoActual() {
       setDiff('ticket-diferencia-ventas', diferenciaVentas);
       setDiff('ticket-diferencia-abonos', diferenciaAbonos);
       setDiff('ticket-diferencia-total', diferenciaTotal);
+
+      // Arqueo por método (declarado vs esperado)
+      const arqueoTurno = document.getElementById('ticket-arqueo-metodos');
+      if (arqueoTurno) { arqueoTurno.innerHTML = htmlArqueoMetodos(vDet, aDet, d.resumen); lucide.createIcons(); }
       
 
 
@@ -4968,6 +4972,10 @@ window.loadCierreDia = async function(fechaReq) {
 
     setMonto('dia-declarado', `$${fmt(r.declarado_cop || 0)}`);
 
+    // Arqueo por método del día (suma de lo declarado en todos los turnos)
+    const arqueoDia = document.getElementById('dia-arqueo-metodos');
+    if (arqueoDia) { arqueoDia.innerHTML = htmlArqueoMetodos(vDet, aDet, r); lucide.createIcons(); }
+
     const diff = r.diferencia_caja || 0;
     const diffEl = document.getElementById('dia-diferencia');
     const diffRow = document.getElementById('dia-diff-row');
@@ -5009,7 +5017,17 @@ async function loadCierresAdmin() {
     showToast('Modo Local. Conecta al servidor para ver el historial de cierres.', 'warning');
     return;
   }
-  const desde = document.getElementById('cierres-desde')?.value || '';
+  // Por defecto, los últimos 30 días (para que cargue rápido con meses de historial)
+  const inpDesde = document.getElementById('cierres-desde');
+  if (inpDesde && !inpDesde.value && !loadCierresAdmin._iniciado) {
+    const d = new Date(localDateStr() + 'T12:00:00');
+    d.setDate(d.getDate() - 30);
+    inpDesde.value = d.toISOString().slice(0, 10);
+  }
+  loadCierresAdmin._iniciado = true;
+  mostrarTurnoEnCurso();
+
+  const desde = inpDesde?.value || '';
   const hasta = document.getElementById('cierres-hasta')?.value || '';
   let url = '/api/admin/cierres';
   const qs = [];
@@ -5065,6 +5083,26 @@ async function loadCierresAdmin() {
   }
 }
 
+// Aviso del turno que está abierto ahora (el historial solo lista turnos cerrados)
+async function mostrarTurnoEnCurso() {
+  const cont = document.getElementById('cierres-turno-en-curso');
+  if (!cont) return;
+  try {
+    const est = await fetch('/api/caja/estado').then(r => r.json());
+    if (!est || !est.abierta || !est.sesion) { cont.style.display = 'none'; return; }
+    const s = est.sesion;
+    // PostgreSQL envía la fecha en ISO con zona; SQLite, "AAAA-MM-DD HH:MM:SS" en UTC sin zona.
+    let raw = String(s.fecha_apertura || '');
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(raw)) raw = raw.replace(' ', 'T') + 'Z';
+    const fecha = new Date(raw);
+    const desde = isNaN(fecha) ? '' : fecha.toLocaleTimeString('es-VE', { timeZone: 'America/Caracas', hour: '2-digit', minute: '2-digit', hour12: false });
+    cont.innerHTML = `🟢 <strong>Turno en curso:</strong> ${escHtml(s.turno || '')} · ${escHtml(s.nombre_cajero || s.usuario_nombre || 'Cajero')}${desde ? ` · desde las ${escHtml(desde)}` : ''}. Aparecerá aquí con su ticket cuando se cierre.`;
+    cont.style.display = 'block';
+  } catch (e) {
+    cont.style.display = 'none';
+  }
+}
+
 window.verTicketCierre = function(idx) {
   const c = cierresCache[idx];
   if (!c) return;
@@ -5073,6 +5111,47 @@ window.verTicketCierre = function(idx) {
 
 function escHtml(v) {
   return String(v ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+}
+
+// Métodos de pago del arqueo, con el campo donde se guarda lo que declaró el cajero.
+const METODOS_ARQUEO = [
+  { nombre: 'Pago Móvil (Bs)', moneda: 'VES', claves: ['Pago Móvil', 'Pago Movil'], simbolo: 'Bs ', declarado: 'declarado_pago_movil' },
+  { nombre: 'Zelle (USD)', moneda: 'USD', claves: ['Zelle'], simbolo: '$', declarado: 'declarado_zelle' },
+  { nombre: 'Binance (USD)', moneda: 'USD', claves: ['Binance'], simbolo: '$', declarado: 'declarado_binance' },
+  { nombre: 'Efectivo (USD)', moneda: 'USD', claves: ['Efectivo USD', 'Efectivo'], simbolo: '$', declarado: 'declarado_efectivo_usd' },
+  { nombre: 'Pesos Efectivo (COP)', moneda: 'COP', claves: ['Efectivo COP', 'Efectivo'], simbolo: '$', declarado: 'declarado_efectivo_pesos' },
+  { nombre: 'Bancolombia (COP)', moneda: 'COP', claves: ['Bancolombia'], simbolo: '$', declarado: 'declarado_bancolombia' }
+];
+
+// Sección "Arqueo por Método": lo esperado (ventas de contado + abonos) contra lo que contó
+// el cajero, en la moneda de cada método. Así se ve DÓNDE está una diferencia, no solo cuánto.
+// Los detalles pueden venir como { MONEDA: { método: número } } o { MONEDA: { método: { monto } } }.
+function htmlArqueoMetodos(ventasDet, abonosDet, declarados) {
+  const monto = (det, m) => m.claves.reduce((s, k) => {
+    const x = det?.[m.moneda]?.[k];
+    return s + (typeof x === 'number' ? x : parseFloat(x?.monto || 0));
+  }, 0);
+  const fmt = (v) => Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  const filas = METODOS_ARQUEO.map(m => {
+    const esperado = monto(ventasDet, m) + monto(abonosDet, m);
+    const declarado = parseFloat(declarados?.[m.declarado] || 0);
+    const dif = declarado - esperado;
+    // Tolerancia: 100 pesos en COP; 0,01 en USD/Bs
+    const tolerancia = m.moneda === 'COP' ? 100 : 0.01;
+    const color = Math.abs(dif) < tolerancia ? 'var(--success)' : (dif < 0 ? 'var(--danger)' : 'var(--warning)');
+    const difTxt = Math.abs(dif) < tolerancia ? `${m.simbolo}0` : `${dif < 0 ? '-' : '+'}${m.simbolo}${fmt(Math.abs(dif))}`;
+    return `<tr><td>${m.nombre}</td><td class="ctd-mono">${m.simbolo}${fmt(esperado)}</td><td class="ctd-mono">${m.simbolo}${fmt(declarado)}</td><td class="ctd-mono" style="color:${color}; font-weight:bold;">${difTxt}</td></tr>`;
+  }).join('');
+  return `
+    <section class="ctd-card">
+      <div class="ctd-card-head">
+        <span class="ctd-card-icon ctd-icon-cyan"><i data-lucide="list-checks"></i></span>
+        <span class="ctd-card-title">Arqueo por Método</span>
+      </div>
+      <table class="ctd-table"><thead><tr><th>Método</th><th>Esperado</th><th>Declarado</th><th>Diferencia</th></tr></thead>
+        <tbody>${filas}</tbody></table>
+      <div class="ctd-row" style="font-size:12px;"><span class="text-muted">Esperado = ventas de contado + abonos de cada método, en su moneda.</span></div>
+    </section>`;
 }
 
 // Imprime solo el ticket indicado (ver @media print en index.css), no la página entera.
@@ -5119,6 +5198,7 @@ window.verTicketTurno = async function(turnoId, fecha) {
         <div>
           <div class="ctd-title">TICKET DE CIERRE · TURNO ${escHtml(t.turno).toUpperCase()}</div>
           <div class="ctd-subtitle">${escHtml(fecha || '')} · ${escHtml(t.cajero)} · ${escHtml(t.hora_apertura || '—')} a ${escHtml(t.hora_cierre || '—')}</div>
+          <div class="ctd-subtitle">${d.cantidad_ventas || 0} venta(s)${d.cantidad_anuladas ? ` · <span style="color:var(--danger)">${d.cantidad_anuladas} anulada(s)</span>` : ''}${d.tasas ? ` · Tasa al cierre: USD ${fmt(d.tasas.USD)} · Bs ${fmt(d.tasas.VES)}` : ''}</div>
         </div>
       </div>
       <section class="ctd-card">
@@ -5133,6 +5213,13 @@ window.verTicketTurno = async function(turnoId, fecha) {
         <div class="ctd-foot-row ctd-foot-total"><span><i data-lucide="receipt"></i> Venta Total Facturada</span><strong class="ctd-mono">$${fmt(d.total_ventas_real_cop)}</strong></div>
       </section>
       <section class="ctd-card">
+        <div class="ctd-card-head"><span class="ctd-card-icon ctd-icon-gold"><i data-lucide="trending-up"></i></span><span class="ctd-card-title">Rendimiento</span></div>
+        <div class="ctd-kpi">
+          <div class="ctd-kpi-item ctd-kpi-cost"><span>Costo de Producción</span><strong class="ctd-mono">-$${fmt(d.costo_produccion)}</strong></div>
+          <div class="ctd-kpi-item ctd-kpi-profit"><span>Utilidad Neta</span><strong class="ctd-mono" style="color:${utilidad >= 0 ? 'var(--success)' : 'var(--danger)'}">${utilidad < 0 ? '-' : ''}$${fmt(Math.abs(utilidad))}</strong></div>
+        </div>
+      </section>
+      <section class="ctd-card">
         <div class="ctd-card-head">
           <span class="ctd-card-icon ctd-icon-cyan"><i data-lucide="hand-coins"></i></span>
           <span class="ctd-card-title">Cobranzas / Abonos</span>
@@ -5141,13 +5228,7 @@ window.verTicketTurno = async function(turnoId, fecha) {
         <table class="ctd-table"><thead><tr><th>Método</th><th>Monto</th><th>Tasa</th><th>Total</th></tr></thead>
           <tbody>${tabla(d.abonos_detalle)}</tbody></table>
       </section>
-      <section class="ctd-card">
-        <div class="ctd-card-head"><span class="ctd-card-icon ctd-icon-gold"><i data-lucide="trending-up"></i></span><span class="ctd-card-title">Rendimiento</span></div>
-        <div class="ctd-kpi">
-          <div class="ctd-kpi-item ctd-kpi-cost"><span>Costo de Producción</span><strong class="ctd-mono">-$${fmt(d.costo_produccion)}</strong></div>
-          <div class="ctd-kpi-item ctd-kpi-profit"><span>Utilidad Neta</span><strong class="ctd-mono" style="color:${utilidad >= 0 ? 'var(--success)' : 'var(--danger)'}">${utilidad < 0 ? '-' : ''}$${fmt(Math.abs(utilidad))}</strong></div>
-        </div>
-      </section>
+      ${htmlArqueoMetodos(d.ventas_detalle, d.abonos_detalle, d)}
       <section class="ctd-card">
         <div class="ctd-card-head"><span class="ctd-card-icon ctd-icon-gold"><i data-lucide="wallet"></i></span><span class="ctd-card-title">Fondo de Caja y Arqueo Final</span></div>
         <div class="ctd-row"><span>Fondo de Caja Base</span><strong class="ctd-mono">$${fmt(t.fondo_inicial_cop)} COP + $${fmt(t.fondo_inicial_usd)} USD</strong></div>
@@ -5180,7 +5261,7 @@ function exportarCierresCSV() {
     showToast('No hay datos para exportar. Carga el historial primero.', 'warning');
     return;
   }
-  const encabezado = ['Fecha', 'Turnos', 'Ventas Contado COP', 'Credito COP', 'Costo Produccion COP', 'Gastos COP', 'Reposicion COP', 'Utilidad COP', 'Declarado COP', 'Diferencia COP'];
+  const encabezado = ['Fecha', 'Turnos', 'Ventas Contado COP', 'Credito COP', 'Costo Produccion COP', 'Gastos COP', 'Compras de stock COP', 'Utilidad COP', 'Declarado COP', 'Diferencia COP'];
   const filas = cierresCache.map(c => [
     c.fecha,
     c.total_turnos,
