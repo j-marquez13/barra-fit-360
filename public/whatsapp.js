@@ -311,6 +311,66 @@ async function enviarReporteSemanalAhora() {
 }
 
 // ============================================
+// AVISO DE INICIO DE TURNO (solo administrador)
+// ============================================
+async function loadAvisoTurno() {
+  const panel = document.getElementById('wa-aviso-turno-panel');
+  if (!panel || !waIsLoggedIn()) return;
+  try {
+    const res = await fetch('/api/whatsapp/aviso-turno/estado');
+    if (!res.ok) { panel.style.display = 'none'; return; } // no es administrador
+    const d = await res.json();
+    panel.style.display = '';
+    document.getElementById('wa-aviso-activo').checked = !!d.activado;
+    document.getElementById('wa-aviso-telefono-1').value = d.telefonos?.[0] || '';
+    document.getElementById('wa-aviso-telefono-2').value = d.telefonos?.[1] || '';
+    const status = document.getElementById('wa-aviso-status');
+    status.style.display = 'block';
+    status.className = d.activado && d.telefonos?.length ? 'wa-banner wa-ok' : 'wa-banner wa-warn';
+    status.innerHTML = d.activado && d.telefonos?.length
+      ? '🔔 Se avisará a: ' + d.telefonos.map(waEscapeHtml).join(' y ')
+      : '🔕 Aviso desactivado';
+  } catch (e) { /* sin conexión */ }
+}
+
+async function guardarAvisoTurno() {
+  const telefonos = ['wa-aviso-telefono-1', 'wa-aviso-telefono-2']
+    .map(id => waBuildPhone((document.getElementById(id)?.value || '').trim()))
+    .filter(Boolean);
+  const activado = !!document.getElementById('wa-aviso-activo')?.checked;
+  try {
+    const res = await fetch('/api/whatsapp/aviso-turno/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ telefonos, activado })
+    });
+    const d = await res.json();
+    if (!res.ok) { showToast(d.error || 'Error al guardar', 'danger'); return; }
+    showToast('Aviso de inicio de turno guardado.', 'success');
+    loadAvisoTurno();
+  } catch (e) {
+    showToast('Error al guardar el aviso', 'danger');
+  }
+}
+
+async function probarAvisoTurno() {
+  const btn = document.getElementById('btn-wa-aviso-probar');
+  const original = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i data-lucide="loader"></i> Enviando...'; if (typeof lucide !== 'undefined') lucide.createIcons(); }
+  try {
+    const res = await fetch('/api/whatsapp/aviso-turno/probar', { method: 'POST' });
+    const d = await res.json();
+    if (!res.ok) showToast(d.error || 'Error al enviar la prueba', 'danger');
+    else if (d.ok) showToast('Prueba enviada por WhatsApp ✔', 'success');
+    else showToast('Algunos números fallaron: ' + d.resultados.filter(r => !r.ok).map(r => r.telefono).join(', '), 'warning');
+  } catch (e) {
+    showToast('Error al enviar la prueba', 'danger');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = original; if (typeof lucide !== 'undefined') lucide.createIcons(); }
+  }
+}
+
+// ============================================
 // WIRING + ARRANQUE
 // ============================================
 document.addEventListener('DOMContentLoaded', function () {
@@ -323,14 +383,20 @@ document.addEventListener('DOMContentLoaded', function () {
   document.getElementById('btn-wa-reporte-guardar')?.addEventListener('click', guardarReporteSemanal);
   document.getElementById('btn-wa-reporte-enviar')?.addEventListener('click', enviarReporteSemanalAhora);
 
+  // Aviso de inicio de turno
+  document.getElementById('btn-wa-aviso-guardar')?.addEventListener('click', guardarAvisoTurno);
+  document.getElementById('btn-wa-aviso-probar')?.addEventListener('click', probarAvisoTurno);
+
   // Refrescar al entrar a "Cuentas por Cobrar" (instantáneo)
   document.getElementById('nav-credito')?.addEventListener('click', function () {
     setTimeout(refreshWhatsAppEstado, 300);
     setTimeout(loadReporteSemanal, 300);
+    setTimeout(loadAvisoTurno, 300);
   });
 
   refreshWhatsAppEstado();
   loadReporteSemanal();
+  loadAvisoTurno();
   setInterval(refreshWhatsAppEstado, 30000);
 });
 

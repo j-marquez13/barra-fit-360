@@ -910,6 +910,36 @@
               <div class="wa-banner wa-ok" id="wa-reporte-status" style="display:none;"></div>
             </div>
           </div>
+
+          <!-- ============================================ -->
+          <!-- Aviso de inicio de turno (solo administrador) -->
+          <!-- ============================================ -->
+          <div class="wa-panel" id="wa-aviso-turno-panel" style="display:none;">
+            <div class="wa-panel-header">
+              <h4><i data-lucide="bell-ring"></i> Aviso de Inicio de Turno</h4>
+            </div>
+            <div style="padding:12px; display:flex; flex-direction:column; gap:10px;">
+              <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.9rem;">
+                <input type="checkbox" id="wa-aviso-activo" checked style="width:18px; height:18px;">
+                <span>Avisar por WhatsApp cada vez que alguien inicie un turno</span>
+              </label>
+              <label style="display:flex; flex-direction:column; gap:4px; font-size:0.85rem;">
+                <span>Tu número:</span>
+                <input type="text" id="wa-aviso-telefono-1" placeholder="584141234567" style="background:rgba(255,255,255,0.05); border:1px solid var(--border-glass); border-radius:8px; padding:8px 10px; color:var(--text-bright);">
+              </label>
+              <label style="display:flex; flex-direction:column; gap:4px; font-size:0.85rem;">
+                <span>Otro número (opcional):</span>
+                <input type="text" id="wa-aviso-telefono-2" placeholder="584241234567" style="background:rgba(255,255,255,0.05); border:1px solid var(--border-glass); border-radius:8px; padding:8px 10px; color:var(--text-bright);">
+              </label>
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="action-btn" id="btn-wa-aviso-guardar" style="background:var(--primary);">Guardar</button>
+                <button class="action-btn" id="btn-wa-aviso-probar" style="background:linear-gradient(135deg,#25d366,#128c7e);">
+                  <i data-lucide="send"></i> Enviar prueba
+                </button>
+              </div>
+              <div class="wa-banner wa-ok" id="wa-aviso-status" style="display:none;"></div>
+            </div>
+          </div>
           </div>
         </div>
       </div>
@@ -2401,7 +2431,7 @@
   </div>
 
   <script src="app3.js?v=55"></script>
-  <script src="whatsapp.js?v=5"></script>
+  <script src="whatsapp.js?v=6"></script>
 <!-- Script to automatically replace commas with dots in number inputs -->
   <script>
     document.addEventListener('keydown', function(e) {

@@ -15,6 +15,7 @@ import { initializeDatabase } from './initDb.js';
 import * as db from './db.js';
 import { signToken, verifyToken, requireAuth, requireAdmin, requirePermiso, revokeToken, getTokenFromRequest, esAdmin, validarPasswordAdmin } from './auth.js';
 import * as whatsapp from './controllers/whatsappController.js';
+import { iniciarMantenerDespierto } from './mantenerDespierto.js';
 import { obtenerTasas, fijarTasa, historialTasas } from './tasas.js';
 
 const app = express();
@@ -491,6 +492,10 @@ app.get('/api/whatsapp/recordatorios/progreso', credito, whatsapp.progreso);
 app.get('/api/whatsapp/reporte-semanal/estado', credito, whatsapp.reporteSemanalEstado);
 app.post('/api/whatsapp/reporte-semanal/config', credito, whatsapp.reporteSemanalGuardarConfig);
 app.post('/api/whatsapp/reporte-semanal/enviar', credito, whatsapp.reporteSemanalEnviarAhora);
+// Aviso de inicio de turno (solo administrador)
+app.get('/api/whatsapp/aviso-turno/estado', requireAdmin, whatsapp.avisoTurnoEstado);
+app.post('/api/whatsapp/aviso-turno/config', requireAdmin, whatsapp.avisoTurnoGuardarConfig);
+app.post('/api/whatsapp/aviso-turno/probar', requireAdmin, whatsapp.avisoTurnoProbar);
 
 // ============================================
 // RUTA DE RESET DEL SISTEMA (PONER STOCK EN 0, BORRAR VENTAS, CRÉDITOS, ETC.)
@@ -544,6 +549,7 @@ async function startServer() {
   try {
     await initializeDatabase();
     whatsapp.initWhatsApp();
+    iniciarMantenerDespierto(); // Render: despierto solo en horario laboral
     app.listen(PORT, '0.0.0.0', () => {
       
       // Obtener IP local para que el usuario sepa cómo acceder desde su celular

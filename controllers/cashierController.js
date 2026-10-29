@@ -1,6 +1,7 @@
 import * as db from '../db.js';
 import { localNow, isPostgres, localDate, dateExpr } from '../db.js';
 import { obtenerTasas } from '../tasas.js';
+import { notificarInicioTurno } from './whatsappController.js';
 
 /**
  * Controlador de Arqueo y Sesiones de Caja (Turnos)
@@ -139,6 +140,9 @@ export async function abrirCaja(req, res) {
     const finalSession = { ...sessionRes[0], permisos: usr[0].permisos };
 
     res.status(201).json({ mensaje: 'Caja abierta correctamente', sesion: finalSession });
+
+    // Aviso por WhatsApp al dueño y a los números configurados (en segundo plano)
+    notificarInicioTurno(finalSession);
   } catch (err) {
     console.error('Error al abrir caja:', err);
     res.status(500).json({ error: 'Error interno del servidor' });

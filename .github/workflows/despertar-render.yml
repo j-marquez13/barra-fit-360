@@ -1,0 +1,25 @@
+# Despierta el servidor de Render al empezar el día (el plan gratuito lo duerme de noche).
+# Durante el horario laboral se mantiene despierto solo (ver mantenerDespierto.js).
+# Horas en UTC: 10:25 y 10:40 UTC = 6:25 y 6:40 am hora de Venezuela.
+name: Despertar Render
+
+on:
+  schedule:
+    - cron: '25 10 * * *'
+    - cron: '40 10 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  despertar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Visitar el servidor hasta que responda
+        run: |
+          for intento in 1 2 3 4 5; do
+            if curl -fsS --max-time 90 https://barra-fit-360.onrender.com/api/health; then
+              echo; echo "Servidor despierto"; exit 0
+            fi
+            echo "Intento $intento sin respuesta, reintentando..."; sleep 15
+          done
+          echo "El servidor no respondió"; exit 1

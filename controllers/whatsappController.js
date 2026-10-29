@@ -847,3 +847,111 @@ export async function reporteSemanalEnviarAhora(req, res) {
 
 
 
+
+// ============================================
+// AVISO DE INICIO DE TURNO
+// Cada vez que se abre caja se avisa por WhatsApp a los números configurados
+// (el dueño y uno o más números adicionales). No cuenta para el límite diario
+// de recordatorios.
+// ============================================
+const MAX_TELEFONOS_AVISO = 5;
+
+async function getAvisoTurnoConfig() {
+  const raw = await getConfig('aviso_turno_telefonos');
+  // Por defecto, el mismo número que recibe el resumen semanal (el del dueño)
+  const telefonos = raw === null
+    ? [(await getConfig('reporte_semanal_telefono')) || REPORTE_SEMANAL_DEFECTO.telefono]
+    : raw.split(',').map(s => s.trim()).filter(Boolean);
+  const activado = (await getConfig('aviso_turno_activado')) !== '0';
+  return { telefonos, activado };
+}
+
+function buildMensajeInicioTurno(sesion) {
+  const ahora = localDateTime(); // hora de Venezuela
+  const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+  const fecha = `${dias[ahora.getUTCDay()]} ${String(ahora.getUTCDate()).padStart(2, '0')}/${String(ahora.getUTCMonth() + 1).padStart(2, '0')}`;
+  const hora = `${String(ahora.getUTCHours()).padStart(2, '0')}:${String(ahora.getUTCMinutes()).padStart(2, '0')}`;
+  return `🟢 *Turno iniciado* — Fit 360
+
+• Turno: ${sesion.turno || '—'}
+• Cajero: ${sesion.nombre_cajero || 'Cajero'}
+• Hora: ${hora} (${fecha})
+• Fondo: $${fmtPesos(sesion.fondo_inicial_cop)} COP + $${fmtMoneda(sesion.fondo_inicial_usd)} USD`;
+}
+
+/**
+ * Avisa del inicio de un turno. No bloquea la apertura de caja: corre en segundo plano.
+ * Si WhatsApp todavía se está conectando (p. ej. el servidor acaba de despertar),
+ * espera hasta 3 minutos antes de darlo por fallido.
+ */
+export function notificarInicioTurno(sesion) {
+  (async () => {
+    const cfg = await getAvisoTurnoConfig();
+    if (!cfg.activado) return;
+    const telefonos = [...new Set(cfg.telefonos.map(normalizePhone).filter(Boolean))];
+    if (telefonos.length === 0) return;
+    if (!(await hasStoredSession())) {
+      logger.warn('Aviso de inicio de turno no enviado: WhatsApp no está vinculado.');
+      return;
+    }
+    const mensaje = buildMensajeInicioTurno(sesion);
+    for (let i = 0; i < 18 && (status !== 'conectado' || !sock); i++) await sleep(10000);
+    if (status !== 'conectado' || !sock) {
+      logger.warn('Aviso de inicio de turno no enviado: WhatsApp no se conectó a tiempo.');
+      for (const t of telefonos) await logEnvio(t, mensaje, 'aviso_fallido');
+      return;
+    }
+    for (const t of telefonos) {
+      try {
+        await enviarTexto(t, mensaje);
+        await logEnvio(t, mensaje, 'aviso_turno');
+      } catch (e) {
+        logger.error('Error enviando aviso de turno a ' + t + ':', e.message);
+        await logEnvio(t, mensaje, 'aviso_fallido');
+      }
+    }
+  })().catch((e) => logger.error('Error en aviso de inicio de turno:', e.message));
+}
+
+export async function avisoTurnoEstado(req, res) {
+  try { res.json(await getAvisoTurnoConfig()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+export async function avisoTurnoGuardarConfig(req, res) {
+  try {
+    const { telefonos, activado } = req.body || {};
+    if (telefonos !== undefined) {
+      if (!Array.isArray(telefonos)) return res.status(400).json({ error: 'telefonos debe ser una lista.' });
+      const limpios = telefonos.map(t => String(t || '').trim()).filter(Boolean);
+      if (limpios.length > MAX_TELEFONOS_AVISO) return res.status(400).json({ error: `Máximo ${MAX_TELEFONOS_AVISO} números.` });
+      const normalizados = [];
+      for (const t of limpios) {
+        const n = normalizePhone(t);
+        if (!n) return res.status(400).json({ error: `Número inválido: ${t}. Usa el formato 584141234567.` });
+        normalizados.push(n);
+      }
+      await setConfig('aviso_turno_telefonos', [...new Set(normalizados)].join(','));
+    }
+    if (activado !== undefined) await setConfig('aviso_turno_activado', activado ? '1' : '0');
+    res.json(await getAvisoTurnoConfig());
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+// Envía un aviso de prueba a los números configurados
+export async function avisoTurnoProbar(req, res) {
+  try {
+    if (status !== 'conectado' || !sock) return res.status(400).json({ error: 'WhatsApp no está conectado.' });
+    const cfg = await getAvisoTurnoConfig();
+    const telefonos = [...new Set(cfg.telefonos.map(normalizePhone).filter(Boolean))];
+    if (telefonos.length === 0) return res.status(400).json({ error: 'No hay números configurados.' });
+    const mensaje = '🧪 *Prueba* — Así te llegará el aviso cada vez que se inicie un turno:\n\n' +
+      buildMensajeInicioTurno({ turno: 'Mañana', nombre_cajero: 'Ejemplo', fondo_inicial_cop: 50000, fondo_inicial_usd: 10 });
+    const resultados = [];
+    for (const t of telefonos) {
+      try { await enviarTexto(t, mensaje); resultados.push({ telefono: t, ok: true }); }
+      catch (e) { resultados.push({ telefono: t, ok: false, error: e.message }); }
+    }
+    res.json({ ok: resultados.every(r => r.ok), resultados });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
