@@ -53,13 +53,35 @@ export async function fijarTasa({ USD, VES }, usuario) {
  *   vieja, o manipulación) → error 409 para que el cajero revise el cobro.
  * Devuelve { USD, VES } del servidor (las de hoy, o la última conocida si solo hay COP).
  */
-export async function resolverTasas(pagos, tasasCliente) {
-  const { hoy, ultima } = await obtenerTasas();
+export async function resolverTasas(pagos, tasasCliente, fechaVentaLocal = null) {
   const usaDivisas = (pagos || []).some(p => {
     const m = String(p.moneda || '').toUpperCase();
     return (m === 'USD' || m === 'VES') && parseFloat(p.monto_original) > 0;
   });
 
+  // Venta hecha SIN INTERNET que se sube después: vale cualquier tasa que el admin haya
+  // fijado el día en que se vendió (pudo cambiarla mientras la tablet estaba sin conexión).
+  if (fechaVentaLocal) {
+    const dia = String(fechaVentaLocal).slice(0, 10);
+    const filas = await db.query('SELECT usd, ves FROM tasas_cambio WHERE fecha = $1 ORDER BY id', [dia]);
+    const delDia = filas.map(f => ({ USD: parseFloat(f.usd), VES: parseFloat(f.ves) }));
+    if (usaDivisas) {
+      if (delDia.length === 0) {
+        throw Object.assign(new Error(`No había tasa fijada el ${dia}, día de la venta.`), { status: 400, extra: { sin_tasa: true } });
+      }
+      const igual = (a, b) => Math.abs(parseFloat(a) - b) < 1e-6;
+      const usada = tasasCliente && delDia.find(t => igual(tasasCliente.USD, t.USD) && igual(tasasCliente.VES, t.VES));
+      if (!usada) {
+        throw Object.assign(new Error(`La tasa de la venta no coincide con ninguna tasa fijada el ${dia}.`), { status: 409, extra: { tasas: delDia[delDia.length - 1] } });
+      }
+      return usada;
+    }
+    const { ultima } = await obtenerTasas();
+    const ref = delDia[delDia.length - 1] || ultima;
+    return { USD: ref ? ref.USD : 1, VES: ref ? ref.VES : 1 };
+  }
+
+  const { hoy, ultima } = await obtenerTasas();
   if (usaDivisas) {
     if (!hoy) {
       throw Object.assign(new Error('No hay tasa del día. El administrador debe fijarla; mientras tanto solo se puede cobrar en pesos (COP).'), { status: 400, extra: { sin_tasa: true } });

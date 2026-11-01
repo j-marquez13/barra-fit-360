@@ -19,10 +19,40 @@ function numeroValido(v) {
   return Number.isFinite(n) ? n : NaN;
 }
 
-// ¿Hay un turno de caja abierto? (ventas y abonos solo se registran dentro de un turno)
+// Turno de caja abierto (o null). Ventas y abonos solo se registran dentro de un turno.
+async function turnoAbierto() {
+  const rows = await db.query("SELECT id, fecha_apertura FROM sesiones_caja WHERE fecha_cierre IS NULL AND estado = 'Abierta' ORDER BY id DESC LIMIT 1");
+  return rows[0] || null;
+}
 export async function hayTurnoAbierto() {
-  const rows = await db.query("SELECT id FROM sesiones_caja WHERE fecha_cierre IS NULL AND estado = 'Abierta' LIMIT 1");
-  return rows.length > 0;
+  return !!(await turnoAbierto());
+}
+
+// Instante (Date) de una fecha de la BD: en PostgreSQL llega como Date; en SQLite como
+// texto UTC "AAAA-MM-DD HH:MM:SS" (CURRENT_TIMESTAMP) o local con 'T' (localNow).
+function instanteDeBD(v) {
+  if (v instanceof Date) return v;
+  const s = String(v || '');
+  if (s.includes('T')) return new Date(new Date(s + 'Z').getTime() + 4 * 3600 * 1000); // local VE → UTC
+  return new Date(s.replace(' ', 'T') + 'Z');
+}
+
+// Fecha de una venta hecha SIN INTERNET, en el formato de cada base:
+// PostgreSQL guarda hora local de Venezuela; SQLite guarda UTC (como CURRENT_TIMESTAMP).
+function fechaParaBD(instante) {
+  if (db.isPostgres()) return new Date(instante.getTime() - 4 * 3600 * 1000).toISOString().slice(0, 23);
+  return instante.toISOString().slice(0, 19).replace('T', ' ');
+}
+function fechaLocalVenezuela(instante) {
+  return new Date(instante.getTime() - 4 * 3600 * 1000).toISOString().slice(0, 23);
+}
+
+const UID_VALIDO = /^[A-Za-z0-9_-]{8,64}$/;
+const HORAS_MAX_PENDIENTE = 48; // una venta sin internet debe subirse en menos de 2 días
+
+async function ventaPorUid(uid) {
+  const rows = await db.query('SELECT id FROM ventas WHERE uid = $1', [uid]);
+  return rows[0] || null;
 }
 
 // Error con código HTTP para lanzarlo desde dentro de una transacción.
@@ -75,14 +105,44 @@ export async function processSale(req, res) {
     return res.status(400).json({ error: 'Debe registrar al menos un método de pago.' });
   }
 
+  // Código único de la venta (lo genera la tablet). Si la misma venta llega dos veces
+  // (p. ej. se cortó el internet justo al enviarla y se reintentó), se registra una sola vez.
+  const uid = req.body.uid !== undefined && req.body.uid !== null && req.body.uid !== '' ? String(req.body.uid) : null;
+  if (uid && !UID_VALIDO.test(uid)) {
+    return res.status(400).json({ error: 'Código de venta inválido.' });
+  }
+
   try {
+    if (uid) {
+      const existente = await ventaPorUid(uid);
+      if (existente) {
+        return res.status(200).json({ mensaje: 'Esta venta ya estaba registrada.', venta_id: existente.id, duplicada: true });
+      }
+    }
+
+    // Venta hecha SIN INTERNET que se sube ahora: se registra con la hora real en que se vendió.
+    let fechaVenta = null;
+    if (req.body.fecha_offline) {
+      fechaVenta = new Date(req.body.fecha_offline);
+      const ahora = Date.now();
+      if (isNaN(fechaVenta) || fechaVenta.getTime() > ahora + 5 * 60 * 1000 || fechaVenta.getTime() < ahora - HORAS_MAX_PENDIENTE * 3600 * 1000) {
+        return res.status(400).json({ error: 'La fecha de la venta pendiente no es válida (debe ser de las últimas 48 horas).' });
+      }
+    }
+
     // Sin turno de caja abierto no se vende: el dinero no quedaría en ningún cierre.
-    if (!(await hayTurnoAbierto())) {
+    const turno = await turnoAbierto();
+    if (!turno) {
       return res.status(400).json({ error: 'No hay un turno de caja abierto. Inicia un turno para vender.', sin_turno: true });
+    }
+    // Una venta pendiente de un turno que ya se cerró descuadraría ese cierre
+    if (fechaVenta && fechaVenta.getTime() < instanteDeBD(turno.fecha_apertura).getTime() - 60 * 1000) {
+      return res.status(400).json({ error: 'La venta es de un turno que ya se cerró. Regístrala a mano o ajusta ese cierre.', turno_cerrado: true });
     }
 
     // Tasa del día: la del servidor (fijada por el admin), nunca la que envía la pantalla.
-    const tasasServidor = await resolverTasas(isCortesia ? [] : pagos, tasas);
+    // En una venta sin internet, vale la tasa vigente el día en que se vendió.
+    const tasasServidor = await resolverTasas(isCortesia ? [] : pagos, tasas, fechaVenta ? fechaLocalVenezuela(fechaVenta) : null);
     const tasaDiaUsd = tasasServidor.USD;
     const tasaDiaVes = tasasServidor.VES;
 
@@ -272,11 +332,13 @@ export async function processSale(req, res) {
       }
 
       // A. Insertar cabecera de la venta
-      const insertVentaSql = isPg
-        ? 'INSERT INTO ventas (tipo_transaccion, total, tasa_cambio, cliente_id, notas) VALUES ($1, $2, $3, $4, $5) RETURNING id'
-        : 'INSERT INTO ventas (tipo_transaccion, total, tasa_cambio, cliente_id, notas) VALUES ($1, $2, $3, $4, $5)';
+      // Venta sin internet: fecha real de la venta; si no, la fecha la pone la base (ahora)
+      const fechaBD = fechaVenta ? fechaParaBD(fechaVenta) : null;
+      const colsVenta = ['tipo_transaccion', 'total', 'tasa_cambio', 'cliente_id', 'notas', 'uid', ...(fechaBD ? ['fecha'] : [])];
+      const valsVenta = [tipoTransaccion, totalVentaCop, tasaDiaUsd, cliente_id || null, notas || '', uid, ...(fechaBD ? [fechaBD] : [])];
+      const insertVentaSql = `INSERT INTO ventas (${colsVenta.join(', ')}) VALUES (${colsVenta.map((_, i) => '$' + (i + 1)).join(', ')})${isPg ? ' RETURNING id' : ''}`;
 
-      const resVenta = await tx.execute(insertVentaSql, [tipoTransaccion, totalVentaCop, tasaDiaUsd, cliente_id || null, notas || '']);
+      const resVenta = await tx.execute(insertVentaSql, valsVenta);
       const ventaId = resVenta[0].id;
 
       // B. Insertar detalle de productos vendidos (Activa el trigger de inventario)
@@ -429,10 +491,12 @@ export async function processSale(req, res) {
       }
 
       // C. Insertar los pagos asociados
-      const insertPagoSql = `
-        INSERT INTO pagos_ventas (venta_id, metodo_pago, moneda, monto_original, tasa_cambio, monto_base, referencia)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-      `;
+      // Los pagos llevan la misma fecha que la venta (así caen en el turno y el día correctos)
+      const insertPagoSql = fechaBD
+        ? `INSERT INTO pagos_ventas (venta_id, metodo_pago, moneda, monto_original, tasa_cambio, monto_base, referencia, fecha)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+        : `INSERT INTO pagos_ventas (venta_id, metodo_pago, moneda, monto_original, tasa_cambio, monto_base, referencia)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`;
       for (const pago of pagosProcesados) {
         await tx.execute(insertPagoSql, [
           ventaId,
@@ -441,7 +505,8 @@ export async function processSale(req, res) {
           pago.monto_original,
           pago.tasa_cambio,
           pago.monto_base,
-          pago.referencia
+          pago.referencia,
+          ...(fechaBD ? [fechaBD] : [])
         ]);
 
         // Si el pago es a Crédito, sumar a saldo_deudor del cliente
@@ -474,6 +539,12 @@ export async function processSale(req, res) {
   } catch (error) {
     if (error.status) {
       return res.status(error.status).json({ error: error.message, ...error.extra });
+    }
+    // La misma venta llegó dos veces a la vez: la base rechazó la segunda por el código único
+    const esDuplicado = uid && (error.code === '23505' || /UNIQUE constraint failed: ventas\.uid/i.test(error.message || ''));
+    if (esDuplicado) {
+      const existente = await ventaPorUid(uid).catch(() => null);
+      if (existente) return res.status(200).json({ mensaje: 'Esta venta ya estaba registrada.', venta_id: existente.id, duplicada: true });
     }
     console.error('Error al procesar la venta:', error);
     return res.status(500).json({

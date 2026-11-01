@@ -120,6 +120,9 @@ export async function initializeDatabase() {
 
       // Consumo real de insumos por línea de venta (para anular exactamente lo descontado)
       await db.execute('ALTER TABLE detalle_ventas ADD COLUMN IF NOT EXISTS consumo_insumos TEXT;');
+      // Código único de cada venta (lo genera la tablet): evita duplicar ventas hechas sin internet
+      await db.execute('ALTER TABLE ventas ADD COLUMN IF NOT EXISTS uid TEXT;');
+      await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS ventas_uid_unico ON ventas(uid) WHERE uid IS NOT NULL;');
 
       // Tasa de cambio del día fijada por el administrador (con historial)
       await db.execute(`CREATE TABLE IF NOT EXISTS tasas_cambio (
@@ -721,6 +724,10 @@ async function runMigrations() {
   try { await db.execute("ALTER TABLE usuarios ADD COLUMN bloqueado_hasta BIGINT"); } catch(e) {}
   // Consumo real de insumos por línea de venta (para anular exactamente lo descontado)
   try { await db.execute("ALTER TABLE detalle_ventas ADD COLUMN consumo_insumos TEXT"); } catch(e) {}
+  // Código único de cada venta (lo genera la tablet): evita registrar dos veces una venta
+  // hecha sin internet que se reintenta al volver la conexión
+  try { await db.execute("ALTER TABLE ventas ADD COLUMN uid TEXT"); } catch(e) {}
+  await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS ventas_uid_unico ON ventas(uid) WHERE uid IS NOT NULL");
   // Tasa de cambio del día fijada por el administrador (con historial)
   await db.execute(`CREATE TABLE IF NOT EXISTS tasas_cambio (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

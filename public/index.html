@@ -15,7 +15,7 @@
        bloqueando la página ~3 s y cambiando de versión sin aviso) -->
   <script src="vendor/lucide-1.57.0.min.js"></script>
   <!-- Estilos CSS -->
-  <link rel="stylesheet" href="index.css?v=23">
+  <link rel="stylesheet" href="index.css?v=24">
   <!-- PWA: instalable como aplicación en Chrome/Android/escritorio -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#0b0f1a">
@@ -27,6 +27,8 @@
   <meta name="apple-mobile-web-app-title" content="Barra Fit 360">
 </head>
 <body>
+  <!-- Aviso de conexión: sin internet, ventas pendientes de subir o rechazadas (lo pinta app3.js) -->
+  <div id="aviso-conexion" role="status" aria-live="polite" style="display:none"></div>
 
   <!-- ============================================ -->
   <!-- PANTALLA DE SELECCIÓN DE TURNO              -->
@@ -2255,8 +2257,8 @@
     <div class="receipt-box">
       <div class="receipt-header">
         <div class="receipt-icon"><i data-lucide="check"></i></div>
-        <h2>¡Venta Procesada!</h2>
-        <p>Transacción registrada exitosamente</p>
+        <h2 id="receipt-titulo">¡Venta Procesada!</h2>
+        <p id="receipt-subtitulo">Transacción registrada exitosamente</p>
       </div>
 
       <div class="receipt-content">
@@ -2447,7 +2449,7 @@
     </div>
   </div>
 
-  <script src="app3.js?v=57"></script>
+  <script src="app3.js?v=58"></script>
   <script src="whatsapp.js?v=6"></script>
 <!-- Script to automatically replace commas with dots in number inputs -->
   <script>

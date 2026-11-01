@@ -16,6 +16,10 @@ function localDateStr() {
 // ==========================================
 (function () {
   const _fetch = window.fetch;
+  // Datos que el POS necesita para vender. Cada vez que llegan bien se guarda una copia en la
+  // tablet; si no hay internet se usa esa copia, para poder seguir vendiendo (las ventas se
+  // guardan como pendientes y se suben solas al volver la conexión).
+  const CON_RESPALDO = /^\/api\/(productos(\/\d+\/receta)?|recetas-base|insumos|clientes|tasas|caja\/estado)$/;
   window.fetch = async function (input, init) {
     const url = (typeof input === 'string') ? input : input.url;
     const opts = init || {};
@@ -24,7 +28,26 @@ function localDateStr() {
       const auth = JSON.parse(sessionStorage.getItem('bf360_auth') || 'null');
       if (auth && auth.token) headers.set('x-auth-token', auth.token);
     } catch (e) {}
-    const res = await _fetch.call(window, input, { ...opts, headers });
+    const ruta = typeof url === 'string' ? url.split('?')[0] : '';
+    const metodo = String(opts.method || (typeof input !== 'string' && input.method) || 'GET').toUpperCase();
+    const claveRespaldo = metodo === 'GET' && CON_RESPALDO.test(ruta) ? 'bf360_respaldo:' + ruta : null;
+    let res;
+    try {
+      res = await _fetch.call(window, input, { ...opts, headers });
+    } catch (err) {
+      // Sin conexión: usar la última copia guardada, si existe
+      if (claveRespaldo) {
+        let guardado = null;
+        try { guardado = localStorage.getItem(claveRespaldo); } catch (e) {}
+        if (guardado !== null) {
+          return new Response(guardado, { status: 200, headers: { 'Content-Type': 'application/json', 'X-Desde-Respaldo': '1' } });
+        }
+      }
+      throw err;
+    }
+    if (claveRespaldo && res.ok) {
+      res.clone().text().then(t => { try { localStorage.setItem(claveRespaldo, t); } catch (e) {} }).catch(() => {});
+    }
 
     if (res.status === 401 && typeof url === 'string' && url.startsWith('/api/') && !url.includes('/api/auth/login')) {
       sessionStorage.removeItem('bf360_auth');
@@ -926,16 +949,27 @@ async function quickPay(method, currency) {
     }],
     tasas: STATE.tasas,
     cliente_id: null,
-    notas: 'Pago rápido'
+    notas: 'Pago rápido',
+    uid: nuevoUidVenta()
   };
 
+  if (estaSinConexion()) { guardarVentaPendiente(payload); return; }
+
   try {
-    const response = await fetch('/api/ventas', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    
+    let response;
+    try {
+      response = await fetch('/api/ventas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    } catch (errRed) {
+      // Se cortó la conexión: queda en la tablet y se sube sola (el uid evita duplicarla)
+      STATE.apiOnline = false;
+      guardarVentaPendiente(payload);
+      return;
+    }
+
     if (!response.ok) {
       const data = await response.json();
       if (response.status === 409 || data.sin_tasa) await cargarTasas(); // la tasa del día cambió o no existe
@@ -1442,7 +1476,11 @@ async function submitPayment() {
     cliente_id: clienteId
   };
 
-  if (STATE.apiOnline) {
+  // Código único de la venta: si se reenvía (corte de red, cola sin internet) el servidor
+  // la registra una sola vez.
+  payload.uid = nuevoUidVenta();
+
+  if (!estaSinConexion()) {
     try {
       const res = await fetch('/api/ventas', {
         method: 'POST',
@@ -1454,84 +1492,268 @@ async function submitPayment() {
         showReceipt(data);
         // Recargar productos del servidor
         await loadProductsFromAPI();
+      } else if (res.status === 200 && data.duplicada) {
+        showToast('Esta venta ya estaba registrada.', 'success');
+        closePaymentModal();
+        resetSale();
       } else {
         if (res.status === 409 || data.sin_tasa) await cargarTasas(); // la tasa del día cambió o no existe
         showToast(`Error: ${data.error}`, 'danger');
         recalculatePayments();
+        reactivarBotonCobro();
       }
     } catch (err) {
+      // Se cortó la conexión en pleno cobro: la venta queda guardada en la tablet con su
+      // código único. Si el servidor alcanzó a guardarla, al reenviarla no se duplica.
       console.error(err);
-      showToast('Error de conexión. Procesando en modo local.', 'warning');
-      simulateCheckout(payload);
+      STATE.apiOnline = false;
+      if (!guardarVentaPendiente(payload)) reactivarBotonCobro();
     }
   } else {
-    setTimeout(() => simulateCheckout(payload), 800);
+    if (!guardarVentaPendiente(payload)) reactivarBotonCobro();
   }
 }
 
-function simulateCheckout(payload) {
-  const transactionId = `LOCAL-${Math.floor(100000 + Math.random() * 900000)}`;
-  const totalVentaCop = calculateCartTotal();
-  const rateUsd = payload.tasas.USD;
+function reactivarBotonCobro() {
+  DOM.btnConfirmPayment.disabled = false;
+  DOM.btnConfirmPayment.innerHTML = `<i data-lucide="check-circle-2"></i><span>Confirmar Venta</span>`;
+  lucide.createIcons();
+}
 
-  let totalPagadoCop = 0;
-  const pagosProcesados = payload.pagos.map(p => {
-    let rate = 1.0;
-    if (p.moneda === 'USD') rate = payload.tasas.USD;
-    else if (p.moneda === 'VES') rate = payload.tasas.VES;
-    const base = p.monto_original * rate;
-    totalPagadoCop += base;
-    return { ...p, tasa_cambio: rate, monto_base: base };
-  });
+// ==========================================
+// VENTAS SIN INTERNET (pendientes en esta tablet)
+// Sin conexión, la venta se guarda en la tablet (localStorage) con un código único y la hora
+// real, y se sube sola cuando vuelve el internet. El servidor la registra una sola vez aunque
+// llegue repetida, con su hora y la tasa que había ese día.
+// ==========================================
+const CLAVE_PENDIENTES = 'bf360_ventas_pendientes';
+const CLAVE_RECHAZADAS = 'bf360_ventas_rechazadas';
 
-  const cambioCop = totalPagadoCop - totalVentaCop;
-  const cambioUsd = cambioCop > 0 ? cambioCop / rateUsd : 0;
+function leerLista(clave) {
+  try { return JSON.parse(localStorage.getItem(clave) || '[]') || []; } catch (e) { return []; }
+}
+function guardarLista(clave, lista) {
+  localStorage.setItem(clave, JSON.stringify(lista));
+}
+function ventasPendientes() { return leerLista(CLAVE_PENDIENTES); }
+function ventasRechazadas() { return leerLista(CLAVE_RECHAZADAS); }
 
-  const advertencias = [];
-  payload.items.forEach(item => {
+function nuevoUidVenta() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
+}
+
+function estaSinConexion() {
+  return !navigator.onLine || !STATE.apiOnline;
+}
+
+// Guarda la venta en la tablet y muestra su recibo marcado como PENDIENTE.
+// Devuelve false si no se pudo guardar (p. ej. memoria del navegador llena).
+function guardarVentaPendiente(payload) {
+  const auth = JSON.parse(sessionStorage.getItem('bf360_auth') || 'null');
+  const venta = {
+    uid: payload.uid || nuevoUidVenta(),
+    fecha: new Date().toISOString(),
+    payload: { ...payload },
+    total: calculateCartTotal(),
+    cajero: auth ? auth.nombre : null,
+    resumen: STATE.cart.map(item => {
+      const p = STATE.products.find(x => x.id === item.producto_id);
+      return `${item.cantidad}x ${p ? p.nombre : 'Producto'}`;
+    }).join(', '),
+    pagos_resumen: (payload.pagos || []).map(p => p.metodo_pago).filter((m, i, a) => a.indexOf(m) === i).join(', ')
+      || payload.tipo_transaccion || ''
+  };
+  venta.payload.uid = venta.uid;
+  try {
+    const lista = ventasPendientes();
+    if (!lista.some(v => v.uid === venta.uid)) lista.push(venta);
+    guardarLista(CLAVE_PENDIENTES, lista);
+  } catch (e) {
+    alert('⚠️ NO SE PUDO GUARDAR LA VENTA EN ESTA TABLET (memoria llena).\n\nAnótala en papel y regístrala cuando vuelva la conexión.');
+    return false;
+  }
+
+  // Descontar el stock en pantalla para que el cajero vea lo que queda
+  (payload.items || []).forEach(item => {
     const prod = STATE.products.find(p => p.id === item.producto_id);
     if (prod) {
       const stockKey = prod.stock !== undefined ? 'stock' : 'stock_disponible';
       prod[stockKey] = Math.max(0, (prod[stockKey] || 0) - item.cantidad);
-      if (prod[stockKey] === 0) {
-        advertencias.push(`'${prod.nombre}' se ha agotado.`);
-      } else if (prod[stockKey] < 10) {
-        advertencias.push(`Bajo stock de '${prod.nombre}'. Remanente: ${prod[stockKey]}`);
-      }
     }
   });
-
   renderProducts();
 
-  const mockResponseData = {
-    mensaje: 'Venta simulada (Modo Offline).',
-    venta_id: transactionId,
+  mostrarReciboPendiente(payload, venta.uid);
+  pintarAvisoConexion();
+  if (typeof loadHistorial === 'function' && document.getElementById('tbody-historial')) loadHistorial();
+  return true;
+}
+
+function mostrarReciboPendiente(payload, uid) {
+  const totalVentaCop = calculateCartTotal();
+  let totalPagadoCop = 0;
+  const pagosProcesados = (payload.pagos || []).map(p => {
+    let rate = 1.0;
+    if (p.moneda === 'USD') rate = parseFloat(payload.tasas?.USD) || 1;
+    else if (p.moneda === 'VES') rate = parseFloat(payload.tasas?.VES) || 1;
+    const base = p.monto_original * rate;
+    totalPagadoCop += base;
+    return { ...p, tasa_cambio: rate, monto_base: base };
+  });
+  const cambioCop = Math.max(0, totalPagadoCop - totalVentaCop);
+  const tasaUsd = parseFloat(payload.tasas?.USD) || 0;
+
+  showReceipt({
+    venta_id: 'PENDIENTE ' + String(uid).slice(0, 6).toUpperCase(),
     resumen: {
       total_venta_cop: totalVentaCop,
       total_pagado_cop: totalPagadoCop,
       cambio_cop: cambioCop,
-      cambio_usd: parseFloat(cambioUsd.toFixed(2))
+      cambio_usd: tasaUsd > 0 ? parseFloat((cambioCop / tasaUsd).toFixed(2)) : 0
     },
     detalles: STATE.cart.map(item => {
       const prod = STATE.products.find(p => p.id === item.producto_id);
-      return {
-        producto_id: item.producto_id,
-        nombre: prod.nombre,
-        cantidad: item.cantidad,
-        precio_unitario: Number(prod.precio_venta),
-        subtotal: Number(prod.precio_venta) * item.cantidad
-      };
+      return { producto_id: item.producto_id, nombre: prod ? prod.nombre : 'Producto', cantidad: item.cantidad, subtotal: (prod ? Number(prod.precio_venta) : 0) * item.cantidad };
     }),
     pagos: pagosProcesados,
-    advertencias: advertencias.length > 0 ? advertencias : null
-  };
-
-  showReceipt(mockResponseData);
+    advertencias: ['⏳ SIN CONEXIÓN: venta guardada en esta tablet. Se subirá sola cuando vuelva el internet. No borres los datos del navegador.']
+  });
+  titulosRecibo('⏳ Venta guardada sin internet', 'Se subirá sola al sistema cuando vuelva la conexión');
 }
 
+// Sube las ventas pendientes, en orden. Se llama al volver la conexión y cada 30 segundos.
+let subiendoPendientes = false;
+async function subirVentasPendientes() {
+  if (subiendoPendientes || !navigator.onLine || ventasPendientes().length === 0) { pintarAvisoConexion(); return; }
+  const auth = JSON.parse(sessionStorage.getItem('bf360_auth') || 'null');
+  if (!auth || !auth.token) { pintarAvisoConexion(); return; } // hay que iniciar sesión primero
+
+  subiendoPendientes = true;
+  pintarAvisoConexion();
+  let subidas = 0, rechazadas = 0;
+  try {
+    for (const venta of ventasPendientes()) {
+      let res, data = {};
+      try {
+        res = await fetch('/api/ventas', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...venta.payload, uid: venta.uid, fecha_offline: venta.fecha })
+        });
+        data = await res.json().catch(() => ({}));
+      } catch (e) {
+        break; // todavía sin conexión: se reintenta luego
+      }
+      STATE.apiOnline = true;
+      if (res.status === 201 || res.status === 200) {
+        guardarLista(CLAVE_PENDIENTES, ventasPendientes().filter(v => v.uid !== venta.uid));
+        subidas++;
+      } else if (res.status === 401 || res.status === 403 || res.status === 429 || res.status >= 500) {
+        break; // sesión vencida o servidor con problemas: se reintenta después
+      } else {
+        // El servidor la rechazó (p. ej. turno ya cerrado, crédito sobre el límite): no se
+        // pierde, pasa a la lista de "no se pudieron subir" para revisarla a mano.
+        guardarLista(CLAVE_PENDIENTES, ventasPendientes().filter(v => v.uid !== venta.uid));
+        const lista = ventasRechazadas();
+        lista.push({ ...venta, error: data.error || ('Error ' + res.status), rechazada_en: new Date().toISOString() });
+        guardarLista(CLAVE_RECHAZADAS, lista);
+        rechazadas++;
+      }
+    }
+  } finally {
+    subiendoPendientes = false;
+  }
+  if (subidas) {
+    showToast(`✅ ${subidas} venta(s) hechas sin internet ya se subieron al sistema.`, 'success');
+    loadProductsFromAPI();
+  }
+  if (rechazadas) {
+    showToast(`⚠️ ${rechazadas} venta(s) no se pudieron subir. Revísalas en el aviso de arriba.`, 'danger');
+  }
+  if ((subidas || rechazadas) && document.getElementById('tbody-historial')) loadHistorial();
+  pintarAvisoConexion();
+}
+
+// Aviso fijo arriba: sin conexión, ventas pendientes y ventas que no se pudieron subir.
+function pintarAvisoConexion() {
+  const el = document.getElementById('aviso-conexion');
+  if (!el) return;
+  const pendientes = ventasPendientes().length;
+  const rechazadas = ventasRechazadas().length;
+  let html = '', clase = '';
+  if (estaSinConexion()) {
+    clase = 'aviso-rojo';
+    html = `🔴 <strong>SIN CONEXIÓN</strong> — Puedes seguir vendiendo: las ventas se guardan en esta tablet y se subirán solas.` +
+      (pendientes ? ` <span class="aviso-chip">${pendientes} pendiente(s)</span>` : '');
+  } else if (pendientes) {
+    clase = 'aviso-amarillo';
+    html = subiendoPendientes
+      ? `⏳ Subiendo ${pendientes} venta(s) hechas sin internet…`
+      : `⏳ ${pendientes} venta(s) pendiente(s) de subir. <button type="button" onclick="subirVentasPendientes()">Subir ahora</button>`;
+  }
+  if (rechazadas) {
+    clase = clase || 'aviso-amarillo';
+    html += (html ? ' · ' : '') + `⚠️ ${rechazadas} venta(s) no se pudieron subir <button type="button" onclick="verVentasRechazadas()">Revisar</button>`;
+  }
+  el.className = clase;
+  el.innerHTML = html;
+  el.style.display = html ? 'block' : 'none';
+}
+
+window.subirVentasPendientes = subirVentasPendientes;
+
+window.verVentasRechazadas = function () {
+  const lista = ventasRechazadas();
+  const fmt = (v) => Number(v || 0).toLocaleString('de-DE', { maximumFractionDigits: 2 });
+  const filas = lista.map(v => `
+    <div style="border:1px solid var(--border-glass); border-radius:10px; padding:10px; margin-bottom:8px;">
+      <div><strong>${new Date(v.fecha).toLocaleString('es-VE', { timeZone: 'America/Caracas' })}</strong> · $${fmt(v.total)} COP</div>
+      <div style="font-size:0.85rem; color:var(--text-muted);">${escHtml(v.resumen || '')}</div>
+      <div style="font-size:0.85rem; color:var(--danger); margin:4px 0;">Motivo: ${escHtml(v.error || '')}</div>
+      <button type="button" class="action-btn" style="padding:4px 10px; font-size:12px;" onclick="reintentarRechazada('${escHtml(v.uid)}')">Reintentar</button>
+      <button type="button" class="action-btn" style="padding:4px 10px; font-size:12px; background:var(--danger); color:#fff; border:none;" onclick="descartarRechazada('${escHtml(v.uid)}')">Descartar</button>
+    </div>`).join('');
+  openGenericModal('Ventas que no se pudieron subir', `
+    <p class="text-muted" style="margin-bottom:10px;">Estas ventas se hicieron sin internet y el sistema no las aceptó. Revisa el motivo: si la venta es válida, regístrala de nuevo a mano y luego descártala aquí.</p>
+    ${filas || '<p>No hay ventas rechazadas.</p>'}`, () => closeGenericModal());
+  DOM.btnSubmitGeneric.textContent = 'Cerrar';
+};
+window.reintentarRechazada = function (uid) {
+  const lista = ventasRechazadas();
+  const v = lista.find(x => x.uid === uid);
+  if (!v) return;
+  guardarLista(CLAVE_RECHAZADAS, lista.filter(x => x.uid !== uid));
+  const { error, rechazada_en, ...venta } = v;
+  guardarLista(CLAVE_PENDIENTES, [...ventasPendientes(), venta]);
+  closeGenericModal();
+  subirVentasPendientes();
+};
+window.descartarRechazada = function (uid) {
+  if (!confirm('¿Descartar esta venta? Solo hazlo si ya la registraste a mano o si no era válida.')) return;
+  guardarLista(CLAVE_RECHAZADAS, ventasRechazadas().filter(x => x.uid !== uid));
+  closeGenericModal();
+  pintarAvisoConexion();
+};
+
+// Conexión: el navegador avisa al perderla/recuperarla; además se reintenta cada 30 s.
+window.addEventListener('offline', () => { STATE.apiOnline = false; pintarAvisoConexion(); });
+window.addEventListener('online', () => { checkApiHealth(); setTimeout(subirVentasPendientes, 1500); });
+setInterval(subirVentasPendientes, 30000);
+// Pedir al navegador que no borre los datos guardados de la tablet (ventas pendientes)
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+
 // 8. MOSTRAR RECIBO Y REINICIAR
+function titulosRecibo(titulo = '¡Venta Procesada!', subtitulo = 'Transacción registrada exitosamente') {
+  const t = document.getElementById('receipt-titulo');
+  const s = document.getElementById('receipt-subtitulo');
+  if (t) t.textContent = titulo;
+  if (s) s.textContent = subtitulo;
+}
+
 function showReceipt(data) {
   closePaymentModal();
+  titulosRecibo();
 
   DOM.receiptId.textContent = `#${data.venta_id}`;
   DOM.receiptDate.textContent = new Date().toLocaleString('es-ES');
@@ -1585,6 +1807,7 @@ function showReceipt(data) {
 function resetSale() {
   STATE.cart = [];
   renderCart();
+  titulosRecibo();
   DOM.receiptModal.classList.remove('open');
 }
 
@@ -1662,14 +1885,23 @@ async function submitCortesiaGym() {
       tipo_transaccion: 'Venta',
       cortesia_gym: true,
       notas: 'Cortesía Gym (paga el gimnasio, solo costo)',
-      cliente_id: clienteId
+      cliente_id: clienteId,
+      uid: nuevoUidVenta()
     };
 
-    const res = await fetch('/api/ventas', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+    if (estaSinConexion()) { guardarVentaPendiente(payload); return; }
+    let res;
+    try {
+      res = await fetch('/api/ventas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    } catch (errRed) {
+      STATE.apiOnline = false;
+      guardarVentaPendiente(payload);
+      return;
+    }
     const data = await res.json();
     if (res.status === 201) {
       showReceipt(data);
@@ -3406,20 +3638,40 @@ async function loadCierreMensual() {
   }
 }
 
+// Filas de las ventas hechas sin internet que todavía no llegan al servidor
+function filasVentasPendientes() {
+  const fmt = (n) => Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 });
+  return ventasPendientes().slice().reverse().map(v => `
+        <tr style="background-color:rgba(255,193,7,0.10);">
+          <td><span style="font-size:0.8rem; font-weight:bold; color:#b58100;">⏳ Pendiente de subir</span></td>
+          <td>${new Date(v.fecha).toLocaleString('es-ES')}</td>
+          <td class="font-outfit">$${fmt(v.total)}</td>
+          <td>${escHtml(v.resumen || '-')}</td>
+          <td>${escHtml(v.pagos_resumen || '-')}</td>
+          <td>${escHtml(v.payload?.notas || '-')}</td>
+          <td><span class="text-muted" style="font-size:0.8rem;">Sin internet</span></td>
+        </tr>`).join('');
+}
+
 async function loadHistorial() {
-  if (!STATE.apiOnline) return;
+  const tbody = document.getElementById('tbody-historial');
+  const pendientesHtml = filasVentasPendientes();
+  if (estaSinConexion()) {
+    if (tbody) tbody.innerHTML = pendientesHtml ||
+      '<tr><td colspan="7" class="loading-cell">Sin conexión: solo se ven las ventas pendientes de esta tablet.</td></tr>';
+    return;
+  }
   const desde = document.getElementById('hist-desde').value;
   const hasta = document.getElementById('hist-hasta').value;
   try {
     const data = await fetch(`/api/reportes/ventas?desde=${desde}&hasta=${hasta}`).then(r => r.json());
-    const tbody = document.getElementById('tbody-historial');
-    
+
     if (!data.ventas || data.ventas.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" class="loading-cell">Sin ventas en el rango seleccionado.</td></tr>';
+      tbody.innerHTML = pendientesHtml || '<tr><td colspan="7" class="loading-cell">Sin ventas en el rango seleccionado.</td></tr>';
       return;
     }
 
-    tbody.innerHTML = data.ventas.map(v => {
+    tbody.innerHTML = pendientesHtml + data.ventas.map(v => {
       const prods = v.detalles ? v.detalles.map(d => `${d.producto} x${d.cantidad}`).join(', ') : '-';
       const metodos = v.pagos ? v.pagos.map(p => p.metodo_pago).join(', ') : '-';
       const isAnulada = v.tipo_transaccion === 'Anulada';
@@ -4114,6 +4366,7 @@ function parseMontoAbono(raw) {
 
 function showAbonoModal(clientId, clientName, saldoActual) {
   if (!hayTurnoAbierto()) { avisarSinTurno(); return; }
+  if (estaSinConexion()) { alert('Sin conexión. Los abonos necesitan internet; sin conexión solo se pueden hacer ventas.'); return; }
   cargarTasas().then(() => { if (typeof recalcAbonoTotal === 'function') recalcAbonoTotal(); });
   openGenericModal(`Registrar Abono — ${clientName}`, `
     <div class="abono-resumen">
@@ -4291,6 +4544,7 @@ async function checkApiHealth() {
           await loadProductsFromAPI();
         }
       }
+      if (ventasPendientes().length) subirVentasPendientes();
     }
   } catch (err) {
     STATE.apiOnline = false;
@@ -4300,6 +4554,7 @@ async function checkApiHealth() {
     DOM.sidebarApiStatus.className = 'sidebar-status offline';
     DOM.sidebarApiStatus.innerHTML = '<i data-lucide="wifi-off"></i><span>Modo Local</span>';
   }
+  pintarAvisoConexion();
   lucide.createIcons();
 }
 
@@ -4485,9 +4740,17 @@ async function loadCajaData() {
 }
 
 async function cerrarTurnoActual() {
-  if (!STATE.apiOnline) {
-    showToast('Modo Local. Conecta al servidor para cerrar la caja.', 'warning');
+  if (estaSinConexion()) {
+    showToast('Sin conexión. Conecta al servidor para cerrar la caja.', 'warning');
     return;
+  }
+  if (ventasPendientes().length) {
+    // El cierre debe incluir todas las ventas del turno: primero se suben las pendientes
+    await subirVentasPendientes();
+    if (ventasPendientes().length) {
+      alert(`⚠️ Todavía hay ${ventasPendientes().length} venta(s) hechas sin internet sin subir.\n\nNo se puede cerrar la caja hasta que se suban, para que el cierre cuadre.`);
+      return;
+    }
   }
 
   // 1. Mostrar loading y cargar estado actual de la caja
@@ -5325,6 +5588,7 @@ async function loadGastos() {
 }
 
 function showAddGastoModal() {
+  if (estaSinConexion()) { alert('Sin conexión. Los gastos necesitan internet; sin conexión solo se pueden hacer ventas.'); return; }
   openGenericModal('Registrar Gasto Operacional', `
     <div class="form-group">
       <label>Categoría</label>
@@ -5573,6 +5837,9 @@ function verificarHorarioCierre() {
  * Cierra la sesión del dispositivo y vuelve a la pantalla de turno.
  */
 async function cerrarSesion() {
+  const pendientes = ventasPendientes().length;
+  if (pendientes && !confirm(`⚠️ Hay ${pendientes} venta(s) hechas sin internet que todavía no se subieron.\n\n` +
+      'Si cierras sesión no se perderán, pero solo se subirán cuando alguien vuelva a iniciar sesión en esta tablet con internet.\n\n¿Cerrar sesión de todos modos?')) return;
   // Revocar el token en el servidor (si existe)
   const auth = JSON.parse(sessionStorage.getItem('bf360_auth') || '{}');
   if (auth.token) {
