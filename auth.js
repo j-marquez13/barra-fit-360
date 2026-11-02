@@ -87,6 +87,33 @@ export function verifyToken(token) {
   }
 }
 
+// Autorización puntual con la clave del administrador (p. ej. el cajero registra el inventario
+// mensual con el admin presente). Se firma con una clave DERIVADA para que este comprobante
+// nunca sirva como token de sesión.
+const SECRET_AUTORIZACION = crypto.createHmac('sha256', SECRET).update('autorizacion-admin').digest();
+
+export function firmarAutorizacion(datos, ttlMs) {
+  const data = b64url(JSON.stringify({ ...datos, exp: Date.now() + ttlMs }));
+  const sig = crypto.createHmac('sha256', SECRET_AUTORIZACION).update(data).digest('base64url');
+  return `${data}.${sig}`;
+}
+
+export function verificarAutorizacion(token, tipo) {
+  if (!token || typeof token !== 'string') return null;
+  const [data, sig] = token.split('.');
+  if (!data || !sig) return null;
+  const a = Buffer.from(crypto.createHmac('sha256', SECRET_AUTORIZACION).update(data).digest('base64url'), 'base64url');
+  const b = Buffer.from(sig, 'base64url');
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(data, 'base64url').toString('utf8'));
+    if (payload.tipo !== tipo || !payload.exp || payload.exp < Date.now()) return null;
+    return payload;
+  } catch (e) {
+    return null;
+  }
+}
+
 export function parsePermisos(permisos) {
   if (Array.isArray(permisos)) return permisos;
   try { return JSON.parse(permisos) || []; } catch (e) { return []; }
@@ -171,14 +198,14 @@ export async function validarPasswordAdmin(req, password) {
     return { ok: false, status: 400, error: 'Se requiere la contraseña de administrador.' };
   }
 
-  const admins = await db.query("SELECT id, password_hash FROM usuarios WHERE rol = 'Administrador'");
+  const admins = await db.query("SELECT id, nombre, password_hash FROM usuarios WHERE rol = 'Administrador'");
   if (admins.length === 0) {
     return { ok: false, status: 500, error: 'No hay administradores configurados en el sistema.' };
   }
   for (const admin of admins) {
     if (admin.password_hash && await bcrypt.compare(String(password), admin.password_hash)) {
       intentosAdmin.delete(clave);
-      return { ok: true };
+      return { ok: true, admin: { id: admin.id, nombre: admin.nombre } };
     }
   }
 
@@ -189,7 +216,8 @@ export async function validarPasswordAdmin(req, password) {
     console.log(`🔒 Bloqueo de 15 min por intentos fallidos de contraseña de administrador (${clave}).`);
   }
   intentosAdmin.set(clave, estado);
-  return { ok: false, status: 401, error: 'Contraseña de administrador incorrecta.' };
+  // 403 y no 401: la sesión del cajero sigue siendo válida. Con 401 la pantalla cerraba su sesión.
+  return { ok: false, status: 403, error: 'Contraseña de administrador incorrecta.' };
 }
 
 /**

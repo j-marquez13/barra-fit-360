@@ -93,6 +93,39 @@ check('stock del vaso corregido a 45', (await api('GET', '/api/insumos', null, t
 r = await api('POST', `/api/admin/inventario-mensual/${idCierre}/ajustar`, null, t);
 check('no se puede ajustar dos veces', r.status === 409, r);
 
+// El CAJERO registra el inventario del mes con la clave del administrador presente
+const [ay, am] = mes.split('-').map(Number);
+const mesAnterior = am === 1 ? `${ay - 1}-12` : `${ay}-${String(am - 1).padStart(2, '0')}`;
+await api('POST', '/api/usuarios', { nombre: 'Cajero Inventario', turno: 'Mañana', password: 'inventario1', permisos: ['pos', 'caja'] }, t);
+const caj = (await api('POST', '/api/auth/login', { usuario: 'Cajero Inventario', password: 'inventario1' })).data.token;
+await api('POST', '/api/auth/cambiar-password', { password_nueva: 'inventario22' }, caj);
+check('cajero: entra con su usuario', !!caj);
+r = await api('GET', `/api/admin/inventario-mensual?mes=${mesAnterior}`, null, caj);
+check('cajero NO entra a la revisión del admin', r.status === 403, r);
+r = await api('GET', `/api/inventario-mensual?mes=${mesAnterior}`, null, caj);
+check('cajero sin clave del admin -> 403', r.status === 403 && r.data.requiere_autorizacion === true, r);
+r = await api('POST', '/api/inventario-mensual/autorizar', { admin_password: 'equivocada' }, caj);
+check('clave del admin equivocada -> 403 (sin cerrar la sesión del cajero)', r.status === 403, r);
+r = await api('POST', '/api/inventario-mensual/autorizar', { admin_password: 'AdminPrueba1' }, caj);
+const autz = r.data && r.data.autorizacion;
+check('clave del admin correcta -> autorizado', r.status === 200 && autz && r.data.admin === 'Admin Principal', r);
+const conAutz = async (method, path, body, token = caj) => {
+  const res = await fetch(BASE + path, { method, headers: { 'Content-Type': 'application/json', 'x-auth-token': token, 'x-autorizacion-admin': autz }, body: body ? JSON.stringify(body) : undefined });
+  return { status: res.status, data: await res.json().catch(() => null) };
+};
+check('la autorización NO sirve como sesión', (await api('GET', '/api/productos', null, autz)).status === 401);
+check('la autorización solo vale para ese cajero', (await conAutz('GET', `/api/inventario-mensual?mes=${mesAnterior}`, null, t)).status === 403);
+r = await conAutz('GET', `/api/inventario-mensual?mes=${mesAnterior}`);
+check('cajero autorizado ve la lista a ciegas', r.status === 200 && r.data.items.length > 0 && !('esperado' in r.data.items[0]), r.data && r.data.items && r.data.items[0]);
+r = await conAutz('POST', '/api/inventario-mensual', { mes: mesAnterior, conteos: [{ insumo_id: lata, contado: 9 }] });
+check('cajero guarda avance', r.status === 200 && r.data.cerrado === false, r);
+r = await conAutz('POST', '/api/inventario-mensual', { mes: mesAnterior, conteos: [{ insumo_id: lata, contado: 9 }, { insumo_id: vaso, contado: 44 }], cerrar: true });
+check('cajero cierra el inventario del mes', r.status === 200 && r.data.cerrado === true, r);
+r = await conAutz('GET', `/api/inventario-mensual?mes=${mesAnterior}`);
+check('cajero: ya cerrado, no ve la comparación con el sistema', r.status === 200 && r.data.cierre.estado === 'cerrado' && r.data.items.length === 0 && !('valor_sistema' in r.data.cierre), r.data);
+r = await api('GET', `/api/admin/inventario-mensual?mes=${mesAnterior}`, null, t);
+check('admin lo revisa: quién contó, quién autorizó y la comparación', r.status === 200 && r.data.cierre.usuario_nombre === 'Cajero Inventario' && r.data.cierre.autorizado_por === 'Admin Principal' && r.data.items.find(i => i.insumo_id === vaso).diferencia === -1, r.data.cierre);
+
 // Dejar una caja abierta para revisar la interfaz
 await api('POST', '/api/caja/abrir', { fondo_inicial_cop: 20000, turno: 'Tarde' }, t);
 console.log(`\nRESULTADO: ${fallos ? fallos + ' FALLAS' : 'todo OK'}`);

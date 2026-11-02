@@ -1,6 +1,7 @@
 import * as db from '../db.js';
 import { isPostgres, localNow } from '../db.js';
 import { notificarConteoNevera } from './whatsappController.js';
+import { validarPasswordAdmin, firmarAutorizacion, verificarAutorizacion } from '../auth.js';
 
 /**
  * Conteos físicos de inventario. Son DOS registros separados:
@@ -286,7 +287,8 @@ function filaCierreInventario(c) {
     faltante_cop: num(c.faltante_cop), sobrante_cop: num(c.sobrante_cop),
     items_contados: c.items_contados === null ? null : Number(c.items_contados),
     items_con_diferencia: c.items_con_diferencia === null ? null : Number(c.items_con_diferencia),
-    ajustado: !!Number(c.ajustado), ajustado_por: c.ajustado_por || null
+    ajustado: !!Number(c.ajustado), ajustado_por: c.ajustado_por || null,
+    autorizado_por: c.autorizado_por || null
   };
 }
 
@@ -296,6 +298,11 @@ export async function getInventarioMensual(req, res) {
   if (!MES_VALIDO.test(mes || '')) return res.status(400).json({ error: 'Mes inválido (formato AAAA-MM).' });
   try {
     const cierre = (await db.query('SELECT * FROM cierres_inventario WHERE mes = $1', [mes]))[0] || null;
+    if (cierre && cierre.estado === 'cerrado' && req.autorizadoPor) {
+      // Cajero: el mes ya se cerró; la comparación con el sistema la revisa el administrador
+      const c = filaCierreInventario(cierre);
+      return res.json({ mes, cierre: { id: c.id, mes, estado: c.estado, usuario_nombre: c.usuario_nombre, cerrado_en: c.cerrado_en, autorizado_por: c.autorizado_por }, items: [] });
+    }
     if (cierre && cierre.estado === 'cerrado') {
       const items = await db.query('SELECT * FROM cierres_inventario_items WHERE cierre_id = $1 ORDER BY seccion, nombre', [cierre.id]);
       return res.json({
@@ -381,9 +388,11 @@ export async function guardarInventarioMensual(req, res) {
         if (contados === 0) throw err(400, 'No hay nada contado: cuenta al menos un producto para cerrar el mes.');
         await tx.execute(
           `UPDATE cierres_inventario SET estado = 'cerrado', cerrado_en = $1, usuario_id = $2, usuario_nombre = $3,
-             valor_sistema = $4, valor_contado = $5, faltante_cop = $6, sobrante_cop = $7, items_contados = $8, items_con_diferencia = $9
-           WHERE id = $10`,
-          [localNow(), req.usuario?.usuario_id || null, req.usuario?.nombre || null, valorSistema, valorContado, faltante, sobrante, contados, conDif, cierre.id]);
+             valor_sistema = $4, valor_contado = $5, faltante_cop = $6, sobrante_cop = $7, items_contados = $8, items_con_diferencia = $9,
+             autorizado_por = $10
+           WHERE id = $11`,
+          [localNow(), req.usuario?.usuario_id || null, req.usuario?.nombre || null, valorSistema, valorContado, faltante, sobrante, contados, conDif,
+            req.autorizadoPor || req.usuario?.nombre || null, cierre.id]);
       }
       return { id: cierre.id, sin_contar: insumos.length - [...valores.values()].filter(v => v !== null).length };
     });
@@ -466,4 +475,32 @@ export async function reporteInventarioMes(req, res) {
   } catch (e) {
     return responderError(res, e, 'Error en el reporte de inventario del mes:');
   }
+}
+
+// ============================================
+// CAJERO: registra el inventario mensual con la CLAVE DEL ADMINISTRADOR (que debe estar
+// presente). Cada vez que se abre la pantalla se pide la clave; el permiso dura unas horas
+// y solo vale para ese usuario. El administrador lo revisa en Cierres → Inventario Mensual.
+// ============================================
+const DURACION_AUTORIZACION = 4 * 60 * 60 * 1000;
+
+// POST /api/inventario-mensual/autorizar  { admin_password }
+export async function autorizarInventarioMensual(req, res) {
+  try {
+    const r = await validarPasswordAdmin(req, req.body && req.body.admin_password);
+    if (!r.ok) return res.status(r.status).json({ error: r.error });
+    const autorizacion = firmarAutorizacion({ tipo: 'inventario-mensual', usuario_id: req.usuario.usuario_id, admin: r.admin.nombre }, DURACION_AUTORIZACION);
+    return res.json({ autorizacion, admin: r.admin.nombre });
+  } catch (e) {
+    return responderError(res, e, 'Error al autorizar el inventario mensual:');
+  }
+}
+
+export function requiereAutorizacionInventario(req, res, next) {
+  const p = verificarAutorizacion(req.headers['x-autorizacion-admin'], 'inventario-mensual');
+  if (!p || p.usuario_id !== req.usuario?.usuario_id) {
+    return res.status(403).json({ error: 'Se requiere la clave del administrador.', requiere_autorizacion: true });
+  }
+  req.autorizadoPor = p.admin;
+  next();
 }

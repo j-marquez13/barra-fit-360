@@ -11,7 +11,7 @@ import { cierreDiario, cierreSemanal, cierreRango, historialVentas } from './con
 import { listarGastos, registrarGasto } from './controllers/expensesController.js';
 import { estadoCaja, abrirCaja, cerrarCaja, cierreDia, listarCierresAdmin, ticketTurnoAdmin } from './controllers/cashierController.js';
 import { getSaldos, transferirFondos } from './controllers/treasuryController.js';
-import { getConteoNevera, verificarConteoNevera, guardarConteoNevera, listarConteosNevera, decidirItemNevera, getInventarioMensual, guardarInventarioMensual, ajustarInventarioMensual, reporteInventarioMes } from './controllers/conteoController.js';
+import { getConteoNevera, verificarConteoNevera, guardarConteoNevera, listarConteosNevera, decidirItemNevera, getInventarioMensual, guardarInventarioMensual, ajustarInventarioMensual, reporteInventarioMes, autorizarInventarioMensual, requiereAutorizacionInventario } from './controllers/conteoController.js';
 import { initializeDatabase } from './initDb.js';
 import * as db from './db.js';
 import { signToken, verifyToken, requireAuth, requireAdmin, requirePermiso, revokeToken, getTokenFromRequest, esAdmin, validarPasswordAdmin } from './auth.js';
@@ -209,6 +209,11 @@ app.get('/api/caja/cierre-dia', cierreDia);
 app.get('/api/caja/conteo-nevera', getConteoNevera);
 app.post('/api/caja/conteo-nevera/verificar', verificarConteoNevera);
 app.post('/api/caja/conteo-nevera', guardarConteoNevera);
+
+// Inventario mensual registrado por el cajero con la clave del administrador presente
+app.post('/api/inventario-mensual/autorizar', autorizarInventarioMensual);
+app.get('/api/inventario-mensual', requiereAutorizacionInventario, getInventarioMensual);
+app.post('/api/inventario-mensual', requiereAutorizacionInventario, guardarInventarioMensual);
 
 // Histórico de cierres diarios (solo administrador)
 app.get('/api/admin/cierres', requireAdmin, listarCierresAdmin);

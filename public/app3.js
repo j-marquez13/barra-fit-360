@@ -598,6 +598,8 @@ checkApiHealth();
 // NAVEGACIÓN SPA
 // ============================================
 function switchView(viewName) {
+  // Al salir de "Inventario del Mes" se bloquea: la próxima vez se pide otra vez la clave
+  if (STATE.currentView === 'inventario-mes' && viewName !== 'inventario-mes') bloquearInventarioCajero();
   STATE.currentView = viewName;
 
   // Actualizar nav items
@@ -619,7 +621,8 @@ function switchView(viewName) {
     reportes: 'Reportes & Cierres',
     caja: 'Caja y Gastos',
     tesoreria: 'Tesorería y Flujo de Caja',
-    cierres: 'Historial de Cierres Diarios'
+    cierres: 'Historial de Cierres Diarios',
+    'inventario-mes': 'Inventario del Mes'
   };
   DOM.viewTitle.textContent = titles[viewName] || viewName;
 
@@ -631,6 +634,7 @@ function switchView(viewName) {
   if (viewName === 'tesoreria') loadTesoreriaData();
   if (viewName === 'usuarios') loadUsuariosData();
   if (viewName === 'cierres') loadCierresAdmin();
+  if (viewName === 'inventario-mes') abrirInventarioCajero();
 
   // Cerrar sidebar en móvil
   DOM.sidebar.classList.remove('open');
@@ -6528,7 +6532,7 @@ function hideTurnoScreen(sesion, nombreOverride) {
   
   DOM.navItems.forEach(btn => {
     const view = btn.dataset.view;
-    if (permisos.includes('all') || permisos.includes(view)) {
+    if (permisos.includes('all') || permisos.includes(view) || view === 'inventario-mes') {
       btn.style.display = 'flex';
     } else {
       btn.style.display = 'none';
@@ -7067,7 +7071,12 @@ function pintarInventarioMensual() {
   const cont = document.getElementById('inv-mes-contenido');
   if (!d || !cont) return;
   if (d.cierre && d.cierre.estado === 'cerrado') { pintarInventarioCerrado(d, cont); return; }
+  pintarFormularioInventario(cont, d, (conteos, cerrar) => guardarInventarioMensualUI(conteos, cerrar));
+}
 
+// Formulario del conteo mensual (a ciegas). Lo usan el admin (Cierres → Inventario Mensual)
+// y el cajero ("Inventario del Mes", con la clave del admin). guardar(conteos, cerrar).
+function pintarFormularioInventario(cont, d, guardar) {
   const porSeccion = SECCIONES_INV.map(s => ({ s, items: d.items.filter(i => i.seccion === s) })).filter(x => x.items.length);
   cont.innerHTML = `
     <div class="inv-aviso">
@@ -7076,10 +7085,10 @@ function pintarInventarioMensual() {
       ${d.cierre ? `<div class="text-muted" style="font-size:12px; margin-top:4px;">Avance guardado · empezado por ${escHtml(d.cierre.usuario_nombre || '—')} el ${fechaCorta(d.cierre.creado_en)}</div>` : ''}
     </div>
     <div class="inv-barra">
-      <input type="search" id="inv-buscar" class="date-picker" placeholder="🔍 Buscar producto…" style="flex:1; min-width:180px;">
-      <span id="inv-progreso" class="text-muted"></span>
-      <button class="action-btn" id="btn-inv-guardar"><i data-lucide="save"></i> Guardar avance</button>
-      <button class="action-btn btn-primary" id="btn-inv-cerrar"><i data-lucide="lock"></i> Cerrar inventario del mes</button>
+      <input type="search" class="date-picker inv-buscar" placeholder="🔍 Buscar producto…" style="flex:1; min-width:180px;">
+      <span class="text-muted inv-progreso"></span>
+      <button class="action-btn inv-btn-guardar"><i data-lucide="save"></i> Guardar avance</button>
+      <button class="action-btn btn-primary inv-btn-cerrar"><i data-lucide="lock"></i> Cerrar inventario del mes</button>
     </div>
     ${porSeccion.map(({ s, items }) => `
       <div class="inv-seccion">
@@ -7100,23 +7109,23 @@ function pintarInventarioMensual() {
   const inputs = [...cont.querySelectorAll('.inv-input')];
   const progreso = () => {
     const n = inputs.filter(i => i.value.trim() !== '').length;
-    document.getElementById('inv-progreso').textContent = `${n} de ${inputs.length} contados`;
+    cont.querySelector('.inv-progreso').textContent = `${n} de ${inputs.length} contados`;
   };
   inputs.forEach(i => i.addEventListener('input', progreso));
   progreso();
-  document.getElementById('inv-buscar').addEventListener('input', (e) => {
+  cont.querySelector('.inv-buscar').addEventListener('input', (e) => {
     const q = e.target.value.trim().toLowerCase();
     cont.querySelectorAll('.inv-fila').forEach(f => { f.style.display = !q || f.dataset.nombre.includes(q) ? '' : 'none'; });
   });
   const leer = () => inputs.map(i => ({ insumo_id: Number(i.dataset.insumo), contado: i.value.trim() === '' ? null : parseFloat(i.value) }));
-  document.getElementById('btn-inv-guardar').onclick = () => guardarInventarioMensualUI(leer(), false);
-  document.getElementById('btn-inv-cerrar').onclick = () => {
+  cont.querySelector('.inv-btn-guardar').onclick = () => guardar(leer(), false);
+  cont.querySelector('.inv-btn-cerrar').onclick = () => {
     const conteos = leer();
     const sinContar = conteos.filter(c => c.contado === null).length;
     if (sinContar === conteos.length) { showToast('No has contado ningún producto.', 'warning'); return; }
     if (!confirm(`¿Cerrar el inventario de ${nombreMes(d.mes)}?\n\nSe comparará con lo que dice el sistema en este momento y ya no se podrá modificar.` +
       (sinContar ? `\n\n⚠️ ${sinContar} producto(s) sin contar NO entrarán en el cierre.` : ''))) return;
-    guardarInventarioMensualUI(conteos, true);
+    guardar(conteos, true);
   };
   lucide.createIcons();
 }
@@ -7144,7 +7153,7 @@ function pintarInventarioCerrado(d, cont) {
   const conDif = d.items.filter(i => Math.abs(i.diferencia || 0) > 0.001);
   cont.innerHTML = `
     <div class="inv-aviso">
-      Inventario de <strong>${escHtml(nombreMes(d.mes))}</strong> cerrado por ${escHtml(c.usuario_nombre || '—')} el ${fechaCorta(c.cerrado_en)} ·
+      Inventario de <strong>${escHtml(nombreMes(d.mes))}</strong> registrado por ${escHtml(c.usuario_nombre || '—')}${c.autorizado_por && c.autorizado_por !== c.usuario_nombre ? ` (autorizó ${escHtml(c.autorizado_por)})` : ''} el ${fechaCorta(c.cerrado_en)} ·
       ${c.items_contados} producto(s) contados, <strong>${c.items_con_diferencia}</strong> con diferencia.
       ${c.ajustado ? `<span class="ctd-badge ctd-badge-ok" style="margin-left:6px;">Stock ajustado${c.ajustado_por ? ' · ' + escHtml(c.ajustado_por) : ''}</span>` : ''}
     </div>
@@ -7253,5 +7262,145 @@ async function pintarInventarioEnCierreMensual(mes, utilidadMes) {
   } catch (e) {
     el.style.display = 'none';
     console.error('Error cargando inventario del mes:', e);
+  }
+}
+
+// ============================================
+// INVENTARIO DEL MES (cajero): registra el conteo mensual con la CLAVE DEL ADMINISTRADOR,
+// que debe estar presente. Se pide cada vez que se abre esta pantalla; al salir se bloquea.
+// El administrador lo revisa en Cierres → Inventario Mensual.
+// ============================================
+let autorizacionInventario = null; // { token, admin } — solo en memoria, nunca guardado
+
+function mesSugeridoInventario() {
+  // Los primeros días del mes normalmente se cuenta el cierre del mes anterior
+  const hoy = localDateStr();
+  const [a, m, d] = hoy.split('-').map(Number);
+  if (d <= 5) return m === 1 ? `${a - 1}-12` : `${a}-${String(m - 1).padStart(2, '0')}`;
+  return hoy.slice(0, 7);
+}
+
+function bloquearInventarioCajero() {
+  autorizacionInventario = null;
+  const cont = document.getElementById('invc-contenido');
+  if (!cont) return;
+  cont.innerHTML = `
+    <div class="invc-bloqueado">
+      <div style="font-size:2.5rem;">🔒</div>
+      <h3>Se necesita la clave del administrador</h3>
+      <p class="text-muted">El inventario del mes se registra con el administrador presente. Pídele que ingrese su clave para empezar.</p>
+      <button class="action-btn btn-primary" id="btn-invc-desbloquear"><i data-lucide="key-round"></i> Ingresar clave del administrador</button>
+    </div>`;
+  document.getElementById('btn-invc-desbloquear').onclick = () => pedirClaveInventario();
+  lucide.createIcons();
+}
+
+// alAutorizar: qué hacer con la clave correcta (por defecto, cargar el formulario)
+function pedirClaveInventario(alAutorizar = cargarInventarioCajero) {
+  openGenericModal('🔒 Clave del administrador', `
+    <p class="text-muted" style="margin-bottom:12px;">Para registrar el inventario del mes, el administrador debe estar presente e ingresar su clave.</p>
+    <div class="form-group">
+      <label>Contraseña de Administrador</label>
+      <input type="password" id="invc-admin-pass" placeholder="Clave del administrador" autocomplete="new-password">
+    </div>`, async () => {
+    const pass = document.getElementById('invc-admin-pass').value;
+    if (!pass) { showToast('Escribe la clave del administrador.', 'warning'); return; }
+    DOM.btnSubmitGeneric.disabled = true;
+    try {
+      const res = await fetch('/api/inventario-mensual/autorizar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ admin_password: pass })
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Clave incorrecta.');
+      autorizacionInventario = { token: d.autorizacion, admin: d.admin };
+      closeGenericModal();
+      showToast(`Autorizado por ${d.admin}.`, 'success');
+      alAutorizar();
+    } catch (e) {
+      showToast(e.message, 'danger');
+      DOM.btnSubmitGeneric.disabled = false;
+      const inp = document.getElementById('invc-admin-pass');
+      if (inp) { inp.value = ''; inp.focus(); }
+    }
+  });
+  DOM.btnSubmitGeneric.innerHTML = '<i data-lucide="unlock"></i> Autorizar';
+  lucide.createIcons();
+  setTimeout(() => document.getElementById('invc-admin-pass')?.focus(), 100);
+}
+
+function abrirInventarioCajero() {
+  const sel = document.getElementById('invc-mes');
+  if (sel && !sel.options.length) {
+    // Mes actual y anterior
+    const sug = mesSugeridoInventario();
+    const hoy = localDateStr().slice(0, 7);
+    const [a, m] = hoy.split('-').map(Number);
+    const anterior = m === 1 ? `${a - 1}-12` : `${a}-${String(m - 1).padStart(2, '0')}`;
+    sel.innerHTML = [hoy, anterior].map(v => `<option value="${v}" ${v === sug ? 'selected' : ''}>${nombreMes(v)}</option>`).join('');
+    sel.addEventListener('change', () => { if (autorizacionInventario) cargarInventarioCajero(); });
+  }
+  bloquearInventarioCajero();
+  pedirClaveInventario();
+}
+
+async function cargarInventarioCajero() {
+  const cont = document.getElementById('invc-contenido');
+  const mes = document.getElementById('invc-mes')?.value;
+  if (!cont || !mes || !autorizacionInventario) return;
+  cont.innerHTML = '<div class="loading-cell">Cargando…</div>';
+  try {
+    const res = await fetch(`/api/inventario-mensual?mes=${encodeURIComponent(mes)}`, {
+      headers: { 'x-autorizacion-admin': autorizacionInventario.token }
+    });
+    const d = await res.json();
+    if (res.status === 403 && d.requiere_autorizacion) { bloquearInventarioCajero(); pedirClaveInventario(); return; }
+    if (!res.ok) throw new Error(d.error || 'No se pudo cargar el inventario.');
+    if (d.cierre && d.cierre.estado === 'cerrado') {
+      cont.innerHTML = `
+        <div class="invc-bloqueado">
+          <div style="font-size:2.5rem;">✅</div>
+          <h3>El inventario de ${escHtml(nombreMes(d.mes))} ya está cerrado</h3>
+          <p class="text-muted">Lo registró ${escHtml(d.cierre.usuario_nombre || '—')} el ${fechaCorta(d.cierre.cerrado_en)}${d.cierre.autorizado_por ? `, autorizado por ${escHtml(d.cierre.autorizado_por)}` : ''}. El administrador lo revisa.</p>
+        </div>`;
+      return;
+    }
+    pintarFormularioInventario(cont, d, guardarInventarioCajero);
+    const aviso = cont.querySelector('.inv-aviso');
+    if (aviso) aviso.insertAdjacentHTML('afterbegin', `<div style="margin-bottom:6px;">🔓 Autorizado por <strong>${escHtml(autorizacionInventario.admin)}</strong></div>`);
+    cont.dataset.mes = d.mes;
+  } catch (e) {
+    cont.innerHTML = `<div class="loading-cell">Error: ${escHtml(e.message)}</div>`;
+  }
+}
+
+async function guardarInventarioCajero(conteos, cerrar) {
+  const mes = document.getElementById('invc-contenido')?.dataset.mes;
+  if (!autorizacionInventario || !mes) { bloquearInventarioCajero(); pedirClaveInventario(); return; }
+  try {
+    const res = await fetch('/api/inventario-mensual', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-autorizacion-admin': autorizacionInventario.token },
+      body: JSON.stringify({ mes, conteos, cerrar })
+    });
+    const d = await res.json();
+    if (res.status === 403 && d.requiere_autorizacion) {
+      // Lo contado sigue en pantalla: con la clave se vuelve a guardar sin perder nada
+      showToast('La autorización venció. Pide de nuevo la clave del administrador.', 'warning');
+      autorizacionInventario = null;
+      pedirClaveInventario(() => guardarInventarioCajero(conteos, cerrar));
+      return;
+    }
+    if (!res.ok) throw new Error(d.error || 'No se pudo guardar.');
+    if (cerrar) {
+      showToast('Inventario del mes cerrado. El administrador lo revisará.', 'success');
+      await cargarInventarioCajero();
+      autorizacionInventario = null; // cerrado: la próxima vez hay que volver a pedir la clave
+    } else {
+      showToast('Avance guardado.', 'success');
+    }
+  } catch (e) {
+    showToast(e.message, 'danger');
   }
 }

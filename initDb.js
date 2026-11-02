@@ -975,6 +975,9 @@ async function crearTablasConteos() {
     costo_unitario ${num},
     UNIQUE (cierre_id, insumo_id)
   )`);
+  // Quién autorizó con su clave el inventario que registró el cajero
+  if (pg) await db.execute('ALTER TABLE cierres_inventario ADD COLUMN IF NOT EXISTS autorizado_por TEXT');
+  else { try { await db.execute('ALTER TABLE cierres_inventario ADD COLUMN autorizado_por TEXT'); } catch (e) { /* ya existe */ } }
 }
 
 async function seedData() {

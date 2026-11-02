@@ -98,7 +98,7 @@ check('Zelle +5 USD', near(s1.Zelle - s0.Zelle, 5), { antes: s0.Zelle, despues: 
 // Cambiar la receta después de vender: la anulación debe devolver lo realmente descontado
 await api('PUT', `/api/recetas-base/${rbFresa}`, { nombre: 'Base Fresa', insumos: [{ insumo_id: id('Vaso'), cantidad: 1 }, { insumo_id: id('Leche'), cantidad: 9 }, { insumo_id: id('Fresa'), cantidad: 1 }] }, admin);
 r = await api('POST', `/api/ventas/${ventaId}/anular`, { admin_password: 'mala' }, admin);
-check('anular con clave mala -> 401', r.status === 401, r);
+check('anular con clave mala -> 403 (sin cerrar la sesión)', r.status === 403, r);
 r = await api('POST', `/api/ventas/${ventaId}/anular`, { admin_password: 'AdminPrueba1' }, admin);
 check('anular venta', r.status === 200, r);
 st = await stock();
@@ -189,7 +189,7 @@ const intentos = [];
 for (let i = 0; i < 5; i++) {
   intentos.push((await api('POST', `/api/ventas/${ventaCaj}/anular`, { admin_password: 'adivinando' + i }, caj)).status);
 }
-check('5 claves de admin equivocadas -> 401', intentos.every(s => s === 401), intentos);
+check('5 claves de admin equivocadas -> 403 (sin cerrar la sesión del cajero)', intentos.every(s => s === 403), intentos);
 r = await api('POST', `/api/ventas/${ventaCaj}/anular`, { admin_password: 'AdminPrueba1' }, caj);
 check('bloqueado 15 min aunque ahora acierte -> 429', r.status === 429, r);
 r = await api('POST', '/api/restore-db', Buffer.from('x'), caj, { 'x-admin-password': 'AdminPrueba1' });
@@ -197,7 +197,7 @@ check('el bloqueo aplica también a restaurar BD', r.status === 429, r);
 r = await api('POST', `/api/ventas/${ventaCaj}/anular`, { admin_password: 'AdminPrueba1' }, admin);
 check('el admin (otro usuario) no queda bloqueado', r.status === 200, r);
 r = await api('POST', `/api/ventas/${ventaCaj}/anular`, { admin_password: 'mala' }, admin);
-check('un acierto reinicia el contador del admin (1 fallo -> 401, no 429)', r.status === 401 || r.status === 400, r);
+check('un acierto reinicia el contador del admin (1 fallo -> 403, no 429)', r.status === 403 || r.status === 400, r);
 
 await api('POST', '/api/auth/logout', {}, caj);
 check('token revocado tras logout -> 401', (await api('GET', '/api/productos', undefined, caj)).status === 401);
