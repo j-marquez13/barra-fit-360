@@ -10,7 +10,7 @@ import { getInsumos, createInsumo, updateInsumo, restockInsumo, getMermas, creat
 import { cierreDiario, cierreSemanal, cierreRango, historialVentas } from './controllers/reportsController.js';
 import { listarGastos, registrarGasto } from './controllers/expensesController.js';
 import { estadoCaja, abrirCaja, cerrarCaja, cierreDia, listarCierresAdmin, ticketTurnoAdmin } from './controllers/cashierController.js';
-import { getSaldos, transferirFondos } from './controllers/treasuryController.js';
+import { getSaldos, transferirFondos, getResumen, getMovimientos, registrarAjuste } from './controllers/treasuryController.js';
 import { listarEspera, crearEspera, actualizarEspera, eliminarEspera } from './controllers/esperaController.js';
 import { getConteoNevera, verificarConteoNevera, guardarConteoNevera, listarConteosNevera, decidirItemNevera, getInventarioMensual, guardarInventarioMensual, ajustarInventarioMensual, reporteInventarioMes, autorizarInventarioMensual, requiereAutorizacionInventario, reabrirInventarioMensual } from './controllers/conteoController.js';
 import { initializeDatabase } from './initDb.js';
@@ -566,6 +566,9 @@ app.post('/api/restore-db', express.raw({ type: '*/*', limit: '100mb' }), async 
   }
 });
 app.post('/api/tesoreria/transferir', tesoreria, transferirFondos);
+app.get('/api/tesoreria/resumen', tesoreria, getResumen);
+app.get('/api/tesoreria/movimientos', tesoreria, getMovimientos);
+app.post('/api/tesoreria/ajuste', requireAdmin, registrarAjuste); // cuadre, aporte o retiro
 
 // ============================================
 // RUTAS DE WHATSAPP (RECORDATORIOS AUTOMÁTICOS)

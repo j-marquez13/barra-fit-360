@@ -137,6 +137,8 @@ export async function initializeDatabase() {
       await crearTablasConteos();
       await crearTablaVentasEspera();
       await db.execute('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS activo INTEGER NOT NULL DEFAULT 1');
+      await crearTablaAjustesTesoreria();
+      await db.execute('ALTER TABLE ventas ADD COLUMN IF NOT EXISTS fecha_anulacion TIMESTAMP');
 
       // Desglose del arqueo de cada turno (ventas vs abonos) para el cierre consolidado
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_ventas_cop DOUBLE PRECISION;');
@@ -745,6 +747,9 @@ async function runMigrations() {
   await crearTablaVentasEspera();
   // Usuarios desactivados (no se borran: se conserva su historial)
   try { await db.execute('ALTER TABLE usuarios ADD COLUMN activo INTEGER NOT NULL DEFAULT 1'); } catch (e) { /* ya existe */ }
+  await crearTablaAjustesTesoreria();
+  // Cuándo se anuló cada venta (para la lista de movimientos de Tesorería)
+  try { await db.execute('ALTER TABLE ventas ADD COLUMN fecha_anulacion TIMESTAMP'); } catch (e) { /* ya existe */ }
   // Desglose del arqueo de cada turno (ventas vs abonos) para el cierre consolidado
   try { await db.execute("ALTER TABLE sesiones_caja ADD COLUMN declarado_ventas_cop REAL"); } catch(e) {}
   try { await db.execute("ALTER TABLE sesiones_caja ADD COLUMN declarado_abonos_cop REAL"); } catch(e) {}
@@ -1012,6 +1017,24 @@ async function crearTablaVentasEspera() {
     usuario_nombre TEXT,
     creado_en TEXT NOT NULL,
     actualizado_en TEXT
+  )`);
+}
+
+// Tesorería: cuadres con la realidad, aportes y retiros del dueño (no son ventas ni gastos)
+async function crearTablaAjustesTesoreria() {
+  const pg = !!usePostgres;
+  const num = pg ? 'DOUBLE PRECISION' : 'REAL';
+  await db.execute(`CREATE TABLE IF NOT EXISTS ajustes_tesoreria (
+    id ${pg ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
+    cuenta TEXT NOT NULL,
+    tipo TEXT NOT NULL,
+    monto ${num} NOT NULL,
+    saldo_antes ${num},
+    saldo_despues ${num},
+    motivo TEXT NOT NULL,
+    usuario_id INTEGER,
+    usuario_nombre TEXT,
+    fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`);
 }
 

@@ -15,7 +15,7 @@
        bloqueando la página ~3 s y cambiando de versión sin aviso) -->
   <script src="vendor/lucide-1.57.0.min.js"></script>
   <!-- Estilos CSS -->
-  <link rel="stylesheet" href="index.css?v=28">
+  <link rel="stylesheet" href="index.css?v=29">
   <!-- PWA: instalable como aplicación en Chrome/Android/escritorio -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#0b0f1a">
@@ -639,6 +639,7 @@
                 <label for="orden-metodo">Método de Pago</label>
                 <select id="orden-metodo">
                   <option value="Efectivo COP">Efectivo COP</option>
+                  <option value="Dueño">Pagado por el dueño (no sale de ninguna cuenta)</option>
                   <option value="Bancolombia">Bancolombia</option>
                   <option value="Pago Móvil">Pago Móvil (VES)</option>
                   <option value="Zelle">Zelle (USD)</option>
@@ -1513,22 +1514,74 @@
       <!-- ============================================ -->
       <!-- VISTA 6: TESORERÍA                           -->
       <!-- ============================================ -->
-      <div class="view-panel" id="view-tesoreria" style="padding: 20px;">
-        <main class="app-body">
-          <div class="view-header-row" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
-            <h2>Saldos Bancarios y Efectivo</h2>
-            <button class="action-btn" onclick="showTransferenciaModal()">
-              <i data-lucide="arrow-right-left"></i> Transferencia Interna
-            </button>
+      <div class="view-panel" id="view-tesoreria">
+        <div class="module-content">
+          <div class="view-header-row" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+            <h2>Tesorería</h2>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button class="action-btn tes-solo-admin" onclick="showCuadrarCuentaModal()"><i data-lucide="scale"></i> Cuadrar con la realidad</button>
+              <button class="action-btn tes-solo-admin" onclick="showAporteRetiroModal()"><i data-lucide="hand-coins"></i> Aporte / Retiro</button>
+              <button class="action-btn btn-primary" onclick="showTransferenciaModal()"><i data-lucide="arrow-right-left"></i> Transferencia interna</button>
+            </div>
           </div>
-          
-          <!-- Contenedor dinámico de saldos -->
-          <div class="kpis-grid" id="tesoreria-saldos-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
-            <div class="kpi-card"><div class="kpi-value">Cargando...</div></div>
+          <div class="tes-total" id="tes-total"></div>
+          <div id="tes-avisos"></div>
+          <div class="tes-cuentas" id="tesoreria-saldos-grid"><div class="loading-cell">Cargando…</div></div>
+
+          <div class="tes-panel">
+            <div class="tes-filtros">
+              <h3 style="margin:0;">Entradas y salidas</h3>
+              <span style="flex:1;"></span>
+              <input type="date" id="tes-desde" class="date-picker">
+              <span class="text-muted">hasta</span>
+              <input type="date" id="tes-hasta" class="date-picker">
+              <button class="action-btn" onclick="loadTesoreriaData()"><i data-lucide="refresh-cw"></i> Ver</button>
+            </div>
+            <div id="tes-resumen-periodo"></div>
           </div>
 
+          <div class="tes-panel" id="tes-movimientos">
+            <div class="tes-filtros">
+              <h3 style="margin:0;">Movimientos</h3>
+              <span style="flex:1;"></span>
+              <select id="tes-cuenta" class="date-picker" onchange="loadMovimientosTesoreria()"><option value="">Todas las cuentas</option></select>
+            </div>
+            <p class="text-muted" style="font-size:0.8rem; margin:0 0 8px;">Lo más reciente arriba. Elige una cuenta para ver el saldo después de cada movimiento.</p>
+            <div class="data-table-container">
+              <table class="data-table">
+                <thead id="tes-mov-head"></thead>
+                <tbody id="tes-mov-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================ -->
+      <!-- VISTA 7: USUARIOS (ADMIN)                    -->
+      <!-- ============================================ -->
+      <div class="view-panel" id="view-usuarios">
+        <div class="module-content">
+          <div class="view-header-row" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+            <div>
+              <h2>Usuarios y Permisos</h2>
+              <p class="text-muted" id="usuarios-resumen" style="margin:4px 0 0; font-size:0.85rem;"></p>
+            </div>
+            <button class="action-btn btn-success" onclick="showEditarUsuarioModal()">
+              <i data-lucide="user-plus"></i> Nuevo usuario
+            </button>
+          </div>
+          <div class="usuarios-leyenda">
+            <div><span class="usr-rol usr-rol-admin">Administrador</span> Acceso a todo. Su clave autoriza anulaciones, el inventario del mes y reaperturas.</div>
+            <div><span class="usr-rol usr-rol-cajero">Cajero</span> Solo los módulos que le marques. Su clave no autoriza nada.</div>
+            <div class="text-muted">Desactivar no borra a nadie: se conserva su historial y se puede volver a activar.</div>
+          </div>
+          <div id="usuarios-alertas"></div>
+          <div class="usuarios-grid" id="tabla-usuarios"></div>
+
+          <h3 style="margin:1.5rem 0 0;"><i data-lucide="shield"></i> Administración del sistema</h3>
           <!-- RESPALDO DE DATOS (solo administrador; app3.js la muestra) -->
-          <div id="respaldo-card" style="display:none; margin-top: 2rem; border: 1px solid var(--border-glass); border-radius: 12px; padding: 20px; background: var(--bg-card);">
+          <div id="respaldo-card" style="display:none; margin-top: 0.5rem; border: 1px solid var(--border-glass); border-radius: 12px; padding: 20px; background: var(--bg-card);">
             <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
               <div>
                 <h3 style="margin:0; font-size:1.05rem;"><i data-lucide="database-backup" style="width:18px; height:18px; vertical-align:-3px;"></i> Respaldo de datos</h3>
@@ -1567,30 +1620,6 @@
             </button>
           </div>
 
-        </main>
-      </div>
-
-      <!-- ============================================ -->
-      <!-- VISTA 7: USUARIOS (ADMIN)                    -->
-      <!-- ============================================ -->
-      <div class="view-panel" id="view-usuarios">
-        <div class="module-content">
-          <div class="view-header-row" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-            <div>
-              <h2>Usuarios y Permisos</h2>
-              <p class="text-muted" id="usuarios-resumen" style="margin:4px 0 0; font-size:0.85rem;"></p>
-            </div>
-            <button class="action-btn btn-success" onclick="showEditarUsuarioModal()">
-              <i data-lucide="user-plus"></i> Nuevo usuario
-            </button>
-          </div>
-          <div class="usuarios-leyenda">
-            <div><span class="usr-rol usr-rol-admin">Administrador</span> Acceso a todo. Su clave autoriza anulaciones, el inventario del mes y reaperturas.</div>
-            <div><span class="usr-rol usr-rol-cajero">Cajero</span> Solo los módulos que le marques. Su clave no autoriza nada.</div>
-            <div class="text-muted">Desactivar no borra a nadie: se conserva su historial y se puede volver a activar.</div>
-          </div>
-          <div id="usuarios-alertas"></div>
-          <div class="usuarios-grid" id="tabla-usuarios"></div>
         </div>
       </div>
 
@@ -2539,7 +2568,7 @@
     </div>
   </div>
 
-  <script src="app3.js?v=64"></script>
+  <script src="app3.js?v=65"></script>
   <script src="whatsapp.js?v=7"></script>
 <!-- Script to automatically replace commas with dots in number inputs -->
   <script>

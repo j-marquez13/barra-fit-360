@@ -741,7 +741,7 @@ export async function anularVenta(req, res) {
 
       // f. Marcar la venta como anulada (no se borra para dejar registro)
       await tx.execute(
-        "UPDATE ventas SET tipo_transaccion = 'Anulada', total = 0, notas = $1 WHERE id = $2",
+        "UPDATE ventas SET tipo_transaccion = 'Anulada', total = 0, notas = $1, fecha_anulacion = CURRENT_TIMESTAMP WHERE id = $2",
         [`${venta.notas || ''} [ANULADA]`.trim(), id]
       );
     });

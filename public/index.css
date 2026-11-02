@@ -4162,3 +4162,35 @@ select.receta-insumo option {
 .usr-rol-opcion input, .usr-modulo input { margin-top: 3px; width: auto; }
 .usr-rol-opcion span, .usr-modulo span { display: flex; flex-direction: column; gap: 2px; font-size: 0.85rem; }
 .usr-rol-opcion small, .usr-modulo small { color: var(--color-muted); font-size: 0.75rem; font-weight: normal; }
+
+/* ============================================
+   TESORERÍA
+   ============================================ */
+.tes-total {
+  padding: 18px 20px; border-radius: 14px; border: 1px solid var(--border-glass);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(56, 189, 248, 0.06));
+}
+.tes-total-label { font-size: 0.8rem; color: var(--color-muted); text-transform: uppercase; letter-spacing: 1px; }
+.tes-total-valor { font-family: var(--font-title); font-size: 2rem; font-weight: 800; margin: 4px 0; }
+.tes-total-valor small { font-size: 0.9rem; color: var(--color-muted); font-weight: 600; }
+.tes-total-sub { font-size: 0.85rem; color: var(--color-muted); }
+.tes-neg { color: var(--danger); }
+.tes-cuentas { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.tes-cuenta {
+  text-align: left; padding: 14px; border-radius: 12px; border: 1px solid var(--border-glass);
+  background: var(--bg-card); color: var(--color-text); cursor: pointer; font: inherit;
+}
+.tes-cuenta:hover { background: var(--bg-card-hover); }
+.tes-cuenta-neg { border-color: var(--danger); background: var(--danger-glow); }
+.tes-cuenta-head { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--color-muted); }
+.tes-cuenta-head svg { width: 16px; height: 16px; }
+.tes-moneda { margin-left: auto; font-size: 0.7rem; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--border-glass); }
+.tes-cuenta-saldo { font-family: var(--font-title); font-size: 1.35rem; font-weight: 700; margin-top: 6px; }
+.tes-cuenta-neg .tes-cuenta-saldo { color: var(--danger); }
+.tes-cuenta-sub { font-size: 0.78rem; color: var(--color-muted); }
+.tes-panel { padding: 14px; border-radius: 12px; border: 1px solid var(--border-glass); background: var(--bg-card); }
+.tes-filtros { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.tes-filtros .action-btn, #view-tesoreria .view-header-row .action-btn { width: auto; }
+.tes-saldo-fila td { font-weight: 700; background: var(--bg-surface); }
+.tes-mov-ajuste td, .tes-mov-aporte td, .tes-mov-retiro td { background: rgba(245, 158, 11, 0.06); }
+.tes-mov-anulacion td { opacity: 0.8; }

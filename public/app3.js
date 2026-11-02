@@ -620,7 +620,7 @@ function switchView(viewName) {
     credito: 'Cuentas por Cobrar',
     reportes: 'Reportes & Cierres',
     caja: 'Caja y Gastos',
-    tesoreria: 'Tesorería y Flujo de Caja',
+    tesoreria: 'Tesorería',
     cierres: 'Historial de Cierres Diarios',
     usuarios: 'Usuarios y Permisos',
     'inventario-mes': 'Inventario del Mes'
@@ -632,8 +632,8 @@ function switchView(viewName) {
   if (viewName === 'credito') loadClientesData();
   if (viewName === 'reportes') loadCierreDiario();
   if (viewName === 'caja') loadCajaData();
-  if (viewName === 'tesoreria') { loadTesoreriaData(); cargarEstadoRespaldo(); }
-  if (viewName === 'usuarios') loadUsuariosData();
+  if (viewName === 'tesoreria') loadTesoreriaData();
+  if (viewName === 'usuarios') { loadUsuariosData(); cargarEstadoRespaldo(); }
   if (viewName === 'cierres') loadCierresAdmin();
   if (viewName === 'inventario-mes') abrirInventarioCajero();
 
@@ -3939,6 +3939,7 @@ window.showRestockModal = function(insumoId, nombre) {
       <label>Método de Pago (Opcional - Para Flujo de Caja)</label>
       <select id="inp-restock-metodo">
         <option value="">-- No Registrar Gasto --</option>
+        <option value="Dueño">Pagado por el dueño (no sale de ninguna cuenta)</option>
         <option value="Efectivo COP">Efectivo COP</option>
         <option value="Efectivo USD">Efectivo USD</option>
         <option value="Bancolombia">Bancolombia</option>
@@ -3999,37 +4000,212 @@ window.showRestockModal = function(insumoId, nombre) {
 // 11. MÓDULO TESORERÍA
 // ============================================
 
+// ============================================
+// TESORERÍA: cuánto dinero hay en total, en cada cuenta, y todo lo que entró y salió.
+// Los cuadres, aportes y retiros los hace solo el administrador.
+// ============================================
+let tesResumen = null;
+
+function fmtCuenta(monto, moneda) {
+  const m = String(moneda || '').toUpperCase();
+  const v = Math.abs(Number(monto) || 0).toLocaleString('de-DE', { minimumFractionDigits: m === 'COP' ? 0 : 2, maximumFractionDigits: 2 });
+  const signo = Number(monto) < -0.004 ? '-' : '';
+  if (m === 'COP') return `${signo}$${v}`;
+  if (m === 'VES') return `${signo}Bs ${v}`;
+  if (m === 'USD') return `${signo}US$${v}`;
+  return `${signo}${v} ${m}`;
+}
+const esAdminTes = () => { try { const a = JSON.parse(sessionStorage.getItem('bf360_auth') || '{}'); return (a.permisos || []).includes('all') || (a.permisos || []).includes('admin'); } catch (e) { return false; } };
+
+function periodoTesoreria() {
+  const d = document.getElementById('tes-desde'), h = document.getElementById('tes-hasta');
+  if (d && !d.value) d.value = localDateStr().slice(0, 8) + '01';
+  if (h && !h.value) h.value = localDateStr();
+  return { desde: d ? d.value : '', hasta: h ? h.value : '' };
+}
+
 async function loadTesoreriaData() {
   if (!STATE.apiOnline) return;
+  const { desde, hasta } = periodoTesoreria();
   try {
-    const res = await fetch('/api/tesoreria/saldos');
-    const data = await res.json();
-    const grid = document.getElementById('tesoreria-saldos-grid');
-    if (!data || data.length === 0) {
-      grid.innerHTML = '<div class="kpi-card"><div class="kpi-value">Sin cuentas.</div></div>';
-      return;
-    }
-    
-    // Almacenar bancos para los selects del modal de transferencia
-    STATE.bancos = data;
-
-    grid.innerHTML = data.map(cta => {
-      let icon = 'dollar-sign';
-      if (cta.nombre.toLowerCase().includes('zelle')) icon = 'banknote';
-      if (cta.nombre.toLowerCase().includes('binance')) icon = 'bitcoin';
-      return `
-        <div class="kpi-card">
-          <div class="kpi-icon"><i data-lucide="${icon}"></i></div>
-          <div class="kpi-label">${cta.nombre} (${cta.moneda})</div>
-          <div class="kpi-value">${parseFloat(cta.saldo).toLocaleString(undefined, {minimumFractionDigits: 2})} ${cta.moneda}</div>
-        </div>
-      `;
-    }).join('');
-    lucide.createIcons();
+    const res = await fetch(`/api/tesoreria/resumen?desde=${desde}&hasta=${hasta}`);
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'Error');
+    tesResumen = d;
+    STATE.bancos = d.cuentas; // para la transferencia interna
+    pintarTesoreria();
+    loadMovimientosTesoreria();
   } catch (err) {
     console.error('Error cargando tesorería:', err);
+    document.getElementById('tesoreria-saldos-grid').innerHTML = '<div class="loading-cell">No se pudo cargar la tesorería.</div>';
   }
 }
+
+function pintarTesoreria() {
+  const d = tesResumen;
+  const admin = esAdminTes();
+  document.querySelectorAll('.tes-solo-admin').forEach(el => { el.style.display = admin ? '' : 'none'; });
+
+  const t = d.tasas;
+  document.getElementById('tes-total').innerHTML = `
+    <div class="tes-total-label">Dinero total en todas las cuentas</div>
+    <div class="tes-total-valor ${d.total_cop < 0 ? 'tes-neg' : ''}">${fmtCuenta(d.total_cop, 'COP')} <small>COP</small></div>
+    <div class="tes-total-sub">${d.total_usd !== null ? `≈ ${fmtCuenta(d.total_usd, 'USD')}` : ''}
+      ${t ? ` · tasa USD ${numTicket(t.USD)} · Bs ${numTicket(t.VES)}${t.fecha ? ' (' + escHtml(String(t.fecha).split('-').reverse().join('/')) + ')' : ''}` : ' · sin tasa: los USD y Bs no se pueden sumar'}
+      ${d.total_incompleto ? ' · <span style="color:var(--warning);">falta la tasa de alguna moneda</span>' : ''}</div>`;
+
+  const negativas = d.cuentas.filter(c => c.negativo);
+  document.getElementById('tes-avisos').innerHTML = negativas.map(c => `
+    <div class="inv-aviso" style="border-color:var(--danger);">
+      ⚠️ <strong>${escHtml(c.nombre)} está en negativo (${fmtCuenta(c.saldo, c.moneda)}).</strong>
+      Casi siempre es porque se registraron compras pagadas con dinero que no estaba en esa cuenta.
+      ${admin ? `Déjala en lo que hay de verdad con <a href="#" onclick="showCuadrarCuentaModal('${escHtml(c.nombre)}'); return false;">Cuadrar con la realidad</a>, o registra un <a href="#" onclick="showAporteRetiroModal('${escHtml(c.nombre)}'); return false;">Aporte</a>.` : 'Avísale al administrador.'}
+    </div>`).join('');
+
+  const iconos = { zelle: 'banknote', binance: 'bitcoin', 'pago': 'smartphone', bancolombia: 'landmark', efectivo: 'wallet' };
+  document.getElementById('tesoreria-saldos-grid').innerHTML = d.cuentas.map(c => {
+    const clave = Object.keys(iconos).find(k => c.nombre.toLowerCase().includes(k));
+    return `
+      <button type="button" class="tes-cuenta ${c.negativo ? 'tes-cuenta-neg' : ''}" onclick="filtrarMovimientosCuenta('${escHtml(c.nombre)}')" title="Ver los movimientos de ${escHtml(c.nombre)}">
+        <div class="tes-cuenta-head"><i data-lucide="${clave ? iconos[clave] : 'dollar-sign'}"></i> ${escHtml(c.nombre)} <span class="tes-moneda">${escHtml(c.moneda)}</span></div>
+        <div class="tes-cuenta-saldo">${fmtCuenta(c.saldo, c.moneda)}</div>
+        <div class="tes-cuenta-sub">${c.moneda !== 'COP' && c.saldo_cop !== null ? '≈ ' + fmtCuenta(c.saldo_cop, 'COP') : '&nbsp;'}</div>
+      </button>`;
+  }).join('');
+
+  // Entradas y salidas del período por cuenta
+  const filas = d.por_cuenta.filter(p => p.entradas || p.salidas).map(p => `
+    <tr><td>${escHtml(p.cuenta)}</td>
+      <td class="font-outfit" style="color:var(--success);">${p.entradas > 0.004 ? '+' + fmtCuenta(p.entradas, p.moneda) : '—'}</td>
+      <td class="font-outfit" style="color:var(--danger);">${p.salidas > 0.004 ? '-' + fmtCuenta(p.salidas, p.moneda) : '—'}</td>
+      <td class="font-outfit" style="font-weight:700;">${fmtCuenta(p.entradas - p.salidas, p.moneda)}</td></tr>`).join('');
+  document.getElementById('tes-resumen-periodo').innerHTML = `
+    <div class="data-table-container"><table class="data-table">
+      <thead><tr><th>Cuenta</th><th>Entró</th><th>Salió</th><th>Neto</th></tr></thead>
+      <tbody>${filas || '<tr><td colspan="4" class="loading-cell">Sin movimientos en estas fechas.</td></tr>'}</tbody>
+    </table></div>
+    ${d.pagado_por_dueno.compras ? `<div class="text-muted" style="font-size:0.85rem; margin-top:6px;">🧾 Compras pagadas por el dueño (fuera de las cuentas) en estas fechas: <strong>${fmtCuenta(d.pagado_por_dueno.total_cop, 'COP')}</strong> (${d.pagado_por_dueno.compras})</div>` : ''}`;
+
+  const sel = document.getElementById('tes-cuenta');
+  const actual = sel.value;
+  sel.innerHTML = '<option value="">Todas las cuentas</option>' + d.cuentas.map(c => `<option value="${escHtml(c.nombre)}">${escHtml(c.nombre)} (${escHtml(c.moneda)})</option>`).join('');
+  sel.value = actual;
+  lucide.createIcons();
+}
+
+window.filtrarMovimientosCuenta = function (cuenta) {
+  document.getElementById('tes-cuenta').value = cuenta;
+  loadMovimientosTesoreria();
+  document.getElementById('tes-movimientos')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+
+async function loadMovimientosTesoreria() {
+  const { desde, hasta } = periodoTesoreria();
+  const cuenta = document.getElementById('tes-cuenta').value;
+  const body = document.getElementById('tes-mov-body');
+  body.innerHTML = '<tr><td colspan="6" class="loading-cell">Cargando…</td></tr>';
+  try {
+    const res = await fetch(`/api/tesoreria/movimientos?desde=${desde}&hasta=${hasta}${cuenta ? '&cuenta=' + encodeURIComponent(cuenta) : ''}`);
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'Error');
+    const una = !!d.cuenta;
+    const monedaDe = (nombre) => (tesResumen?.cuentas.find(c => c.nombre === nombre) || {}).moneda || 'COP';
+    document.getElementById('tes-mov-head').innerHTML = `<tr><th>Fecha</th>${una ? '' : '<th>Cuenta</th>'}<th>Concepto</th><th>Entra</th><th>Sale</th>${una ? '<th>Saldo</th>' : ''}</tr>`;
+    const filas = d.movimientos.slice().reverse().map(m => {
+      const mon = una ? d.moneda : monedaDe(m.cuenta);
+      return `<tr class="tes-mov-${m.tipo}">
+        <td style="white-space:nowrap;">${escHtml(m.fecha)}</td>
+        ${una ? '' : `<td>${escHtml(m.cuenta)}</td>`}
+        <td>${escHtml(m.concepto)}</td>
+        <td class="font-outfit" style="color:var(--success);">${m.monto > 0 ? '+' + fmtCuenta(m.monto, mon) : ''}</td>
+        <td class="font-outfit" style="color:var(--danger);">${m.monto < 0 ? fmtCuenta(m.monto, mon) : ''}</td>
+        ${una ? `<td class="font-outfit" style="font-weight:700; ${m.saldo < -0.004 ? 'color:var(--danger);' : ''}">${fmtCuenta(m.saldo, mon)}</td>` : ''}
+      </tr>`;
+    }).join('');
+    const cols = una ? 5 : 5;
+    body.innerHTML = (una ? `<tr class="tes-saldo-fila"><td colspan="${cols - 1}">Saldo al final del período</td><td class="font-outfit">${fmtCuenta(d.saldo_final, d.moneda)}</td></tr>` : '') +
+      (filas || `<tr><td colspan="${cols}" class="loading-cell">Sin movimientos en estas fechas.</td></tr>`) +
+      (una ? `<tr class="tes-saldo-fila"><td colspan="${cols - 1}">Saldo al empezar el período</td><td class="font-outfit">${fmtCuenta(d.saldo_inicial, d.moneda)}</td></tr>` : '');
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="6" class="loading-cell">Error: ${escHtml(e.message)}</td></tr>`;
+  }
+}
+
+function opcionesCuentas(seleccion) {
+  return (tesResumen?.cuentas || STATE.bancos || []).map(c =>
+    `<option value="${escHtml(c.nombre)}" ${c.nombre === seleccion ? 'selected' : ''}>${escHtml(c.nombre)} (${escHtml(c.moneda)})</option>`).join('');
+}
+const cuentaTes = (nombre) => (tesResumen?.cuentas || []).find(c => c.nombre === nombre);
+
+async function enviarAjusteTesoreria(payload, ok) {
+  DOM.btnSubmitGeneric.disabled = true;
+  try {
+    const res = await fetch('/api/tesoreria/ajuste', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'No se pudo guardar.');
+    showToast(ok(d), 'success');
+    closeGenericModal();
+    loadTesoreriaData();
+  } catch (e) {
+    showToast(e.message, 'danger');
+    DOM.btnSubmitGeneric.disabled = false;
+  }
+}
+
+// "En la cuenta hay de verdad X": registra la diferencia y deja el saldo en X
+window.showCuadrarCuentaModal = function (cuentaInicial) {
+  const primera = cuentaInicial || (tesResumen?.cuentas.find(c => c.negativo) || tesResumen?.cuentas[0] || {}).nombre;
+  openGenericModal('Cuadrar con la realidad', `
+    <p class="text-muted" style="margin-bottom:12px;">Cuenta la plata (o mira el estado de cuenta del banco) y escribe cuánto hay de verdad. El sistema registra la diferencia como un ajuste, con su motivo, y la cuenta queda en ese valor.</p>
+    <div class="form-group"><label>Cuenta</label><select id="cuadre-cuenta">${opcionesCuentas(primera)}</select></div>
+    <div class="inv-aviso" id="cuadre-sistema" style="margin-bottom:12px;"></div>
+    <div class="form-group"><label>¿Cuánto hay de verdad?</label><input type="number" step="any" id="cuadre-real" placeholder="0"></div>
+    <div class="form-group"><label>Motivo</label><input type="text" id="cuadre-motivo" maxlength="300" placeholder="Ej: conteo de la caja / estado de cuenta"></div>
+    <div id="cuadre-diferencia" style="font-weight:600;"></div>`, () => {
+    const cuenta = document.getElementById('cuadre-cuenta').value;
+    const real = document.getElementById('cuadre-real').value;
+    if (real === '') { showToast('Escribe cuánto hay de verdad.', 'warning'); return; }
+    enviarAjusteTesoreria({ cuenta, tipo: 'ajuste', saldo_real: parseFloat(real), motivo: document.getElementById('cuadre-motivo').value },
+      (d) => `${cuenta} quedó en ${fmtCuenta(d.saldo_nuevo, d.moneda)}.`);
+  });
+  DOM.btnSubmitGeneric.innerHTML = '<i data-lucide="scale"></i> Cuadrar';
+  const actualizar = () => {
+    const c = cuentaTes(document.getElementById('cuadre-cuenta').value);
+    if (!c) return;
+    document.getElementById('cuadre-sistema').innerHTML = `El sistema dice que en <strong>${escHtml(c.nombre)}</strong> hay <strong>${fmtCuenta(c.saldo, c.moneda)}</strong>.`;
+    const real = document.getElementById('cuadre-real').value;
+    const dif = real === '' ? null : parseFloat(real) - c.saldo;
+    document.getElementById('cuadre-diferencia').innerHTML = dif === null ? ''
+      : Math.abs(dif) < 0.005 ? '<span style="color:var(--success);">✅ Ya cuadra: no hay nada que ajustar.</span>'
+      : `Se registrará un ajuste de <span style="color:${dif < 0 ? 'var(--danger)' : 'var(--success)'};">${dif > 0 ? '+' : ''}${fmtCuenta(dif, c.moneda)}</span>.`;
+  };
+  document.getElementById('cuadre-cuenta').addEventListener('change', actualizar);
+  document.getElementById('cuadre-real').addEventListener('input', actualizar);
+  actualizar();
+  lucide.createIcons();
+};
+
+// Aporte (el dueño mete dinero) o retiro (el dueño saca dinero): no son ventas ni gastos
+window.showAporteRetiroModal = function (cuentaInicial) {
+  openGenericModal('Aporte o retiro del dueño', `
+    <div class="usr-roles" style="margin-bottom:12px;">
+      <label class="usr-rol-opcion"><input type="radio" name="ar-tipo" value="aporte" checked>
+        <span><strong>Aporte</strong><small>Meto dinero a la cuenta (p. ej. para pagar compras).</small></span></label>
+      <label class="usr-rol-opcion"><input type="radio" name="ar-tipo" value="retiro">
+        <span><strong>Retiro</strong><small>Saco dinero de la cuenta (p. ej. ganancias).</small></span></label>
+    </div>
+    <div class="form-group"><label>Cuenta</label><select id="ar-cuenta">${opcionesCuentas(cuentaInicial)}</select></div>
+    <div class="form-group"><label>Monto (en la moneda de la cuenta)</label><input type="number" step="any" min="0" id="ar-monto" placeholder="0"></div>
+    <div class="form-group"><label>Motivo</label><input type="text" id="ar-motivo" maxlength="300" placeholder="Ej: retiro de ganancias de octubre"></div>
+    <small class="text-muted">No cuenta como venta ni como gasto: no cambia la utilidad, solo el dinero de la cuenta.</small>`, () => {
+    const tipo = document.querySelector('input[name="ar-tipo"]:checked').value;
+    const cuenta = document.getElementById('ar-cuenta').value;
+    enviarAjusteTesoreria({ cuenta, tipo, monto: parseFloat(document.getElementById('ar-monto').value), motivo: document.getElementById('ar-motivo').value },
+      (d) => `${tipo === 'aporte' ? 'Aporte' : 'Retiro'} registrado. ${cuenta}: ${fmtCuenta(d.saldo_nuevo, d.moneda)}.`);
+  });
+  DOM.btnSubmitGeneric.innerHTML = '<i data-lucide="check"></i> Registrar';
+  lucide.createIcons();
+};
 
 window.showTransferenciaModal = function() {
   const options = STATE.bancos ? STATE.bancos.map(b => `<option value="${b.nombre}">${b.nombre} (${b.moneda})</option>`).join('') : '';
@@ -5672,6 +5848,7 @@ function showAddGastoModal() {
       <label>Método de Pago (Cuenta Bancaria)</label>
       <select id="gasto-metodo">
         <option value="Efectivo COP">Efectivo COP</option>
+        <option value="Dueño">Pagado por el dueño (no sale de ninguna cuenta)</option>
         <option value="Efectivo USD">Efectivo USD</option>
         <option value="Bancolombia">Bancolombia</option>
         <option value="Zelle">Zelle</option>
