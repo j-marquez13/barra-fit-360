@@ -929,14 +929,14 @@ function buildMensajeConteoNevera(c) {
     `\nRevísalo en Cierres → Conteos de Nevera.`;
 }
 
-// Resultado del conteo de nevera de un cierre: a los mismos números del aviso de turno.
-export function notificarConteoNevera(conteo) {
+// Envía un aviso a los números del aviso de turno (el dueño y el otro número configurado).
+// Corre en segundo plano: si WhatsApp se está conectando, espera hasta 3 minutos.
+function enviarAvisoAdmin(mensaje, tipoLog, descripcion) {
   (async () => {
     const cfg = await getAvisoTurnoConfig();
     if (!cfg.activado) return;
     const telefonos = [...new Set(cfg.telefonos.map(normalizePhone).filter(Boolean))];
     if (telefonos.length === 0 || !(await hasStoredSession())) return;
-    const mensaje = buildMensajeConteoNevera(conteo);
     for (let i = 0; i < 18 && (status !== 'conectado' || !sock); i++) await sleep(10000);
     if (status !== 'conectado' || !sock) {
       for (const t of telefonos) await logEnvio(t, mensaje, 'aviso_fallido');
@@ -945,13 +945,65 @@ export function notificarConteoNevera(conteo) {
     for (const t of telefonos) {
       try {
         await enviarTexto(t, mensaje);
-        await logEnvio(t, mensaje, 'aviso_conteo');
+        await logEnvio(t, mensaje, tipoLog);
       } catch (e) {
-        logger.error('Error enviando conteo de nevera a ' + t + ':', e.message);
+        logger.error(`Error enviando ${descripcion} a ${t}:`, e.message);
         await logEnvio(t, mensaje, 'aviso_fallido');
       }
     }
-  })().catch((e) => logger.error('Error en aviso de conteo de nevera:', e.message));
+  })().catch((e) => logger.error(`Error en aviso de ${descripcion}:`, e.message));
+}
+
+// Resultado del conteo de nevera de un cierre
+export function notificarConteoNevera(conteo) {
+  enviarAvisoAdmin(buildMensajeConteoNevera(conteo), 'aviso_conteo', 'conteo de nevera');
+}
+
+const NOMBRES_MES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+const nombreMes = (mes) => { const [a, m] = String(mes).split('-').map(Number); return `${NOMBRES_MES[m - 1] || ''} ${a}`; };
+const fmtCant = (n) => Number(n || 0).toLocaleString('es-VE', { maximumFractionDigits: 2 });
+const MAX_LINEAS_INVENTARIO = 25;
+
+export function buildMensajeInventarioMensual(inv) {
+  const neta = (inv.valor_contado || 0) - (inv.valor_sistema || 0);
+  const pct = inv.valor_sistema ? (neta / inv.valor_sistema) * 100 : 0;
+  const conDif = (inv.items || []).filter(i => Math.abs(i.diferencia || 0) > 0.001)
+    .sort((x, y) => Math.abs(y.valor_diferencia) - Math.abs(x.valor_diferencia)); // primero lo que más pesa
+  let m = `📋 *Inventario de ${nombreMes(inv.mes)}* — Fit 360
+
+• Registró: ${inv.usuario_nombre || '—'}${inv.autorizado_por && inv.autorizado_por !== inv.usuario_nombre ? `\n• Autorizó: ${inv.autorizado_por}` : ''}
+• Productos contados: ${inv.items_contados} · con diferencia: ${conDif.length}
+
+Según el sistema: $${fmtPesos(inv.valor_sistema)}
+Físico (contado): $${fmtPesos(inv.valor_contado)}
+Faltantes: -$${fmtPesos(inv.faltante_cop)}
+Sobrantes: +$${fmtPesos(inv.sobrante_cop)}
+Diferencia neta: ${neta < 0 ? '-' : '+'}$${fmtPesos(Math.abs(neta))} (${pct.toLocaleString('es-VE', { maximumFractionDigits: 1 })}%)`;
+  if (conDif.length === 0) return m + `\n\n✅ Todo lo contado cuadra con el sistema.`;
+  const lineas = conDif.slice(0, MAX_LINEAS_INVENTARIO).map(i => {
+    const falta = i.diferencia < 0;
+    return `  – ${i.nombre}: ${falta ? 'faltan' : 'sobran'} ${fmtCant(Math.abs(i.diferencia))}${i.unidad ? ' ' + i.unidad : ''} (sistema ${fmtCant(i.esperado)}, físico ${fmtCant(i.contado)}) ${falta ? '-' : '+'}$${fmtPesos(Math.abs(i.valor_diferencia))}`;
+  });
+  m += `\n\n⚠️ *Diferencias:*\n${lineas.join('\n')}`;
+  if (conDif.length > MAX_LINEAS_INVENTARIO) m += `\n  …y ${conDif.length - MAX_LINEAS_INVENTARIO} más`;
+  return m + `\n\nDetalle completo en Cierres → Inventario Mensual.`;
+}
+
+// Inventario mensual cerrado: totales y las diferencias producto por producto
+export function notificarInventarioMensual(inv) {
+  enviarAvisoAdmin(buildMensajeInventarioMensual(inv), 'aviso_inventario', 'inventario mensual');
+}
+
+// Alguien reabrió el inventario del mes para volver a contarlo (con la clave del admin)
+export function notificarReaperturaInventario({ mes, reabierto_por, autorizado_por, anterior }) {
+  const mensaje = `🔁 *Inventario de ${nombreMes(mes)} reabierto* para volver a contarlo — Fit 360
+
+• Reabrió: ${reabierto_por || '—'}
+• Autorizó: ${autorizado_por || '—'}` + (anterior ? `
+• Cierre anterior (${anterior.usuario_nombre || '—'}): faltante -$${fmtPesos(anterior.faltante_cop)}, sobrante +$${fmtPesos(anterior.sobrante_cop)}` : '') + `
+
+Cuando lo vuelvan a cerrar te llega el nuevo reporte.`;
+  enviarAvisoAdmin(mensaje, 'aviso_inventario', 'reapertura de inventario');
 }
 
 export async function avisoTurnoEstado(req, res) {

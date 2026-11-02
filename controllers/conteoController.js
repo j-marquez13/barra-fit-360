@@ -1,6 +1,6 @@
 import * as db from '../db.js';
 import { isPostgres, localNow } from '../db.js';
-import { notificarConteoNevera } from './whatsappController.js';
+import { notificarConteoNevera, notificarInventarioMensual, notificarReaperturaInventario } from './whatsappController.js';
 import { validarPasswordAdmin, firmarAutorizacion, verificarAutorizacion } from '../auth.js';
 
 /**
@@ -398,6 +398,7 @@ export async function guardarInventarioMensual(req, res) {
       }
       return { id: cierre.id, sin_contar: insumos.length - [...valores.values()].filter(v => v !== null).length };
     });
+    if (cerrar) avisarInventarioCerrado(mes).catch(e => console.error('Aviso de inventario mensual:', e.message));
     return res.json({ ok: true, ...resultado, cerrado: !!cerrar });
   } catch (e) {
     return responderError(res, e, 'Error al guardar el inventario mensual:');
@@ -535,7 +536,7 @@ export async function reabrirInventarioMensual(req, res) {
   try {
     const r = await validarPasswordAdmin(req, admin_password);
     if (!r.ok) return res.status(r.status).json({ error: r.error });
-    await db.transaction(async (tx) => {
+    const anterior = await db.transaction(async (tx) => {
       const c = (await tx.query('SELECT * FROM cierres_inventario WHERE mes = $1', [mes]))[0];
       if (!c) throw err(404, 'No hay inventario de ese mes.');
       if (c.estado !== 'cerrado') throw err(400, 'Este inventario no está cerrado: se puede seguir contando.');
@@ -552,11 +553,27 @@ export async function reabrirInventarioMensual(req, res) {
           faltante_cop = NULL, sobrante_cop = NULL, items_contados = NULL, items_con_diferencia = NULL,
           ajustado = 0, ajustado_por = NULL, ajustado_en = NULL, autorizado_por = NULL, reaperturas = COALESCE(reaperturas, 0) + 1
         WHERE id = $1`, [c.id]);
+      return copia;
     });
+    notificarReaperturaInventario({ mes, reabierto_por: req.usuario?.nombre, autorizado_por: r.admin.nombre, anterior });
     // Quien lo reabre puede seguir contando de una vez (misma autorización que al entrar)
     const autorizacion = firmarAutorizacion({ tipo: 'inventario-mensual', usuario_id: req.usuario.usuario_id, admin: r.admin.nombre }, DURACION_AUTORIZACION);
     return res.json({ ok: true, autorizacion, admin: r.admin.nombre });
   } catch (e) {
     return responderError(res, e, 'Error al reabrir el inventario mensual:');
   }
+}
+
+// Reporte del inventario recién cerrado (totales + diferencias de cada producto) al WhatsApp del dueño
+async function avisarInventarioCerrado(mes) {
+  const c = (await db.query("SELECT * FROM cierres_inventario WHERE mes = $1 AND estado = 'cerrado'", [mes]))[0];
+  if (!c) return;
+  const items = await db.query('SELECT nombre, unidad, contado, esperado, diferencia, costo_unitario FROM cierres_inventario_items WHERE cierre_id = $1', [c.id]);
+  notificarInventarioMensual({
+    ...filaCierreInventario(c),
+    items: items.map(i => ({
+      nombre: i.nombre, unidad: i.unidad, contado: num(i.contado), esperado: num(i.esperado),
+      diferencia: num(i.diferencia) || 0, valor_diferencia: (num(i.diferencia) || 0) * (num(i.costo_unitario) || 0)
+    }))
+  });
 }
