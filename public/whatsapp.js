@@ -346,7 +346,7 @@ async function guardarAvisoTurno() {
     });
     const d = await res.json();
     if (!res.ok) { showToast(d.error || 'Error al guardar', 'danger'); return; }
-    showToast('Aviso de inicio de turno guardado.', 'success');
+    showToast('Avisos por WhatsApp guardados.', 'success');
     loadAvisoTurno();
   } catch (e) {
     showToast('Error al guardar el aviso', 'danger');

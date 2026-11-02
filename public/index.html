@@ -935,17 +935,22 @@
           </div>
 
           <!-- ============================================ -->
-          <!-- Aviso de inicio de turno (solo administrador) -->
+          <!-- Avisos al dueño por WhatsApp (solo administrador): turno, nevera e inventario -->
           <!-- ============================================ -->
           <div class="wa-panel" id="wa-aviso-turno-panel" style="display:none;">
             <div class="wa-panel-header">
-              <h4><i data-lucide="bell-ring"></i> Aviso de Inicio de Turno</h4>
+              <h4><i data-lucide="bell-ring"></i> Avisos al Dueño por WhatsApp</h4>
             </div>
             <div style="padding:12px; display:flex; flex-direction:column; gap:10px;">
               <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.9rem;">
                 <input type="checkbox" id="wa-aviso-activo" checked style="width:18px; height:18px;">
-                <span>Avisar por WhatsApp cada vez que alguien inicie un turno</span>
+                <span>Enviarme los avisos por WhatsApp</span>
               </label>
+              <ul class="text-muted" style="margin:0 0 0 18px; font-size:0.8rem; line-height:1.5;">
+                <li>Cada vez que alguien inicia un turno</li>
+                <li>El conteo de la nevera de cada cierre de caja</li>
+                <li>El inventario del mes, con sus diferencias, y si alguien lo reabre</li>
+              </ul>
               <label style="display:flex; flex-direction:column; gap:4px; font-size:0.85rem;">
                 <span>Tu número:</span>
                 <input type="text" id="wa-aviso-telefono-1" placeholder="584141234567" style="background:rgba(255,255,255,0.05); border:1px solid var(--border-glass); border-radius:8px; padding:8px 10px; color:var(--text-bright);">
@@ -2525,7 +2530,7 @@
   </div>
 
   <script src="app3.js?v=61"></script>
-  <script src="whatsapp.js?v=6"></script>
+  <script src="whatsapp.js?v=7"></script>
 <!-- Script to automatically replace commas with dots in number inputs -->
   <script>
     document.addEventListener('keydown', function(e) {
