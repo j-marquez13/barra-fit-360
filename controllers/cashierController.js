@@ -2,6 +2,7 @@ import * as db from '../db.js';
 import { localNow, isPostgres, localDate, dateExpr } from '../db.js';
 import { obtenerTasas } from '../tasas.js';
 import { notificarInicioTurno } from './whatsappController.js';
+import { faltaConteoNevera, conteoNeveraDeSesion } from './conteoController.js';
 
 /**
  * Controlador de Arqueo y Sesiones de Caja (Turnos)
@@ -380,7 +381,8 @@ export async function ticketTurnoAdmin(req, res) {
       declarado_bancolombia: num(s.declarado_bancolombia) || 0,
       tasas: tasaUsd || tasaVes ? { USD: tasaUsd, VES: tasaVes } : null,
       cantidad_ventas: parseInt(conteo?.ventas || 0, 10),
-      cantidad_anuladas: parseInt(conteo?.anuladas || 0, 10)
+      cantidad_anuladas: parseInt(conteo?.anuladas || 0, 10),
+      conteo_nevera: await conteoNeveraDeSesion(s.id)
     });
   } catch (error) {
     console.error('Error al obtener ticket del turno:', error);
@@ -525,6 +527,11 @@ export async function cerrarCaja(req, res) {
     const currentSession = session[0];
     const fechaApertura = currentSession.fecha_apertura;
     const isPg = !!(process.env.DATABASE_URL || process.env.PGHOST);
+
+    // En cada cierre el cajero debe contar la nevera (lo que quedó vs. lo que dice el sistema)
+    if (await faltaConteoNevera(currentSession.id)) {
+      return res.status(400).json({ error: 'Antes de cerrar la caja hay que hacer el conteo de la nevera.', falta_conteo_nevera: true });
+    }
 
     // Tasas para convertir a COP: la tasa del día del servidor (o la última fijada).
     // Solo si nunca se ha fijado ninguna se usa la que envía la pantalla.
@@ -748,7 +755,8 @@ export async function cerrarCaja(req, res) {
         tasas: { USD: tasaUsd, VES: tasaVes },
         ventas_detalle: ventasDetalle,
         abonos_detalle: abonosDetalle,
-        diferencia: diferencia
+        diferencia: diferencia,
+        conteo_nevera: await conteoNeveraDeSesion(currentSession.id)
       },
       sesion: sessionRes[0]
     });

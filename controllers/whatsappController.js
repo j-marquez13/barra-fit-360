@@ -913,6 +913,47 @@ export function notificarInicioTurno(sesion) {
   })().catch((e) => logger.error('Error en aviso de inicio de turno:', e.message));
 }
 
+function buildMensajeConteoNevera(c) {
+  const conDif = (c.items || []).filter(i => Math.abs(i.diferencia || 0) > 0.001);
+  const encabezado = `🧊 *Conteo de Nevera* — Fit 360\n\n• Turno: ${c.turno || '—'}\n• Cajero: ${c.usuario_nombre || 'Cajero'}`;
+  if (conDif.length === 0) return `${encabezado}\n\n✅ Todo cuadra (${c.items_total} productos).`;
+  const lineas = conDif.map(i => {
+    const n = Math.abs(i.diferencia);
+    const cant = Number.isInteger(n) ? n : n.toFixed(2);
+    return i.diferencia < 0
+      ? `  – ${i.nombre}: faltan ${cant} (-$${fmtPesos(Math.abs(i.valor_diferencia))})`
+      : `  – ${i.nombre}: sobran ${cant} (+$${fmtPesos(Math.abs(i.valor_diferencia))})`;
+  });
+  return `${encabezado}\n\n⚠️ ${conDif.length} producto(s) no cuadran:\n${lineas.join('\n')}` +
+    (c.faltante_cop > 0 ? `\n\nFaltante total: -$${fmtPesos(c.faltante_cop)} COP (a costo)` : '') +
+    `\nRevísalo en Cierres → Conteos de Nevera.`;
+}
+
+// Resultado del conteo de nevera de un cierre: a los mismos números del aviso de turno.
+export function notificarConteoNevera(conteo) {
+  (async () => {
+    const cfg = await getAvisoTurnoConfig();
+    if (!cfg.activado) return;
+    const telefonos = [...new Set(cfg.telefonos.map(normalizePhone).filter(Boolean))];
+    if (telefonos.length === 0 || !(await hasStoredSession())) return;
+    const mensaje = buildMensajeConteoNevera(conteo);
+    for (let i = 0; i < 18 && (status !== 'conectado' || !sock); i++) await sleep(10000);
+    if (status !== 'conectado' || !sock) {
+      for (const t of telefonos) await logEnvio(t, mensaje, 'aviso_fallido');
+      return;
+    }
+    for (const t of telefonos) {
+      try {
+        await enviarTexto(t, mensaje);
+        await logEnvio(t, mensaje, 'aviso_conteo');
+      } catch (e) {
+        logger.error('Error enviando conteo de nevera a ' + t + ':', e.message);
+        await logEnvio(t, mensaje, 'aviso_fallido');
+      }
+    }
+  })().catch((e) => logger.error('Error en aviso de conteo de nevera:', e.message));
+}
+
 export async function avisoTurnoEstado(req, res) {
   try { res.json(await getAvisoTurnoConfig()); }
   catch (e) { res.status(500).json({ error: e.message }); }

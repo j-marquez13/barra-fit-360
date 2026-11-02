@@ -4035,3 +4035,58 @@ select.receta-insumo option {
   padding: 2px 10px;
   font-weight: 700;
 }
+
+/* ============================================
+   CONTEO DE NEVERA (cierre de caja) E INVENTARIO MENSUAL
+   ============================================ */
+#cierre-caja-view-nevera { max-height: 95vh; overflow-y: auto; }
+.nevera-conteo { padding: 16px 20px 4px; }
+.nevera-pasos { display: flex; gap: 8px; margin-bottom: 12px; font-size: 0.8rem; flex-wrap: wrap; }
+.nevera-paso { padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border-glass); color: var(--color-muted); }
+.nevera-paso.activo { border-color: var(--cyan-neon); color: var(--cyan-neon); background: var(--cyan-glow); }
+.nevera-instrucciones { margin-bottom: 14px; color: var(--color-text); line-height: 1.45; }
+.nevera-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+.nevera-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border-glass); background: var(--bg-surface);
+  cursor: text;
+}
+.nevera-nombre { font-weight: 500; }
+.nevera-input {
+  width: 110px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border-glass);
+  background: var(--bg-app); color: var(--color-text); font-size: 1rem; text-align: right;
+}
+.nevera-input:focus { outline: none; border-color: var(--border-focus); }
+.nevera-input.nevera-vacio { border-color: var(--danger); }
+.nevera-item.nevera-recontar { border-color: var(--warning); background: var(--warning-glow); }
+.nevera-item.nevera-ok { opacity: 0.5; }
+#nevera-resultado .ctd-card { margin-top: 4px; }
+
+.btn-mini { padding: 4px 10px !important; font-size: 12px !important; }
+.conteo-card {
+  border: 1px solid var(--border-glass); border-radius: 12px; background: var(--bg-card);
+  padding: 12px; margin-bottom: 12px;
+}
+.conteo-card-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+
+.inv-aviso {
+  padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border-glass); background: var(--bg-card);
+  margin-bottom: 12px; font-size: 0.9rem; line-height: 1.45;
+}
+.inv-barra { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.inv-seccion { margin-bottom: 16px; }
+.inv-seccion h4 { margin-bottom: 8px; }
+.inv-input { width: 120px; }
+.inv-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.inv-kpi {
+  display: flex; flex-direction: column; gap: 4px; padding: 12px; border-radius: 10px;
+  border: 1px solid var(--border-glass); background: var(--bg-card);
+}
+.inv-kpi span { font-size: 0.8rem; color: var(--color-muted); }
+.inv-kpi strong { font-family: var(--font-title); font-size: 1.15rem; }
+.inv-reporte-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+@media (max-width: 600px) {
+  .nevera-input { width: 90px; }
+  .nevera-conteo { padding: 12px; }
+}
+.inv-barra .action-btn { width: auto; flex: 0 0 auto; }

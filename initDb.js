@@ -134,6 +134,7 @@ export async function initializeDatabase() {
         usuario_nombre TEXT,
         creado_en TEXT
       )`);
+      await crearTablasConteos();
 
       // Desglose del arqueo de cada turno (ventas vs abonos) para el cierre consolidado
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_ventas_cop DOUBLE PRECISION;');
@@ -738,6 +739,7 @@ async function runMigrations() {
     usuario_nombre TEXT,
     creado_en TEXT
   )`);
+  await crearTablasConteos();
   // Desglose del arqueo de cada turno (ventas vs abonos) para el cierre consolidado
   try { await db.execute("ALTER TABLE sesiones_caja ADD COLUMN declarado_ventas_cop REAL"); } catch(e) {}
   try { await db.execute("ALTER TABLE sesiones_caja ADD COLUMN declarado_abonos_cop REAL"); } catch(e) {}
@@ -905,6 +907,74 @@ async function createTriggers() {
   } catch(e) {
     console.error('Error al crear triggers de tesorería', e);
   }
+}
+
+// Conteos físicos de inventario (ver controllers/conteoController.js). Son dos registros
+// separados: el conteo de nevera de cada cierre de caja y el cierre de inventario mensual.
+async function crearTablasConteos() {
+  const pg = !!usePostgres;
+  const id = pg ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT';
+  const num = pg ? 'DOUBLE PRECISION' : 'REAL';
+  await db.execute(`CREATE TABLE IF NOT EXISTS conteos_nevera (
+    id ${id},
+    sesion_caja_id INTEGER NOT NULL UNIQUE,
+    usuario_id INTEGER,
+    usuario_nombre TEXT,
+    fecha TEXT NOT NULL,
+    recontado INTEGER NOT NULL DEFAULT 0,
+    items_total INTEGER NOT NULL DEFAULT 0,
+    items_con_diferencia INTEGER NOT NULL DEFAULT 0,
+    faltante_cop ${num} NOT NULL DEFAULT 0,
+    sobrante_cop ${num} NOT NULL DEFAULT 0
+  )`);
+  await db.execute(`CREATE TABLE IF NOT EXISTS conteos_nevera_items (
+    id ${id},
+    conteo_id INTEGER NOT NULL,
+    insumo_id INTEGER,
+    nombre TEXT NOT NULL,
+    unidad TEXT,
+    esperado ${num} NOT NULL,
+    primer_conteo ${num},
+    contado ${num} NOT NULL,
+    diferencia ${num} NOT NULL,
+    costo_unitario ${num} NOT NULL DEFAULT 0,
+    decision TEXT,
+    decidido_por TEXT,
+    decidido_en TEXT
+  )`);
+  await db.execute('CREATE INDEX IF NOT EXISTS conteos_nevera_items_conteo ON conteos_nevera_items(conteo_id)');
+
+  await db.execute(`CREATE TABLE IF NOT EXISTS cierres_inventario (
+    id ${id},
+    mes TEXT NOT NULL UNIQUE,
+    estado TEXT NOT NULL DEFAULT 'borrador',
+    usuario_id INTEGER,
+    usuario_nombre TEXT,
+    creado_en TEXT,
+    cerrado_en TEXT,
+    valor_sistema ${num},
+    valor_contado ${num},
+    faltante_cop ${num},
+    sobrante_cop ${num},
+    items_contados INTEGER,
+    items_con_diferencia INTEGER,
+    ajustado INTEGER NOT NULL DEFAULT 0,
+    ajustado_por TEXT,
+    ajustado_en TEXT
+  )`);
+  await db.execute(`CREATE TABLE IF NOT EXISTS cierres_inventario_items (
+    id ${id},
+    cierre_id INTEGER NOT NULL,
+    insumo_id INTEGER NOT NULL,
+    nombre TEXT NOT NULL,
+    unidad TEXT,
+    seccion TEXT,
+    contado ${num},
+    esperado ${num},
+    diferencia ${num},
+    costo_unitario ${num},
+    UNIQUE (cierre_id, insumo_id)
+  )`);
 }
 
 async function seedData() {

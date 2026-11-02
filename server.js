@@ -11,6 +11,7 @@ import { cierreDiario, cierreSemanal, cierreRango, historialVentas } from './con
 import { listarGastos, registrarGasto } from './controllers/expensesController.js';
 import { estadoCaja, abrirCaja, cerrarCaja, cierreDia, listarCierresAdmin, ticketTurnoAdmin } from './controllers/cashierController.js';
 import { getSaldos, transferirFondos } from './controllers/treasuryController.js';
+import { getConteoNevera, verificarConteoNevera, guardarConteoNevera, listarConteosNevera, decidirItemNevera, getInventarioMensual, guardarInventarioMensual, ajustarInventarioMensual, reporteInventarioMes } from './controllers/conteoController.js';
 import { initializeDatabase } from './initDb.js';
 import * as db from './db.js';
 import { signToken, verifyToken, requireAuth, requireAdmin, requirePermiso, revokeToken, getTokenFromRequest, esAdmin, validarPasswordAdmin } from './auth.js';
@@ -188,6 +189,7 @@ app.get('/api/reportes/cierre-diario', reportes, cierreDiario);
 app.get('/api/reportes/cierre-semanal', reportes, cierreSemanal);
 app.get('/api/reportes/cierre-rango', reportes, cierreRango);
 app.get('/api/reportes/ventas', reportes, historialVentas);
+app.get('/api/reportes/inventario-mes', reportes, reporteInventarioMes);
 
 // ============================================
 // RUTAS DE GASTOS Y NÓMINA
@@ -203,9 +205,21 @@ app.post('/api/caja/abrir', abrirCaja);
 app.post('/api/caja/cerrar', cerrarCaja);
 app.get('/api/caja/cierre-dia', cierreDia);
 
+// Conteo de la nevera: lo hace el cajero en cada cierre de caja (obligatorio para cerrar)
+app.get('/api/caja/conteo-nevera', getConteoNevera);
+app.post('/api/caja/conteo-nevera/verificar', verificarConteoNevera);
+app.post('/api/caja/conteo-nevera', guardarConteoNevera);
+
 // Histórico de cierres diarios (solo administrador)
 app.get('/api/admin/cierres', requireAdmin, listarCierresAdmin);
 app.get('/api/admin/cierres/turno/:id', requireAdmin, ticketTurnoAdmin);
+
+// Revisión de los conteos de nevera y cierre de inventario mensual (registros separados)
+app.get('/api/admin/conteos-nevera', requireAdmin, listarConteosNevera);
+app.post('/api/admin/conteos-nevera/items/:id', requireAdmin, decidirItemNevera);
+app.get('/api/admin/inventario-mensual', requireAdmin, getInventarioMensual);
+app.post('/api/admin/inventario-mensual', requireAdmin, guardarInventarioMensual);
+app.post('/api/admin/inventario-mensual/:id/ajustar', requireAdmin, ajustarInventarioMensual);
 
 // ============================================
 // RUTAS DE USUARIOS Y AUTENTICACIÓN

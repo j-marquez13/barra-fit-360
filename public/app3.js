@@ -573,7 +573,25 @@ checkApiHealth();
       mensualSelect.appendChild(opt);
       d.setMonth(d.getMonth() - 1);
     }
+    // Los mismos meses para el cierre de inventario mensual
+    const invMes = document.getElementById('inv-mes');
+    if (invMes) invMes.innerHTML = mensualSelect.innerHTML;
   }
+
+  // Cierres (admin): pestañas Cierres de caja | Conteos de nevera | Inventario mensual
+  document.querySelectorAll('[data-cierres-tab]').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const destino = tab.dataset.cierresTab;
+      document.querySelectorAll('[data-cierres-tab]').forEach(t => t.classList.toggle('active', t === tab));
+      document.querySelectorAll('.cierres-panel').forEach(p => { p.style.display = p.id === `cierres-panel-${destino}` ? '' : 'none'; });
+      if (destino === 'nevera') loadConteosNevera();
+      if (destino === 'inventario') loadInventarioMensual();
+    });
+  });
+  document.getElementById('btn-load-nevera')?.addEventListener('click', loadConteosNevera);
+  document.getElementById('nevera-solo-diferencias')?.addEventListener('change', () => pintarConteosNevera());
+  document.getElementById('btn-load-inv-mes')?.addEventListener('click', loadInventarioMensual);
+  document.getElementById('inv-mes')?.addEventListener('change', loadInventarioMensual);
 });
 
 // ============================================
@@ -3633,6 +3651,9 @@ async function loadCierreMensual() {
       `;
       }).join('');
     }
+
+    // Inventario del mes: conteo físico vs sistema y nevera de los cierres de caja
+    pintarInventarioEnCierreMensual(mesValue, utilidad);
   } catch (err) {
     console.error('Error cargando cierre mensual:', err);
   }
@@ -4753,6 +4774,10 @@ async function cerrarTurnoActual() {
     }
   }
 
+  // 0. Conteo de la nevera: obligatorio en cada cierre, antes del arqueo
+  const pasoNevera = await pasoConteoNevera();
+  if (!pasoNevera.ok) return;
+
   // 1. Mostrar loading y cargar estado actual de la caja
   const overlay = document.getElementById('cierre-caja-overlay');
   const viewArqueo = document.getElementById('cierre-caja-view-arqueo');
@@ -5102,6 +5127,8 @@ async function cerrarTurnoActual() {
       // Arqueo por método (declarado vs esperado)
       const arqueoTurno = document.getElementById('ticket-arqueo-metodos');
       if (arqueoTurno) { arqueoTurno.innerHTML = htmlArqueoMetodos(vDet, aDet, d.resumen); lucide.createIcons(); }
+      const conteoTicket = document.getElementById('ticket-conteo-nevera');
+      if (conteoTicket) { conteoTicket.innerHTML = htmlConteoNevera(d.resumen.conteo_nevera); lucide.createIcons(); }
       
 
 
@@ -5504,6 +5531,7 @@ window.verTicketTurno = async function(turnoId, fecha) {
           <tbody>${tabla(d.abonos_detalle)}</tbody></table>
       </section>
       ${htmlArqueoMetodos(d.ventas_detalle, d.abonos_detalle, d)}
+      ${htmlConteoNevera(d.conteo_nevera)}
       <section class="ctd-card">
         <div class="ctd-card-head"><span class="ctd-card-icon ctd-icon-gold"><i data-lucide="wallet"></i></span><span class="ctd-card-title">Fondo de Caja y Arqueo Final</span></div>
         <div class="ctd-row"><span>Fondo de Caja Base</span><strong class="ctd-mono">$${fmt(t.fondo_inicial_cop)} COP + $${fmt(t.fondo_inicial_usd)} USD</strong></div>
@@ -6725,3 +6753,505 @@ window.eliminarAbono = async function(id) {
     showToast(err.message, 'error');
   }
 };
+
+// ============================================
+// CONTEO DE NEVERA (paso 1 de cada cierre de caja)
+// El cajero cuenta lo que quedó en la nevera SIN ver lo que dice el sistema. Si algo no
+// cuadra se le pide recontar solo esos productos (sin decirle cuánto); luego se guarda y
+// se le muestra el resultado. Devuelve { ok, conteo }; ok = false si canceló.
+// ============================================
+async function pasoConteoNevera() {
+  let data;
+  try {
+    const res = await fetch('/api/caja/conteo-nevera');
+    data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'No se pudo cargar el conteo de nevera.');
+  } catch (e) {
+    showToast(e.message, 'danger');
+    return { ok: false };
+  }
+  // Ya contado en este turno (p. ej. se canceló el arqueo y se vuelve a cerrar) o nada que contar
+  if (data.conteo || !data.items.length) return { ok: true, conteo: data.conteo };
+
+  const overlay = document.getElementById('cierre-caja-overlay');
+  const vista = document.getElementById('cierre-caja-view-nevera');
+  const lista = document.getElementById('nevera-lista');
+  const resultado = document.getElementById('nevera-resultado');
+  const instrucciones = document.getElementById('nevera-instrucciones');
+  const btn = document.getElementById('btn-nevera-siguiente');
+  document.getElementById('cierre-caja-view-arqueo').style.display = 'none';
+  document.getElementById('cierre-caja-view-success').style.display = 'none';
+  vista.style.display = 'block';
+  overlay.classList.add('open');
+
+  instrucciones.innerHTML = 'Cuenta cuántas unidades <strong>quedaron</strong> de cada producto en la nevera y escríbelo. ' +
+    'Si algo no cuadra con el sistema, te pediremos volver a contarlo.';
+  resultado.innerHTML = '';
+  lista.style.display = '';
+  lista.innerHTML = data.items.map(i => `
+    <label class="nevera-item">
+      <span class="nevera-nombre">${escHtml(i.nombre)}</span>
+      <input type="number" class="nevera-input" min="0" step="1" inputmode="numeric" placeholder="¿Cuántas?" data-insumo="${i.insumo_id}">
+    </label>`).join('');
+
+  return new Promise(resolve => {
+    let fase = 'primero'; // primero -> recontar -> listo
+    let primerConteo = null;
+    let conteoGuardado = null;
+    const inputs = () => [...lista.querySelectorAll('.nevera-input')];
+    const setBtn = (html, disabled = false) => { btn.innerHTML = html; btn.disabled = disabled; lucide.createIcons(); };
+    const terminar = (ok) => {
+      vista.style.display = 'none';
+      if (!ok) overlay.classList.remove('open');
+      resolve({ ok, conteo: conteoGuardado });
+    };
+    document.getElementById('btn-close-nevera').onclick = () => terminar(false);
+    document.getElementById('btn-cancel-nevera').onclick = () => terminar(false);
+    setBtn('<i data-lucide="check"></i> Verificar conteo');
+    lista.querySelector('.nevera-input')?.focus();
+
+    const leer = () => {
+      const conteos = [];
+      let vacio = null;
+      for (const inp of inputs()) {
+        const v = inp.value.trim();
+        const ok = v !== '' && parseFloat(v) >= 0;
+        inp.classList.toggle('nevera-vacio', !ok);
+        if (!ok && !vacio) vacio = inp;
+        conteos.push({ insumo_id: Number(inp.dataset.insumo), contado: parseFloat(v) });
+      }
+      if (vacio) { vacio.focus(); return null; }
+      return conteos;
+    };
+
+    const guardar = async (conteos) => {
+      setBtn('<i data-lucide="loader"></i> Guardando…', true);
+      const res = await fetch('/api/caja/conteo-nevera', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conteos, primer_conteo: primerConteo || conteos })
+      });
+      const d = await res.json();
+      if (res.ok) conteoGuardado = d.conteo;
+      else if (d.ya_contado) conteoGuardado = (await fetch('/api/caja/conteo-nevera').then(r => r.json())).conteo;
+      else throw new Error(d.error || 'No se pudo guardar el conteo.');
+
+      fase = 'listo';
+      lista.style.display = 'none';
+      const conDif = (conteoGuardado?.items || []).filter(i => Math.abs(i.diferencia) > 0.001).length;
+      instrucciones.innerHTML = conDif
+        ? `⚠️ <strong>${conDif} producto(s) no cuadran con el sistema.</strong> Quedó registrado y el administrador lo revisará.`
+        : '✅ <strong>Todo cuadra con el sistema.</strong>';
+      resultado.innerHTML = htmlConteoNevera(conteoGuardado);
+      setBtn('<i data-lucide="arrow-right"></i> Continuar al arqueo');
+    };
+
+    btn.onclick = async () => {
+      try {
+        if (fase === 'listo') { terminar(true); return; }
+        const conteos = leer();
+        if (!conteos) { showToast('Falta escribir la cantidad de algún producto (si no queda ninguno, escribe 0).', 'warning'); return; }
+
+        if (fase === 'primero') {
+          setBtn('<i data-lucide="loader"></i> Verificando…', true);
+          const res = await fetch('/api/caja/conteo-nevera/verificar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ conteos })
+          });
+          const v = await res.json();
+          if (!res.ok) throw new Error(v.error || 'No se pudo verificar el conteo.');
+          if (v.cuadra) { await guardar(conteos); return; }
+
+          // No cuadra: recontar SOLO los productos marcados (sin decir cuánto difieren)
+          primerConteo = conteos;
+          fase = 'recontar';
+          const revisar = new Set(v.revisar.map(Number));
+          inputs().forEach(inp => {
+            const fila = inp.closest('.nevera-item');
+            if (revisar.has(Number(inp.dataset.insumo))) {
+              fila.classList.add('nevera-recontar');
+              inp.value = '';
+              inp.placeholder = 'Vuelve a contar';
+            } else {
+              fila.classList.add('nevera-ok');
+              inp.readOnly = true;
+            }
+          });
+          instrucciones.innerHTML = `⚠️ <strong>${revisar.size} producto(s) no cuadran.</strong> Vuelve a contar los marcados en amarillo y escribe lo que hay de verdad.`;
+          setBtn('<i data-lucide="save"></i> Guardar conteo');
+          lista.querySelector('.nevera-recontar .nevera-input')?.focus();
+          return;
+        }
+        await guardar(conteos);
+      } catch (e) {
+        alert('Error: ' + e.message);
+        setBtn(fase === 'primero' ? '<i data-lucide="check"></i> Verificar conteo' : '<i data-lucide="save"></i> Guardar conteo');
+      }
+    };
+  });
+}
+
+// Tarjeta del conteo de nevera para los tickets de cierre (y el resultado al cajero)
+function htmlConteoNevera(c) {
+  if (!c) return '';
+  const cant = (v) => Number(v || 0).toLocaleString('de-DE', { maximumFractionDigits: 2 });
+  const conDif = (c.items || []).filter(i => Math.abs(i.diferencia) > 0.001);
+  const filas = conDif.map(i => {
+    const falta = i.diferencia < 0;
+    return `<tr><td>${escHtml(i.nombre)}</td><td class="ctd-mono">${cant(i.contado)}</td><td class="ctd-mono">${cant(i.esperado)}</td>
+      <td class="ctd-mono" style="color:${falta ? 'var(--danger)' : 'var(--warning)'}; font-weight:bold;">${falta ? 'Faltan' : 'Sobran'} ${cant(Math.abs(i.diferencia))}</td>
+      <td class="ctd-mono">${falta ? '-' : '+'}$${numTicket(Math.abs(i.valor_diferencia))}</td></tr>`;
+  }).join('');
+  const total = (c.items || []).length;
+  return `
+    <section class="ctd-card">
+      <div class="ctd-card-head">
+        <span class="ctd-card-icon ctd-icon-cyan"><i data-lucide="refrigerator"></i></span>
+        <span class="ctd-card-title">Conteo de Nevera</span>
+        <span class="ctd-badge ${conDif.length ? 'ctd-badge-no' : 'ctd-badge-ok'}" style="margin-left:auto;">${conDif.length ? `${conDif.length} no cuadra(n)` : 'Todo cuadra'}</span>
+      </div>
+      ${conDif.length ? `<table class="ctd-table"><thead><tr><th>Producto</th><th>Contó</th><th>Sistema</th><th>Diferencia</th><th>Valor</th></tr></thead><tbody>${filas}</tbody></table>` : ''}
+      <div class="ctd-row"><span>Productos que cuadran</span><strong class="ctd-mono">${total - conDif.length} de ${total}</strong></div>
+      ${c.faltante_cop > 0 ? `<div class="ctd-foot-row ctd-foot-danger"><span><i data-lucide="alert-triangle"></i> Faltante (a costo)</span><strong class="ctd-mono">-$${numTicket(c.faltante_cop)}</strong></div>` : ''}
+      ${c.recontado ? '<div class="ctd-row" style="font-size:12px;"><span class="text-muted">Hubo productos que se recontaron porque no cuadraban al primer conteo.</span></div>' : ''}
+    </section>`;
+}
+
+const fechaCorta = (f) => f ? `${String(f).slice(8, 10)}/${String(f).slice(5, 7)}/${String(f).slice(0, 4)} ${String(f).slice(11, 16)}` : '—';
+const cantInv = (v) => (v === null || v === undefined) ? '—' : Number(v).toLocaleString('de-DE', { maximumFractionDigits: 2 });
+
+// ============================================
+// CIERRES → CONTEOS DE NEVERA (admin): revisar diferencias de cada cierre
+// ============================================
+let conteosNeveraCache = [];
+
+async function loadConteosNevera() {
+  const inpDesde = document.getElementById('nevera-desde');
+  const inpHasta = document.getElementById('nevera-hasta');
+  if (inpDesde && !inpDesde.value) {
+    const d = new Date(localDateStr() + 'T12:00:00');
+    d.setDate(d.getDate() - 30);
+    inpDesde.value = d.toISOString().slice(0, 10);
+  }
+  const cont = document.getElementById('nevera-conteos-lista');
+  cont.innerHTML = '<div class="loading-cell">Cargando…</div>';
+  try {
+    const qs = new URLSearchParams();
+    if (inpDesde?.value) qs.set('desde', inpDesde.value);
+    if (inpHasta?.value) qs.set('hasta', inpHasta.value);
+    const res = await fetch('/api/admin/conteos-nevera?' + qs.toString());
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'No se pudieron cargar los conteos.');
+    conteosNeveraCache = d;
+    pintarConteosNevera();
+  } catch (e) {
+    cont.innerHTML = `<div class="loading-cell">Error: ${escHtml(e.message)}</div>`;
+  }
+}
+
+function pintarConteosNevera() {
+  const cont = document.getElementById('nevera-conteos-lista');
+  if (!cont) return;
+  const solo = document.getElementById('nevera-solo-diferencias')?.checked;
+  const lista = solo ? conteosNeveraCache.filter(c => c.items_con_diferencia > 0) : conteosNeveraCache;
+  if (!lista.length) {
+    cont.innerHTML = `<div class="loading-cell">${solo && conteosNeveraCache.length ? `✅ Los ${conteosNeveraCache.length} cierre(s) de estas fechas cuadraron.` : 'No hay conteos de nevera en estas fechas.'}</div>`;
+    return;
+  }
+  cont.innerHTML = lista.map(c => {
+    const conDif = c.items.filter(i => Math.abs(i.diferencia) > 0.001);
+    const porRevisar = conDif.filter(i => !i.decision).length;
+    const filas = (solo ? conDif : c.items).map(i => {
+      const dif = i.diferencia;
+      const cuadra = Math.abs(dif) <= 0.001;
+      let accion = '<span style="color:var(--success);">✅ Cuadra</span>';
+      if (!cuadra) {
+        accion = i.decision
+          ? `<span class="ctd-badge ${i.decision === 'ajustado' ? 'ctd-badge-ok' : ''}">${i.decision === 'ajustado' ? 'Ajustado' : 'Ignorado'}${i.decidido_por ? ' · ' + escHtml(i.decidido_por) : ''}</span>`
+          : `<button class="action-btn btn-primary btn-mini" onclick="decidirNevera(${i.id}, 'ajustar')">Ajustar</button>
+             <button class="action-btn secondary btn-mini" onclick="decidirNevera(${i.id}, 'ignorar')">Ignorar</button>`;
+      }
+      const recontado = i.primer_conteo !== null && Math.abs(i.primer_conteo - i.contado) > 0.001
+        ? ` <span class="text-muted" style="font-size:11px;" title="Primer conteo">(1.º: ${cantInv(i.primer_conteo)})</span>` : '';
+      return `<tr>
+        <td>${escHtml(i.nombre)}</td>
+        <td class="font-outfit">${cantInv(i.contado)}${recontado}</td>
+        <td class="font-outfit">${cantInv(i.esperado)}</td>
+        <td class="font-outfit" style="font-weight:bold; color:${cuadra ? 'var(--success)' : dif < 0 ? 'var(--danger)' : 'var(--warning)'};">${cuadra ? '0' : (dif < 0 ? 'Faltan ' : 'Sobran ') + cantInv(Math.abs(dif))}</td>
+        <td class="font-outfit">${cuadra ? '—' : (dif < 0 ? '-' : '+') + '$' + numTicket(Math.abs(i.valor_diferencia))}</td>
+        <td style="white-space:nowrap;">${accion}</td>
+      </tr>`;
+    }).join('');
+    return `
+      <div class="conteo-card">
+        <div class="conteo-card-head">
+          <div>
+            <strong>${fechaCorta(c.fecha)}</strong> · Turno ${escHtml(c.turno || '—')} · ${escHtml(c.usuario_nombre || 'Cajero')}
+            ${c.recontado ? '<span class="ctd-badge" style="margin-left:6px;">Recontado</span>' : ''}
+          </div>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            ${conDif.length
+              ? `<span class="ctd-badge ctd-badge-no">${conDif.length} no cuadra(n)</span>
+                 ${c.faltante_cop > 0 ? `<span style="color:var(--danger); font-weight:600;">-$${numTicket(c.faltante_cop)}</span>` : ''}
+                 ${c.sobrante_cop > 0 ? `<span style="color:var(--warning); font-weight:600;">+$${numTicket(c.sobrante_cop)}</span>` : ''}
+                 ${porRevisar ? `<span class="text-muted" style="font-size:12px;">${porRevisar} por revisar</span>` : '<span style="color:var(--success); font-size:12px;">Revisado</span>'}`
+              : '<span class="ctd-badge ctd-badge-ok">Todo cuadra</span>'}
+          </div>
+        </div>
+        <div class="data-table-container">
+          <table class="data-table">
+            <thead><tr><th>Producto</th><th>Contó</th><th>Sistema</th><th>Diferencia</th><th>Valor (costo)</th><th>Acción</th></tr></thead>
+            <tbody>${filas}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+window.decidirNevera = async function (itemId, accion) {
+  const item = conteosNeveraCache.flatMap(c => c.items).find(i => i.id === itemId);
+  if (!item) return;
+  const n = cantInv(Math.abs(item.diferencia));
+  const msg = accion === 'ajustar'
+    ? (item.diferencia < 0
+      ? `¿Ajustar "${item.nombre}"?\n\nSe registrará una merma de ${n} (-$${numTicket(Math.abs(item.valor_diferencia))}) que resta de la ganancia, y el stock bajará ${n}.`
+      : `¿Ajustar "${item.nombre}"?\n\nSe sumarán ${n} al stock del sistema.`)
+    : `¿Ignorar la diferencia de "${item.nombre}"?\n\nEl stock queda como está (úsalo si fue un error al contar).`;
+  if (!confirm(msg)) return;
+  try {
+    const res = await fetch(`/api/admin/conteos-nevera/items/${itemId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion })
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'No se pudo guardar.');
+    showToast(accion === 'ajustar' ? 'Stock ajustado.' : 'Diferencia ignorada.', 'success');
+    loadConteosNevera();
+  } catch (e) {
+    showToast(e.message, 'danger');
+  }
+};
+
+// ============================================
+// CIERRES → INVENTARIO MENSUAL (admin): conteo de todo el inventario a fin de mes
+// ============================================
+let invMesDatos = null;
+const SECCIONES_INV = ['Nevera', 'Batidos', 'Otros'];
+
+async function loadInventarioMensual() {
+  const mes = document.getElementById('inv-mes')?.value;
+  const cont = document.getElementById('inv-mes-contenido');
+  if (!mes || !cont) return;
+  cont.innerHTML = '<div class="loading-cell">Cargando…</div>';
+  try {
+    const res = await fetch(`/api/admin/inventario-mensual?mes=${encodeURIComponent(mes)}`);
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'No se pudo cargar el inventario.');
+    invMesDatos = d;
+    pintarInventarioMensual();
+  } catch (e) {
+    cont.innerHTML = `<div class="loading-cell">Error: ${escHtml(e.message)}</div>`;
+  }
+}
+
+function nombreMes(mes) {
+  const nombres = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+  const [a, m] = String(mes).split('-').map(Number);
+  return `${nombres[m - 1] || ''} ${a}`;
+}
+
+function pintarInventarioMensual() {
+  const d = invMesDatos;
+  const cont = document.getElementById('inv-mes-contenido');
+  if (!d || !cont) return;
+  if (d.cierre && d.cierre.estado === 'cerrado') { pintarInventarioCerrado(d, cont); return; }
+
+  const porSeccion = SECCIONES_INV.map(s => ({ s, items: d.items.filter(i => i.seccion === s) })).filter(x => x.items.length);
+  cont.innerHTML = `
+    <div class="inv-aviso">
+      <div>Cuenta <strong>todo el inventario</strong> de ${escHtml(nombreMes(d.mes))} y escribe lo que hay. Es a ciegas: el sistema se compara al cerrar.
+      Puedes <strong>guardar el avance</strong> y seguir después. Lo que dejes en blanco no entra en el cierre.</div>
+      ${d.cierre ? `<div class="text-muted" style="font-size:12px; margin-top:4px;">Avance guardado · empezado por ${escHtml(d.cierre.usuario_nombre || '—')} el ${fechaCorta(d.cierre.creado_en)}</div>` : ''}
+    </div>
+    <div class="inv-barra">
+      <input type="search" id="inv-buscar" class="date-picker" placeholder="🔍 Buscar producto…" style="flex:1; min-width:180px;">
+      <span id="inv-progreso" class="text-muted"></span>
+      <button class="action-btn" id="btn-inv-guardar"><i data-lucide="save"></i> Guardar avance</button>
+      <button class="action-btn btn-primary" id="btn-inv-cerrar"><i data-lucide="lock"></i> Cerrar inventario del mes</button>
+    </div>
+    ${porSeccion.map(({ s, items }) => `
+      <div class="inv-seccion">
+        <h4>${s === 'Nevera' ? '🧊' : s === 'Batidos' ? '🥤' : '📦'} ${s} <span class="text-muted" style="font-weight:normal; font-size:0.8rem;">(${items.length})</span></h4>
+        <div class="data-table-container">
+          <table class="data-table">
+            <thead><tr><th>Producto</th><th>Unidad</th><th style="width:150px;">Contado</th></tr></thead>
+            <tbody>${items.map(i => `
+              <tr class="inv-fila" data-nombre="${escHtml(i.nombre.toLowerCase())}">
+                <td>${escHtml(i.nombre)}</td>
+                <td class="text-muted">${escHtml(i.unidad || '')}</td>
+                <td><input type="number" class="nevera-input inv-input" min="0" step="any" inputmode="decimal" data-insumo="${i.insumo_id}" value="${i.contado ?? ''}" placeholder="—"></td>
+              </tr>`).join('')}</tbody>
+          </table>
+        </div>
+      </div>`).join('')}`;
+
+  const inputs = [...cont.querySelectorAll('.inv-input')];
+  const progreso = () => {
+    const n = inputs.filter(i => i.value.trim() !== '').length;
+    document.getElementById('inv-progreso').textContent = `${n} de ${inputs.length} contados`;
+  };
+  inputs.forEach(i => i.addEventListener('input', progreso));
+  progreso();
+  document.getElementById('inv-buscar').addEventListener('input', (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    cont.querySelectorAll('.inv-fila').forEach(f => { f.style.display = !q || f.dataset.nombre.includes(q) ? '' : 'none'; });
+  });
+  const leer = () => inputs.map(i => ({ insumo_id: Number(i.dataset.insumo), contado: i.value.trim() === '' ? null : parseFloat(i.value) }));
+  document.getElementById('btn-inv-guardar').onclick = () => guardarInventarioMensualUI(leer(), false);
+  document.getElementById('btn-inv-cerrar').onclick = () => {
+    const conteos = leer();
+    const sinContar = conteos.filter(c => c.contado === null).length;
+    if (sinContar === conteos.length) { showToast('No has contado ningún producto.', 'warning'); return; }
+    if (!confirm(`¿Cerrar el inventario de ${nombreMes(d.mes)}?\n\nSe comparará con lo que dice el sistema en este momento y ya no se podrá modificar.` +
+      (sinContar ? `\n\n⚠️ ${sinContar} producto(s) sin contar NO entrarán en el cierre.` : ''))) return;
+    guardarInventarioMensualUI(conteos, true);
+  };
+  lucide.createIcons();
+}
+
+async function guardarInventarioMensualUI(conteos, cerrar) {
+  try {
+    const res = await fetch('/api/admin/inventario-mensual', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mes: invMesDatos.mes, conteos, cerrar })
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'No se pudo guardar.');
+    showToast(cerrar ? 'Inventario del mes cerrado.' : 'Avance guardado.', 'success');
+    if (cerrar) loadInventarioMensual();
+  } catch (e) {
+    showToast(e.message, 'danger');
+  }
+}
+
+function pintarInventarioCerrado(d, cont) {
+  const c = d.cierre;
+  const neta = (c.valor_contado || 0) - (c.valor_sistema || 0);
+  const pct = c.valor_sistema ? (neta / c.valor_sistema) * 100 : 0;
+  const conDif = d.items.filter(i => Math.abs(i.diferencia || 0) > 0.001);
+  cont.innerHTML = `
+    <div class="inv-aviso">
+      Inventario de <strong>${escHtml(nombreMes(d.mes))}</strong> cerrado por ${escHtml(c.usuario_nombre || '—')} el ${fechaCorta(c.cerrado_en)} ·
+      ${c.items_contados} producto(s) contados, <strong>${c.items_con_diferencia}</strong> con diferencia.
+      ${c.ajustado ? `<span class="ctd-badge ctd-badge-ok" style="margin-left:6px;">Stock ajustado${c.ajustado_por ? ' · ' + escHtml(c.ajustado_por) : ''}</span>` : ''}
+    </div>
+    <div class="inv-kpis">
+      <div class="inv-kpi"><span>Según el sistema</span><strong>$${numTicket(c.valor_sistema)}</strong></div>
+      <div class="inv-kpi"><span>Contado</span><strong>$${numTicket(c.valor_contado)}</strong></div>
+      <div class="inv-kpi"><span>Faltantes</span><strong style="color:var(--danger);">-$${numTicket(c.faltante_cop)}</strong></div>
+      <div class="inv-kpi"><span>Sobrantes</span><strong style="color:var(--warning);">+$${numTicket(c.sobrante_cop)}</strong></div>
+      <div class="inv-kpi"><span>Diferencia neta</span><strong style="color:${neta < 0 ? 'var(--danger)' : 'var(--success)'};">${neta < 0 ? '-' : '+'}$${numTicket(Math.abs(neta))} <small>(${pct.toLocaleString('de-DE', { maximumFractionDigits: 1 })}%)</small></strong></div>
+    </div>
+    <div class="inv-barra">
+      <label style="display:flex; align-items:center; gap:6px; font-size:0.85rem; color:var(--color-muted);"><input type="checkbox" id="inv-solo-dif" checked> Solo con diferencia</label>
+      <span style="flex:1;"></span>
+      ${!c.ajustado && conDif.length ? '<button class="action-btn btn-primary" id="btn-inv-ajustar"><i data-lucide="wrench"></i> Ajustar stock al conteo</button>' : ''}
+    </div>
+    <div class="data-table-container">
+      <table class="data-table">
+        <thead><tr><th>Sección</th><th>Producto</th><th>Contado</th><th>Sistema</th><th>Diferencia</th><th>Valor (costo)</th></tr></thead>
+        <tbody id="inv-tabla-cerrado"></tbody>
+      </table>
+    </div>`;
+  const pintarFilas = () => {
+    const solo = document.getElementById('inv-solo-dif').checked;
+    const filas = (solo ? conDif : d.items).map(i => {
+      const dif = i.diferencia || 0;
+      const cuadra = Math.abs(dif) <= 0.001;
+      return `<tr>
+        <td class="text-muted">${escHtml(i.seccion || '')}</td>
+        <td>${escHtml(i.nombre)}</td>
+        <td class="font-outfit">${cantInv(i.contado)} <span class="text-muted" style="font-size:11px;">${escHtml(i.unidad || '')}</span></td>
+        <td class="font-outfit">${cantInv(i.esperado)}</td>
+        <td class="font-outfit" style="font-weight:bold; color:${cuadra ? 'var(--success)' : dif < 0 ? 'var(--danger)' : 'var(--warning)'};">${cuadra ? '0' : (dif < 0 ? '' : '+') + cantInv(dif)}</td>
+        <td class="font-outfit">${cuadra ? '—' : (dif < 0 ? '-' : '+') + '$' + numTicket(Math.abs(i.valor_diferencia))}</td>
+      </tr>`;
+    }).join('');
+    document.getElementById('inv-tabla-cerrado').innerHTML = filas || '<tr><td colspan="6" class="loading-cell">✅ Todo lo contado cuadra con el sistema.</td></tr>';
+  };
+  document.getElementById('inv-solo-dif').addEventListener('change', pintarFilas);
+  pintarFilas();
+  const btnAjustar = document.getElementById('btn-inv-ajustar');
+  if (btnAjustar) btnAjustar.onclick = async () => {
+    if (!confirm(`¿Ajustar el stock del sistema a lo contado en ${nombreMes(d.mes)}?\n\n` +
+      `• Los faltantes (-$${numTicket(c.faltante_cop)}) se registran como mermas y restan de la ganancia.\n` +
+      `• Los sobrantes (+$${numTicket(c.sobrante_cop)}) se suman al stock.\n\nSolo se puede hacer una vez.`)) return;
+    try {
+      const res = await fetch(`/api/admin/inventario-mensual/${c.id}/ajustar`, { method: 'POST' });
+      const r = await res.json();
+      if (!res.ok) throw new Error(r.error || 'No se pudo ajustar.');
+      showToast('Stock ajustado al conteo del mes.', 'success');
+      loadInventarioMensual();
+    } catch (e) {
+      showToast(e.message, 'danger');
+    }
+  };
+  lucide.createIcons();
+}
+
+// ============================================
+// CIERRE MENSUAL (Reportes): inventario físico vs sistema + nevera por cajero
+// ============================================
+async function pintarInventarioEnCierreMensual(mes, utilidadMes) {
+  const el = document.getElementById('inventario-mensual-reporte');
+  if (!el) return;
+  try {
+    const res = await fetch(`/api/reportes/inventario-mes?mes=${encodeURIComponent(mes)}`);
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'Error');
+    const inv = d.inventario;
+    const nev = d.nevera;
+    const neta = inv ? (inv.valor_contado || 0) - (inv.valor_sistema || 0) : 0;
+    const pct = inv && inv.valor_sistema ? (neta / inv.valor_sistema) * 100 : 0;
+
+    const tarjetaInv = inv ? `
+      <div class="ctd-row"><span>Según el sistema</span><strong class="ctd-mono">$${numTicket(inv.valor_sistema)}</strong></div>
+      <div class="ctd-row"><span>Contado físicamente</span><strong class="ctd-mono">$${numTicket(inv.valor_contado)}</strong></div>
+      <div class="ctd-row"><span>Faltantes</span><strong class="ctd-mono" style="color:var(--danger);">-$${numTicket(inv.faltante_cop)}</strong></div>
+      <div class="ctd-row"><span>Sobrantes</span><strong class="ctd-mono" style="color:var(--warning);">+$${numTicket(inv.sobrante_cop)}</strong></div>
+      <div class="ctd-foot-row ${neta < 0 ? 'ctd-foot-danger' : 'ctd-foot-total'}"><span>Diferencia neta</span><strong class="ctd-mono">${neta < 0 ? '-' : '+'}$${numTicket(Math.abs(neta))} (${pct.toLocaleString('de-DE', { maximumFractionDigits: 1 })}%)</strong></div>
+      <div class="ctd-row" style="font-size:12px;"><span class="text-muted">${inv.items_contados} contados · ${inv.items_con_diferencia} con diferencia · ${inv.ajustado ? 'stock ya ajustado' : 'stock sin ajustar'}</span></div>
+      ${d.top_faltantes.length ? `<div class="ctd-row" style="font-size:12px; display:block;"><span class="text-muted">Mayores faltantes:</span> ${d.top_faltantes.map(f => `${escHtml(f.nombre)} (${cantInv(f.diferencia)})`).join(', ')}</div>` : ''}`
+      : `<div class="ctd-row"><span class="text-muted">Todavía no se ha cerrado el inventario de este mes. Hazlo en <strong>Cierres → Inventario Mensual</strong>.</span></div>`;
+
+    const tarjetaNev = `
+      <div class="ctd-row"><span>Cierres con conteo</span><strong class="ctd-mono">${nev.conteos}</strong></div>
+      <div class="ctd-row"><span>Cierres con diferencias</span><strong class="ctd-mono" style="color:${nev.con_diferencia ? 'var(--danger)' : 'var(--success)'};">${nev.con_diferencia}</strong></div>
+      <div class="ctd-row"><span>Faltante total (a costo)</span><strong class="ctd-mono" style="color:var(--danger);">-$${numTicket(nev.faltante_cop)}</strong></div>
+      ${nev.faltante_sin_revisar_cop > 0 ? `<div class="ctd-row"><span>Sin revisar todavía</span><strong class="ctd-mono" style="color:var(--warning);">-$${numTicket(nev.faltante_sin_revisar_cop)}</strong></div>` : ''}
+      ${nev.por_cajero.length ? `<table class="ctd-table"><thead><tr><th>Cajero</th><th>Cierres</th><th>Con dif.</th><th>Faltante</th></tr></thead><tbody>
+        ${nev.por_cajero.map(p => `<tr><td>${escHtml(p.cajero)}</td><td class="ctd-mono">${p.conteos}</td><td class="ctd-mono">${p.con_diferencia}</td><td class="ctd-mono" style="color:${p.faltante_cop > 0 ? 'var(--danger)' : 'inherit'};">-$${numTicket(p.faltante_cop)}</td></tr>`).join('')}
+      </tbody></table>` : ''}`;
+
+    const utilAjustada = inv && !inv.ajustado && Math.abs(neta) > 0.01
+      ? `<div class="ctd-foot-row ctd-foot-total" style="margin-top:10px;"><span><i data-lucide="calculator"></i> Utilidad del mes si se ajusta el inventario</span><strong class="ctd-mono">$${numTicket(utilidadMes + neta)}</strong></div>
+         <div class="ctd-row" style="font-size:12px;"><span class="text-muted">Utilidad del mes $${numTicket(utilidadMes)} ${neta < 0 ? '−' : '+'} diferencia del inventario $${numTicket(Math.abs(neta))}. Al ajustar el stock en Cierres → Inventario Mensual, los faltantes pasan a mermas y ya quedan descontados.</span></div>`
+      : '';
+
+    el.innerHTML = `
+      <h4><i data-lucide="clipboard-check"></i> Inventario del Mes: Físico vs Sistema</h4>
+      <div class="inv-reporte-grid">
+        <section class="ctd-card"><div class="ctd-card-head"><span class="ctd-card-icon ctd-icon-gold"><i data-lucide="clipboard-list"></i></span><span class="ctd-card-title">Cierre de inventario mensual</span></div>${tarjetaInv}</section>
+        <section class="ctd-card"><div class="ctd-card-head"><span class="ctd-card-icon ctd-icon-cyan"><i data-lucide="refrigerator"></i></span><span class="ctd-card-title">Nevera en los cierres de caja</span></div>${tarjetaNev}</section>
+      </div>
+      ${utilAjustada}`;
+    el.style.display = '';
+    lucide.createIcons();
+  } catch (e) {
+    el.style.display = 'none';
+    console.error('Error cargando inventario del mes:', e);
+  }
+}
