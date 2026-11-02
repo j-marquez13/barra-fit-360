@@ -622,6 +622,7 @@ function switchView(viewName) {
     caja: 'Caja y Gastos',
     tesoreria: 'Tesorería y Flujo de Caja',
     cierres: 'Historial de Cierres Diarios',
+    usuarios: 'Usuarios y Permisos',
     'inventario-mes': 'Inventario del Mes'
   };
   DOM.viewTitle.textContent = titles[viewName] || viewName;
@@ -6607,114 +6608,216 @@ async function showTurnoScreen() {
 // 14. GESTIÓN DE USUARIOS (ADMIN)
 // ============================================
 
+// Roles: "Administrador" = acceso a todo y su clave autoriza (anulaciones, inventario del mes,
+// reaperturas). "Cajero" = solo los módulos marcados. Desactivar no borra: conserva el historial.
+const MODULOS_USUARIO = [
+  { id: 'pos', nombre: 'Punto de Venta', desc: 'Vender y cobrar' },
+  { id: 'caja', nombre: 'Caja y Gastos', desc: 'Abrir y cerrar caja, registrar gastos' },
+  { id: 'credito', nombre: 'Cuentas por Cobrar', desc: 'Ventas a crédito y abonos' },
+  { id: 'inventario', nombre: 'Inventario', desc: 'Insumos, productos, recetas y compras' },
+  { id: 'reportes', nombre: 'Reportes', desc: 'Cierres diario, semanal, mensual e historial' },
+  { id: 'tesoreria', nombre: 'Tesorería', desc: 'Saldos de bancos y transferencias' }
+];
+let usuariosCache = [];
+
+// Cosas a revisar de cada usuario, con su arreglo de un clic
+function problemasUsuario(u) {
+  if (!u.activo) return [];
+  const p = [];
+  if (u.rol !== 'Administrador' && u.permisos.includes('all')) {
+    p.push({ texto: 'Cajero con acceso total: ve costos y cierres y puede cambiar precios, pero su clave no sirve para autorizar nada.',
+      acciones: u.es_yo
+        ? [['Hacerme Administrador', `hacerAdministrador(${u.id})`]]
+        : [['Hacer Administrador', `hacerAdministrador(${u.id})`], ['Dejar como cajero normal', `dejarComoCajero(${u.id})`]] });
+  } else if (u.rol !== 'Administrador' && !u.permisos.length) {
+    p.push({ texto: 'No tiene ningún permiso: puede entrar, pero no puede hacer nada.',
+      acciones: u.es_yo || u.caja_abierta ? [] : [['Desactivar', `cambiarActivoUsuario(${u.id}, false)`]] });
+  }
+  return p;
+}
+
 async function loadUsuariosData() {
+  const grid = document.getElementById('tabla-usuarios');
   try {
     const res = await fetch('/api/usuarios');
     if (!res.ok) throw new Error('Error al cargar usuarios');
-    const usuarios = await res.json();
-    
-    const tbody = document.getElementById('tabla-usuarios');
-    tbody.innerHTML = '';
-    
-    usuarios.forEach(u => {
-      let pArray = [];
-      try { pArray = typeof u.permisos === 'string' ? JSON.parse(u.permisos) : u.permisos; } catch(e){}
-      const pText = pArray.includes('all') ? 'Acceso Total (Admin)' : pArray.join(', ');
-      
-      tbody.innerHTML += `
-        <tr>
-          <td>${u.nombre}</td>
-          <td><span class="badge ${u.rol === 'Administrador' ? 'badge-tarde' : 'badge-manana'}">${u.rol}</span></td>
-          <td>${u.turno}</td>
-          <td style="font-size:12px; color:var(--text-muted);">${pText.toUpperCase()}</td>
-          <td style="text-align:right;">
-            <button class="action-btn" onclick="showEditarUsuarioModal(${u.id}, '${u.nombre}', '${u.turno}', '${encodeURIComponent(JSON.stringify(pArray))}')">
-              <i data-lucide="edit"></i> Editar
-            </button>
-          </td>
-        </tr>
-      `;
-    });
-    lucide.createIcons();
+    usuariosCache = await res.json();
   } catch (err) {
     console.error(err);
     showToast('Error cargando usuarios', 'error');
+    return;
+  }
+
+  const orden = (u) => (u.activo ? 0 : 2) + (u.rol === 'Administrador' ? 0 : 1);
+  const lista = [...usuariosCache].sort((a, b) => orden(a) - orden(b) || a.nombre.localeCompare(b.nombre));
+  const admins = usuariosCache.filter(u => u.activo && u.rol === 'Administrador').length;
+  const inactivos = usuariosCache.filter(u => !u.activo).length;
+  const conProblemas = usuariosCache.filter(u => problemasUsuario(u).length).length;
+  document.getElementById('usuarios-resumen').textContent =
+    `${usuariosCache.length} usuarios · ${admins} administrador${admins === 1 ? '' : 'es'}${inactivos ? ` · ${inactivos} desactivado${inactivos === 1 ? '' : 's'}` : ''}`;
+  const alerta = document.getElementById('usuarios-alertas');
+  alerta.innerHTML = conProblemas
+    ? `<div class="inv-aviso" style="border-color:var(--warning);">⚠️ <strong>${conProblemas} usuario${conProblemas === 1 ? '' : 's'} con algo por revisar</strong> (marcado${conProblemas === 1 ? '' : 's'} en amarillo). Cada uno trae su arreglo de un clic.</div>`
+    : '';
+
+  grid.innerHTML = lista.map(u => {
+    const problemas = problemasUsuario(u);
+    const chips = u.rol === 'Administrador'
+      ? '<span class="usr-chip usr-chip-total">Acceso a todo</span>'
+      : (MODULOS_USUARIO.filter(m => u.permisos.includes(m.id) || u.permisos.includes('all')).map(m => `<span class="usr-chip">${m.nombre}</span>`).join('') || '<span class="text-muted" style="font-size:0.8rem;">Sin permisos</span>');
+    const actividad = u.turnos
+      ? `${u.turnos} turno${u.turnos === 1 ? '' : 's'} · último ${escHtml(u.ultimo_turno.split('-').reverse().join('/'))}`
+      : 'Nunca ha abierto un turno';
+    return `
+      <div class="usr-card ${!u.activo ? 'usr-inactivo' : ''} ${problemas.length ? 'usr-revisar' : ''}">
+        <div class="usr-head">
+          <div class="usr-avatar ${u.rol === 'Administrador' ? 'usr-avatar-admin' : ''}">${escHtml((u.nombre || '?').trim().charAt(0).toUpperCase())}</div>
+          <div style="flex:1; min-width:0;">
+            <div class="usr-nombre" title="${escHtml(u.nombre)}">${escHtml(u.nombre)}</div>
+            <div class="usr-sub">${u.es_yo ? '<span class="usr-tu">Tú</span> ' : ''}Turno ${escHtml(u.turno || '—')} · ${u.activo ? '<span style="color:var(--success);">● Activo</span>' : '<span>○ Desactivado</span>'}${u.caja_abierta ? ' · <span style="color:var(--cyan-neon);">💵 Caja abierta</span>' : ''}</div>
+          </div>
+          <span class="usr-rol ${u.rol === 'Administrador' ? 'usr-rol-admin' : 'usr-rol-cajero'}">${escHtml(u.rol)}</span>
+        </div>
+        <div class="usr-permisos">${chips}</div>
+        <div class="usr-actividad">🕒 ${actividad}${u.activo && u.debe_cambiar_password ? ' · 🔑 Debe cambiar su clave al entrar' : ''}</div>
+        ${problemas.map(p => `
+          <div class="usr-problema">
+            <div>⚠️ ${escHtml(p.texto)}</div>
+            ${p.acciones.length ? `<div class="usr-problema-acciones">${p.acciones.map(([t, fn]) => `<button class="action-btn btn-mini" onclick="${fn}">${t}</button>`).join('')}</div>` : ''}
+          </div>`).join('')}
+        <div class="usr-acciones">
+          <button class="action-btn btn-mini" onclick="showEditarUsuarioModal(${u.id})"><i data-lucide="pencil"></i> Editar</button>
+          ${u.es_yo ? '' : u.activo
+            ? `<button class="action-btn btn-mini secondary" onclick="cambiarActivoUsuario(${u.id}, false)"><i data-lucide="user-x"></i> Desactivar</button>`
+            : `<button class="action-btn btn-mini btn-primary" onclick="cambiarActivoUsuario(${u.id}, true)"><i data-lucide="user-check"></i> Activar</button>`}
+        </div>
+      </div>`;
+  }).join('');
+  lucide.createIcons();
+}
+
+async function guardarCambiosUsuario(id, cambios, mensajeOk) {
+  const u = usuariosCache.find(x => x.id === id);
+  if (!u) return;
+  try {
+    const res = await fetch('/api/usuarios/' + id, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nombre: u.nombre, turno: u.turno, permisos: u.permisos, rol: u.rol, activo: u.activo, ...cambios })
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'No se pudo guardar.');
+    showToast(mensajeOk, 'success');
+    loadUsuariosData();
+  } catch (e) {
+    showToast(e.message, 'danger');
   }
 }
 
-window.showEditarUsuarioModal = function(id = null, nombre = '', turno = 'Mañana', permisosStr = '[]') {
-  let pArray = [];
-  try { pArray = JSON.parse(decodeURIComponent(permisosStr)); } catch(e){}
-  
-  const isAll = pArray.includes('all');
-  
+window.hacerAdministrador = function (id) {
+  const u = usuariosCache.find(x => x.id === id);
+  if (!u || !confirm(`¿Hacer Administrador a ${u.nombre}?\n\nTendrá acceso a todo y su clave servirá para autorizar anulaciones, el inventario del mes y reaperturas.`)) return;
+  guardarCambiosUsuario(id, { rol: 'Administrador' }, `${u.nombre} ahora es Administrador.`);
+};
+
+window.dejarComoCajero = function (id) {
+  const u = usuariosCache.find(x => x.id === id);
+  if (!u || !confirm(`¿Dejar a ${u.nombre} como cajero normal?\n\nTendrá Punto de Venta, Caja y Gastos y Cuentas por Cobrar. Ya no verá costos, cierres ni tesorería.`)) return;
+  guardarCambiosUsuario(id, { rol: 'Cajero', permisos: ['pos', 'caja', 'credito'] }, `${u.nombre} quedó como cajero.`);
+};
+
+window.cambiarActivoUsuario = function (id, activo) {
+  const u = usuariosCache.find(x => x.id === id);
+  if (!u) return;
+  const msg = activo
+    ? `¿Activar a ${u.nombre}? Podrá volver a entrar con su clave (si no la recuerda, ponle una nueva con "Editar").`
+    : `¿Desactivar a ${u.nombre}?\n\nNo podrá entrar al sistema. No se borra nada: su historial de ventas y turnos se conserva y puedes activarlo cuando quieras.`;
+  if (!confirm(msg)) return;
+  guardarCambiosUsuario(id, { activo }, activo ? `${u.nombre} está activo.` : `${u.nombre} quedó desactivado.`);
+};
+
+window.showEditarUsuarioModal = function (id = null) {
+  const u = id ? usuariosCache.find(x => x.id === id) : null;
+  if (id && !u) return;
+  const rol = u ? u.rol : 'Cajero';
+  const permisos = u ? (u.permisos.includes('all') ? MODULOS_USUARIO.map(m => m.id) : u.permisos) : ['pos', 'caja'];
+  const turno = u ? u.turno : 'Mañana';
+
   const formHtml = `
     <div class="form-group">
-      <label>Nombre del Cajero/Usuario</label>
-      <input type="text" id="edit-usr-nombre" value="${nombre}" required>
+      <label>Nombre (con este nombre entra al sistema)</label>
+      <input type="text" id="edit-usr-nombre" value="${escHtml(u ? u.nombre : '')}" maxlength="60" required>
     </div>
     <div class="form-group">
-      <label>Turno Asignado</label>
+      <label>Turno</label>
       <select id="edit-usr-turno">
         <option value="Mañana" ${turno === 'Mañana' ? 'selected' : ''}>Mañana</option>
         <option value="Tarde" ${turno === 'Tarde' ? 'selected' : ''}>Tarde</option>
-        <option value="Completo" ${turno === 'Completo' ? 'selected' : ''}>Día Completo</option>
+        <option value="Completo" ${turno === 'Completo' ? 'selected' : ''}>Día completo</option>
       </select>
     </div>
     <div class="form-group">
-      <label>Contraseña ${id ? '(Dejar vacío para no cambiar)' : '(Mínimo 6 caracteres; se pedirá cambiarla al entrar)'}</label>
-      <input type="password" id="edit-usr-pass" placeholder="${id ? '***' : 'Mínimo 6 caracteres'}">
-    </div>
-    <div class="form-group">
-      <label>Permisos de Acceso</label>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
-        <label><input type="checkbox" class="chk-permiso" value="pos" ${pArray.includes('pos') || isAll ? 'checked' : ''}> Punto de Venta</label>
-        <label><input type="checkbox" class="chk-permiso" value="inventario" ${pArray.includes('inventario') || isAll ? 'checked' : ''}> Inventario</label>
-        <label><input type="checkbox" class="chk-permiso" value="credito" ${pArray.includes('credito') || isAll ? 'checked' : ''}> Cuentas x Cobrar</label>
-        <label><input type="checkbox" class="chk-permiso" value="reportes" ${pArray.includes('reportes') || isAll ? 'checked' : ''}> Reportes</label>
-        <label><input type="checkbox" class="chk-permiso" value="caja" ${pArray.includes('caja') || isAll ? 'checked' : ''}> Caja y Gastos</label>
-        <label><input type="checkbox" class="chk-permiso" value="tesoreria" ${pArray.includes('tesoreria') || isAll ? 'checked' : ''}> Tesorería</label>
-        <label><input type="checkbox" class="chk-permiso" value="all" ${isAll ? 'checked' : ''}> <b>Acceso Total (Admin)</b></label>
+      <label>Rol</label>
+      <div class="usr-roles">
+        <label class="usr-rol-opcion"><input type="radio" name="edit-usr-rol" value="Cajero" ${rol !== 'Administrador' ? 'checked' : ''}>
+          <span><strong>Cajero</strong><small>Solo los módulos que marques abajo. Su clave no autoriza nada.</small></span></label>
+        <label class="usr-rol-opcion"><input type="radio" name="edit-usr-rol" value="Administrador" ${rol === 'Administrador' ? 'checked' : ''}>
+          <span><strong>Administrador</strong><small>Acceso a todo. Su clave autoriza anulaciones, inventario del mes y reaperturas.</small></span></label>
       </div>
     </div>
-  `;
+    <div class="form-group" id="edit-usr-permisos-grupo">
+      <label>¿Qué puede usar?</label>
+      <div class="usr-modulos">
+        ${MODULOS_USUARIO.map(m => `
+          <label class="usr-modulo"><input type="checkbox" class="chk-permiso" value="${m.id}" ${permisos.includes(m.id) ? 'checked' : ''}>
+            <span><strong>${m.nombre}</strong><small>${m.desc}</small></span></label>`).join('')}
+      </div>
+      <small class="text-muted">"Inventario del Mes" lo ven todos: se abre con la clave del administrador.</small>
+    </div>
+    <div class="form-group">
+      <label>${u ? 'Nueva clave (déjala vacía para no cambiarla)' : 'Clave (mínimo 6 caracteres)'}</label>
+      <input type="password" id="edit-usr-pass" placeholder="${u ? 'Sin cambios' : 'Mínimo 6 caracteres'}" autocomplete="new-password">
+      ${u && !u.es_yo ? '<small class="text-muted">Si le pones una clave nueva, el sistema le pedirá cambiarla al entrar.</small>' : ''}
+      ${!u ? '<small class="text-muted">Al entrar por primera vez, el sistema le pedirá cambiarla.</small>' : ''}
+    </div>`;
 
-  openGenericModal(id ? 'Editar Usuario' : 'Nuevo Usuario', formHtml, async () => {
-    const n_nombre = document.getElementById('edit-usr-nombre').value;
-    const n_turno = document.getElementById('edit-usr-turno').value;
-    const n_pass = document.getElementById('edit-usr-pass').value;
-    
-    const checkboxes = document.querySelectorAll('.chk-permiso:checked');
-    let n_permisos = Array.from(checkboxes).map(c => c.value);
-    
-    // Si marcan Acceso Total, simplificamos
-    if (n_permisos.includes('all')) n_permisos = ['all'];
+  openGenericModal(u ? `Editar usuario — ${u.nombre}` : 'Nuevo usuario', formHtml, async () => {
+    const nombre = document.getElementById('edit-usr-nombre').value.trim();
+    const nuevoRol = document.querySelector('input[name="edit-usr-rol"]:checked')?.value || 'Cajero';
+    const nuevosPermisos = [...document.querySelectorAll('.chk-permiso:checked')].map(c => c.value);
+    const pass = document.getElementById('edit-usr-pass').value;
+    if (!nombre) { showToast('Escribe el nombre.', 'warning'); return; }
+    if (!u && pass.trim().length < 6) { showToast('La clave debe tener al menos 6 caracteres.', 'warning'); return; }
+    if (nuevoRol === 'Cajero' && !nuevosPermisos.length && !confirm('No marcaste ningún módulo: podrá entrar pero no podrá hacer nada. ¿Guardar así?')) return;
+    if (u && u.rol !== 'Administrador' && nuevoRol === 'Administrador' &&
+      !confirm(`${nombre} tendrá acceso a todo y su clave servirá para autorizar. ¿Continuar?`)) return;
 
-    const payload = {
-      nombre: n_nombre,
-      turno: n_turno,
-      permisos: n_permisos
-    };
-    if (n_pass) payload.password = n_pass;
-
+    const payload = { nombre, turno: document.getElementById('edit-usr-turno').value, rol: nuevoRol, permisos: nuevosPermisos };
+    if (u) payload.activo = u.activo;
+    if (pass) payload.password = pass;
+    DOM.btnSubmitGeneric.disabled = true;
     try {
-      const method = id ? 'PUT' : 'POST';
-      const url = id ? '/api/usuarios/' + id : '/api/usuarios';
-      const res = await fetch(url, {
-        method,
+      const res = await fetch(u ? '/api/usuarios/' + u.id : '/api/usuarios', {
+        method: u ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
       const d = await res.json();
-      if (!res.ok) throw new Error(d.error);
-      
-      showToast('Usuario guardado correctamente', 'success');
+      if (!res.ok) throw new Error(d.error || 'No se pudo guardar.');
+      showToast(u ? 'Usuario actualizado.' : `Usuario ${nombre} creado.`, 'success');
       closeGenericModal();
       loadUsuariosData();
-    } catch(e) {
-      alert('Error: ' + e.message);
+    } catch (e) {
+      showToast(e.message, 'danger');
+      DOM.btnSubmitGeneric.disabled = false;
     }
   });
+
+  // Administrador: tiene todo, no se marcan módulos
+  const grupo = document.getElementById('edit-usr-permisos-grupo');
+  const sync = () => { grupo.style.display = document.querySelector('input[name="edit-usr-rol"]:checked')?.value === 'Administrador' ? 'none' : ''; };
+  document.querySelectorAll('input[name="edit-usr-rol"]').forEach(r => r.addEventListener('change', sync));
+  sync();
 };
 
 window.deleteProducto = async function(id) {

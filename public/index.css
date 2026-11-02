@@ -4119,3 +4119,46 @@ select.receta-insumo option {
 .espera-card { border: 1px solid var(--border-glass); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; background: var(--bg-surface); }
 .espera-card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 1rem; }
 .espera-card-pie { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+
+/* ============================================
+   USUARIOS Y PERMISOS
+   ============================================ */
+.usuarios-leyenda {
+  display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 10px;
+  border: 1px solid var(--border-glass); background: var(--bg-card); font-size: 0.85rem;
+}
+.usuarios-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
+.usr-card {
+  display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 12px;
+  border: 1px solid var(--border-glass); background: var(--bg-card);
+}
+.usr-card.usr-revisar { border-color: var(--warning); }
+.usr-card.usr-inactivo { opacity: 0.55; }
+.usr-head { display: flex; align-items: center; gap: 10px; }
+.usr-avatar {
+  width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: var(--primary-glow); color: var(--color-text); font-weight: 700; font-family: var(--font-title); flex-shrink: 0;
+}
+.usr-avatar-admin { background: var(--warning-glow); color: var(--warning); }
+.usr-nombre { font-weight: 700; font-size: 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.usr-sub { font-size: 0.78rem; color: var(--color-muted); margin-top: 2px; }
+.usr-tu { font-size: 0.7rem; padding: 1px 6px; border-radius: 999px; background: var(--cyan-glow); color: var(--cyan-neon); font-weight: 600; }
+.usr-rol { font-size: 0.72rem; font-weight: 700; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+.usr-rol-admin { background: var(--warning-glow); color: var(--warning); }
+.usr-rol-cajero { background: var(--primary-glow); color: #a5b4fc; }
+.usr-permisos { display: flex; flex-wrap: wrap; gap: 6px; }
+.usr-chip { font-size: 0.75rem; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--border-glass); background: var(--bg-surface); }
+.usr-chip-total { border-color: var(--warning); color: var(--warning); }
+.usr-actividad { font-size: 0.78rem; color: var(--color-muted); }
+.usr-problema { font-size: 0.82rem; padding: 8px 10px; border-radius: 8px; background: var(--warning-glow); line-height: 1.4; }
+.usr-problema-acciones { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.usr-acciones { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; }
+.usr-acciones .action-btn, .usr-problema-acciones .action-btn { width: auto; }
+.usr-roles, .usr-modulos { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; margin-top: 6px; }
+.usr-rol-opcion, .usr-modulo {
+  display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border-radius: 8px;
+  border: 1px solid var(--border-glass); background: var(--bg-surface); cursor: pointer;
+}
+.usr-rol-opcion input, .usr-modulo input { margin-top: 3px; width: auto; }
+.usr-rol-opcion span, .usr-modulo span { display: flex; flex-direction: column; gap: 2px; font-size: 0.85rem; }
+.usr-rol-opcion small, .usr-modulo small { color: var(--color-muted); font-size: 0.75rem; font-weight: normal; }

@@ -15,7 +15,7 @@ import { listarEspera, crearEspera, actualizarEspera, eliminarEspera } from './c
 import { getConteoNevera, verificarConteoNevera, guardarConteoNevera, listarConteosNevera, decidirItemNevera, getInventarioMensual, guardarInventarioMensual, ajustarInventarioMensual, reporteInventarioMes, autorizarInventarioMensual, requiereAutorizacionInventario, reabrirInventarioMensual } from './controllers/conteoController.js';
 import { initializeDatabase } from './initDb.js';
 import * as db from './db.js';
-import { signToken, verifyToken, requireAuth, requireAdmin, requirePermiso, revokeToken, getTokenFromRequest, esAdmin, validarPasswordAdmin } from './auth.js';
+import { signToken, verifyToken, requireAuth, requireAdmin, requirePermiso, revokeToken, getTokenFromRequest, esAdmin, validarPasswordAdmin, usuarioActivo, parsePermisos } from './auth.js';
 import * as whatsapp from './controllers/whatsappController.js';
 import { iniciarMantenerDespierto } from './mantenerDespierto.js';
 import { obtenerTasas, fijarTasa, historialTasas } from './tasas.js';
@@ -240,11 +240,35 @@ app.post('/api/admin/inventario-mensual/:id/ajustar', requireAdmin, ajustarInven
 // ============================================
 
 // Listar usuarios (sin exponer password_hash) — solo administrador
+// Roles: "Administrador" (acceso total; su clave autoriza anulaciones e inventario) o "Cajero"
+// (solo los módulos marcados). Un cajero nunca tiene "acceso total": eso lo convertía en
+// administrador a medias (veía todo, pero su clave no autorizaba nada).
+const MODULOS_CAJERO = ['pos', 'inventario', 'credito', 'reportes', 'caja', 'tesoreria'];
+function permisosSegunRol(rol, permisos) {
+  if (rol === 'Administrador') return ['all'];
+  return [...new Set((Array.isArray(permisos) ? permisos : ['pos', 'caja']).filter(p => MODULOS_CAJERO.includes(p)))];
+}
+
 app.get('/api/usuarios', requireAdmin, async (req, res) => {
   try {
-    const usuarios = await db.query('SELECT id, nombre, rol, turno, permisos FROM usuarios ORDER BY turno, nombre');
-    res.json(usuarios);
+    const usuarios = await db.query(`
+      SELECT u.id, u.nombre, u.rol, u.turno, u.permisos, u.activo, u.debe_cambiar_password,
+             COUNT(s.id) AS turnos, MAX(s.fecha_apertura) AS ultimo_turno,
+             SUM(CASE WHEN s.id IS NOT NULL AND s.fecha_cierre IS NULL THEN 1 ELSE 0 END) AS cajas_abiertas
+      FROM usuarios u LEFT JOIN sesiones_caja s ON s.usuario_id = u.id
+      GROUP BY u.id, u.nombre, u.rol, u.turno, u.permisos, u.activo, u.debe_cambiar_password
+      ORDER BY u.nombre`);
+    res.json(usuarios.map(u => ({
+      id: u.id, nombre: u.nombre, rol: u.rol, turno: u.turno, permisos: parsePermisos(u.permisos),
+      activo: usuarioActivo(u),
+      debe_cambiar_password: [1, true, '1', 't', 'true'].includes(u.debe_cambiar_password),
+      turnos: Number(u.turnos) || 0,
+      ultimo_turno: u.ultimo_turno ? (u.ultimo_turno instanceof Date ? u.ultimo_turno.toISOString() : String(u.ultimo_turno)).slice(0, 10) : null,
+      caja_abierta: Number(u.cajas_abiertas) > 0,
+      es_yo: Number(u.id) === Number(req.usuario.usuario_id)
+    })));
   } catch (err) {
+    console.error('Error al obtener usuarios:', err);
     res.status(500).json({ error: 'Error al obtener usuarios' });
   }
 });
@@ -253,6 +277,7 @@ app.get('/api/usuarios', requireAdmin, async (req, res) => {
 app.post('/api/usuarios', requireAdmin, async (req, res) => {
   try {
     const { nombre, turno, password, permisos } = req.body;
+    const rolNuevo = req.body.rol === 'Administrador' ? 'Administrador' : 'Cajero';
     if (!nombre || !turno) return res.status(400).json({ error: 'Nombre y turno son requeridos' });
     const turnoValido = (turno === 'Tarde') ? 'Tarde' : (turno === 'Completo' ? 'Completo' : 'Mañana');
     // Ya no hay contraseña por defecto ('1234'): se exige una de al menos 6 caracteres.
@@ -263,11 +288,11 @@ app.post('/api/usuarios', requireAdmin, async (req, res) => {
     const existe = await db.query('SELECT id FROM usuarios WHERE LOWER(TRIM(nombre)) = LOWER(TRIM($1))', [nombre]);
     if (existe.length > 0) return res.status(409).json({ error: 'Ya existe un usuario con ese nombre' });
     const passwordHash = await bcrypt.hash(password.trim(), 10);
-    const permisosJson = Array.isArray(permisos) ? JSON.stringify(permisos) : '["pos","caja"]';
+    const permisosJson = JSON.stringify(permisosSegunRol(rolNuevo, permisos));
     const insertSql = db.isPostgres()
-      ? "INSERT INTO usuarios (nombre, rol, turno, password_hash, permisos, debe_cambiar_password) VALUES ($1, 'Cajero', $2, $3, $4, 1) RETURNING id"
-      : "INSERT INTO usuarios (nombre, rol, turno, password_hash, permisos, debe_cambiar_password) VALUES ($1, 'Cajero', $2, $3, $4, 1)";
-    const result = await db.execute(insertSql, [nombre.trim(), turnoValido, passwordHash, permisosJson]);
+      ? "INSERT INTO usuarios (nombre, rol, turno, password_hash, permisos, debe_cambiar_password) VALUES ($1, $2, $3, $4, $5, 1) RETURNING id"
+      : "INSERT INTO usuarios (nombre, rol, turno, password_hash, permisos, debe_cambiar_password) VALUES ($1, $2, $3, $4, $5, 1)";
+    const result = await db.execute(insertSql, [nombre.trim(), rolNuevo, turnoValido, passwordHash, permisosJson]);
     const rows = await db.query('SELECT id, nombre, rol, turno, permisos FROM usuarios WHERE id = $1', [result[0].id]);
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -281,24 +306,42 @@ app.put('/api/usuarios/:id', requireAdmin, async (req, res) => {
     const { id } = req.params;
     const { nombre, turno, permisos, password } = req.body;
     if (!nombre || !turno) return res.status(400).json({ error: 'Nombre y turno son requeridos' });
+
+    const actual = (await db.query('SELECT id, rol, activo FROM usuarios WHERE id = $1', [id]))[0];
+    if (!actual) return res.status(404).json({ error: 'Usuario no encontrado' });
+    const rol = ['Administrador', 'Cajero'].includes(req.body.rol) ? req.body.rol : actual.rol;
+    const activo = req.body.activo === undefined ? usuarioActivo(actual) : !!req.body.activo;
+    const esYo = Number(id) === Number(req.usuario.usuario_id);
+    if (esYo && !activo) return res.status(400).json({ error: 'No puedes desactivar tu propio usuario.' });
+    // Nadie se quita a sí mismo el acceso de administrador (lo puede hacer otro administrador)
+    if (esYo && rol !== 'Administrador' && esAdmin(req.usuario)) {
+      return res.status(400).json({ error: 'No puedes quitarte tu propio acceso de Administrador (lo puede hacer otro administrador).' });
+    }
+    // Siempre debe quedar al menos un administrador activo (si no, nadie podría autorizar nada)
+    if (actual.rol === 'Administrador' && usuarioActivo(actual) && (rol !== 'Administrador' || !activo)) {
+      const otros = await db.query("SELECT COUNT(*) AS n FROM usuarios WHERE rol = 'Administrador' AND COALESCE(activo, 1) = 1 AND id <> $1", [id]);
+      if (Number(otros[0].n) === 0) return res.status(400).json({ error: 'Debe quedar al menos un Administrador activo.' });
+    }
+    if (!activo && usuarioActivo(actual)) {
+      const abierta = await db.query('SELECT id FROM sesiones_caja WHERE usuario_id = $1 AND fecha_cierre IS NULL', [id]);
+      if (abierta.length) return res.status(400).json({ error: 'Tiene la caja abierta: hay que cerrarla antes de desactivarlo.' });
+    }
     
     const turnoValido = (turno === 'Tarde') ? 'Tarde' : (turno === 'Completo' ? 'Completo' : 'Mañana');
-    const permisosJson = Array.isArray(permisos) ? JSON.stringify(permisos) : '["pos","caja"]';
+    const permisosJson = JSON.stringify(permisosSegunRol(rol, permisos));
 
     if (password && password.trim().length > 0 && password.trim().length < 6) {
       return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
     }
+    await db.execute(
+      'UPDATE usuarios SET nombre = $1, turno = $2, permisos = $3, rol = $4, activo = $5 WHERE id = $6',
+      [nombre.trim(), turnoValido, permisosJson, rol, activo ? 1 : 0, id]
+    );
     if (password && password.trim().length > 0) {
+      // Clave puesta por el administrador: el usuario la cambia al entrar (salvo que sea la suya)
       const passwordHash = await bcrypt.hash(password.trim(), 10);
-      await db.execute(
-        'UPDATE usuarios SET nombre = $1, turno = $2, permisos = $3, password_hash = $4 WHERE id = $5',
-        [nombre.trim(), turnoValido, permisosJson, passwordHash, id]
-      );
-    } else {
-      await db.execute(
-        'UPDATE usuarios SET nombre = $1, turno = $2, permisos = $3 WHERE id = $4',
-        [nombre.trim(), turnoValido, permisosJson, id]
-      );
+      await db.execute('UPDATE usuarios SET password_hash = $1, debe_cambiar_password = $2, intentos_fallidos = 0, bloqueado_hasta = NULL WHERE id = $3',
+        [passwordHash, esYo ? 0 : 1, id]);
     }
     const rows = await db.query('SELECT id, nombre, rol, turno, permisos FROM usuarios WHERE id = $1', [id]);
     res.json(rows[0]);
@@ -340,7 +383,7 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Usuario y contraseña son requeridos' });
     }
     const rows = await db.query(
-      'SELECT id, nombre, rol, turno, permisos, password_hash, debe_cambiar_password, intentos_fallidos, bloqueado_hasta FROM usuarios WHERE LOWER(TRIM(nombre)) = LOWER(TRIM($1))',
+      'SELECT id, nombre, rol, turno, permisos, password_hash, debe_cambiar_password, intentos_fallidos, bloqueado_hasta, activo FROM usuarios WHERE LOWER(TRIM(nombre)) = LOWER(TRIM($1))',
       [usuario]
     );
     // Mismo mensaje para usuario inexistente o contraseña incorrecta,
@@ -370,6 +413,10 @@ app.post('/api/auth/login', async (req, res) => {
       }
       await db.execute('UPDATE usuarios SET intentos_fallidos = $1 WHERE id = $2', [intentos, user.id]);
       return res.status(401).json({ error: CREDENCIALES_INVALIDAS });
+    }
+
+    if (!usuarioActivo(user)) {
+      return res.status(403).json({ error: 'Este usuario está desactivado. Habla con el administrador.' });
     }
 
     // Login exitoso → resetear contador y bloqueo

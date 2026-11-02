@@ -114,6 +114,10 @@ export function verificarAutorizacion(token, tipo) {
   }
 }
 
+export function usuarioActivo(u) {
+  return !(u && (u.activo === 0 || u.activo === '0' || u.activo === false));
+}
+
 export function parsePermisos(permisos) {
   if (Array.isArray(permisos)) return permisos;
   try { return JSON.parse(permisos) || []; } catch (e) { return []; }
@@ -137,11 +141,14 @@ export async function requireAuth(req, res, next) {
     return res.status(401).json({ error: 'No autorizado. Inicia sesión nuevamente.' });
   }
   try {
-    const rows = await db.query('SELECT id, nombre, rol, permisos, debe_cambiar_password FROM usuarios WHERE id = $1', [payload.usuario_id]);
+    const rows = await db.query('SELECT id, nombre, rol, permisos, debe_cambiar_password, activo FROM usuarios WHERE id = $1', [payload.usuario_id]);
     if (rows.length === 0) {
       return res.status(401).json({ error: 'No autorizado. Inicia sesión nuevamente.' });
     }
     const u = rows[0];
+    if (!usuarioActivo(u)) {
+      return res.status(401).json({ error: 'Tu usuario fue desactivado. Habla con el administrador.' });
+    }
 
     // Con contraseña inicial (1234 / admin123) solo se permite cambiarla o cerrar sesión.
     const debeCambiar = [1, true, '1', 't', 'true'].includes(u.debe_cambiar_password);
@@ -198,7 +205,7 @@ export async function validarPasswordAdmin(req, password) {
     return { ok: false, status: 400, error: 'Se requiere la contraseña de administrador.' };
   }
 
-  const admins = await db.query("SELECT id, nombre, password_hash FROM usuarios WHERE rol = 'Administrador'");
+  const admins = await db.query("SELECT id, nombre, password_hash FROM usuarios WHERE rol = 'Administrador' AND COALESCE(activo, 1) = 1");
   if (admins.length === 0) {
     return { ok: false, status: 500, error: 'No hay administradores configurados en el sistema.' };
   }

@@ -136,6 +136,7 @@ export async function initializeDatabase() {
       )`);
       await crearTablasConteos();
       await crearTablaVentasEspera();
+      await db.execute('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS activo INTEGER NOT NULL DEFAULT 1');
 
       // Desglose del arqueo de cada turno (ventas vs abonos) para el cierre consolidado
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_ventas_cop DOUBLE PRECISION;');
@@ -742,6 +743,8 @@ async function runMigrations() {
   )`);
   await crearTablasConteos();
   await crearTablaVentasEspera();
+  // Usuarios desactivados (no se borran: se conserva su historial)
+  try { await db.execute('ALTER TABLE usuarios ADD COLUMN activo INTEGER NOT NULL DEFAULT 1'); } catch (e) { /* ya existe */ }
   // Desglose del arqueo de cada turno (ventas vs abonos) para el cierre consolidado
   try { await db.execute("ALTER TABLE sesiones_caja ADD COLUMN declarado_ventas_cop REAL"); } catch(e) {}
   try { await db.execute("ALTER TABLE sesiones_caja ADD COLUMN declarado_abonos_cop REAL"); } catch(e) {}

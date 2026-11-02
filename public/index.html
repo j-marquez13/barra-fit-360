@@ -15,7 +15,7 @@
        bloqueando la página ~3 s y cambiando de versión sin aviso) -->
   <script src="vendor/lucide-1.57.0.min.js"></script>
   <!-- Estilos CSS -->
-  <link rel="stylesheet" href="index.css?v=27">
+  <link rel="stylesheet" href="index.css?v=28">
   <!-- PWA: instalable como aplicación en Chrome/Android/escritorio -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#0b0f1a">
@@ -1573,32 +1573,25 @@
       <!-- ============================================ -->
       <!-- VISTA 7: USUARIOS (ADMIN)                    -->
       <!-- ============================================ -->
-      <div class="view-panel" id="view-usuarios" style="padding: 20px;">
-        <main class="app-body">
-          <div class="view-header-row" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
-            <h2>Gestión de Usuarios y Permisos</h2>
+      <div class="view-panel" id="view-usuarios">
+        <div class="module-content">
+          <div class="view-header-row" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+            <div>
+              <h2>Usuarios y Permisos</h2>
+              <p class="text-muted" id="usuarios-resumen" style="margin:4px 0 0; font-size:0.85rem;"></p>
+            </div>
             <button class="action-btn btn-success" onclick="showEditarUsuarioModal()">
-              <i data-lucide="user-plus"></i> Añadir Cajero/Usuario
+              <i data-lucide="user-plus"></i> Nuevo usuario
             </button>
           </div>
-          
-          <div class="data-table-container">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Nombre</th>
-                  <th>Rol</th>
-                  <th>Turno</th>
-                  <th>Permisos</th>
-                  <th style="text-align:right;">Acciones</th>
-                </tr>
-              </thead>
-              <tbody id="tabla-usuarios">
-                <!-- Carga dinámica -->
-              </tbody>
-            </table>
+          <div class="usuarios-leyenda">
+            <div><span class="usr-rol usr-rol-admin">Administrador</span> Acceso a todo. Su clave autoriza anulaciones, el inventario del mes y reaperturas.</div>
+            <div><span class="usr-rol usr-rol-cajero">Cajero</span> Solo los módulos que le marques. Su clave no autoriza nada.</div>
+            <div class="text-muted">Desactivar no borra a nadie: se conserva su historial y se puede volver a activar.</div>
           </div>
-        </main>
+          <div id="usuarios-alertas"></div>
+          <div class="usuarios-grid" id="tabla-usuarios"></div>
+        </div>
       </div>
 
       <!-- ============================================ -->
@@ -2546,7 +2539,7 @@
     </div>
   </div>
 
-  <script src="app3.js?v=63"></script>
+  <script src="app3.js?v=64"></script>
   <script src="whatsapp.js?v=7"></script>
 <!-- Script to automatically replace commas with dots in number inputs -->
   <script>
