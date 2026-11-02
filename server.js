@@ -11,6 +11,7 @@ import { cierreDiario, cierreSemanal, cierreRango, historialVentas } from './con
 import { listarGastos, registrarGasto } from './controllers/expensesController.js';
 import { estadoCaja, abrirCaja, cerrarCaja, cierreDia, listarCierresAdmin, ticketTurnoAdmin } from './controllers/cashierController.js';
 import { getSaldos, transferirFondos } from './controllers/treasuryController.js';
+import { listarEspera, crearEspera, actualizarEspera, eliminarEspera } from './controllers/esperaController.js';
 import { getConteoNevera, verificarConteoNevera, guardarConteoNevera, listarConteosNevera, decidirItemNevera, getInventarioMensual, guardarInventarioMensual, ajustarInventarioMensual, reporteInventarioMes, autorizarInventarioMensual, requiereAutorizacionInventario, reabrirInventarioMensual } from './controllers/conteoController.js';
 import { initializeDatabase } from './initDb.js';
 import * as db from './db.js';
@@ -167,6 +168,12 @@ app.delete('/api/inventario/ordenes-compra/:id', inventario, borrarOrdenCompra);
 // RUTAS DE VENTAS (POS)
 // ============================================
 app.post('/api/ventas', pos, processSale);
+
+// Facturas en espera (pedido con el nombre del cliente, se cobra después)
+app.get('/api/ventas-espera', pos, listarEspera);
+app.post('/api/ventas-espera', pos, crearEspera);
+app.put('/api/ventas-espera/:id', pos, actualizarEspera);
+app.delete('/api/ventas-espera/:id', pos, eliminarEspera);
 // La anulación además exige la contraseña de un administrador (ver salesController).
 app.post('/api/ventas/:id/anular', anularVenta);
 

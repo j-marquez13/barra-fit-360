@@ -15,7 +15,7 @@
        bloqueando la página ~3 s y cambiando de versión sin aviso) -->
   <script src="vendor/lucide-1.57.0.min.js"></script>
   <!-- Estilos CSS -->
-  <link rel="stylesheet" href="index.css?v=26">
+  <link rel="stylesheet" href="index.css?v=27">
   <!-- PWA: instalable como aplicación en Chrome/Android/escritorio -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#0b0f1a">
@@ -329,8 +329,14 @@
           <aside class="cart-section">
             <div class="cart-header">
               <h2><i data-lucide="shopping-cart"></i> Orden de Compra</h2>
-              <span class="items-count" id="cart-count">0 items</span>
+              <div class="cart-header-acciones">
+                <button type="button" class="espera-btn" id="btn-poner-espera" onclick="abrirPonerEnEspera()" title="Guardar este pedido con el nombre del cliente para cobrarlo después" disabled><i data-lucide="pause-circle"></i> En espera</button>
+                <button type="button" class="espera-btn" id="btn-ver-espera" onclick="verFacturasEspera()" title="Ver las facturas en espera"><i data-lucide="clipboard-list"></i> <span id="espera-count">0</span></button>
+                <span class="items-count" id="cart-count">0 items</span>
+              </div>
             </div>
+            <!-- Factura en espera que está ahora en el carrito (la llena app3.js) -->
+            <div class="espera-actual" id="espera-actual" style="display:none;"></div>
 
             <!-- CONTENEDOR NUEVO: Tasas de Cambio Globales -->
             <div class="global-rates-panel" style="padding: 10px 15px; border-bottom: 1px solid var(--border-glass); display: flex; flex-wrap: wrap; gap: 15px; background: rgba(255, 255, 255, 0.02);">
@@ -2529,7 +2535,7 @@
     </div>
   </div>
 
-  <script src="app3.js?v=61"></script>
+  <script src="app3.js?v=62"></script>
   <script src="whatsapp.js?v=7"></script>
 <!-- Script to automatically replace commas with dots in number inputs -->
   <script>

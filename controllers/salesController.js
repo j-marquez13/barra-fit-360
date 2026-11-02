@@ -341,6 +341,12 @@ export async function processSale(req, res) {
       const resVenta = await tx.execute(insertVentaSql, valsVenta);
       const ventaId = resVenta[0].id;
 
+      // Venta que venía de una factura en espera: ya se cobró, se quita de la lista
+      const esperaId = parseInt(req.body.espera_id, 10);
+      if (Number.isInteger(esperaId) && esperaId > 0) {
+        await tx.execute('DELETE FROM ventas_espera WHERE id = $1', [esperaId]);
+      }
+
       // B. Insertar detalle de productos vendidos (Activa el trigger de inventario)
       const insertDetalleSql = isPg
         ? 'INSERT INTO detalle_ventas (venta_id, producto_id, cantidad, precio_unitario, subtotal, costo_unitario, receta_base_ids, insumos_manuales) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id'

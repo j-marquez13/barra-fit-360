@@ -12,7 +12,7 @@ const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'barrafit-test-'));
 const PORT = String(40000 + Math.floor(Math.random() * 10000));
 const BASE = `http://localhost:${PORT}`;
-const PRUEBAS = ['flujos.test.mjs', 'cierre.test.mjs', 'offline.test.mjs', 'conteo.test.mjs'];
+const PRUEBAS = ['flujos.test.mjs', 'cierre.test.mjs', 'offline.test.mjs', 'conteo.test.mjs', 'espera.test.mjs'];
 
 const env = { ...process.env, DB_PATH: path.join(tmp, 'prueba.sqlite'), PORT, AUTH_SECRET: 'secreto-de-prueba' };
 for (const k of Object.keys(env)) {

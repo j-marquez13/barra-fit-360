@@ -19,7 +19,7 @@ function localDateStr() {
   // Datos que el POS necesita para vender. Cada vez que llegan bien se guarda una copia en la
   // tablet; si no hay internet se usa esa copia, para poder seguir vendiendo (las ventas se
   // guardan como pendientes y se suben solas al volver la conexión).
-  const CON_RESPALDO = /^\/api\/(productos(\/\d+\/receta)?|recetas-base|insumos|clientes|tasas|caja\/estado)$/;
+  const CON_RESPALDO = /^\/api\/(productos(\/\d+\/receta)?|recetas-base|insumos|clientes|tasas|caja\/estado|ventas-espera)$/;
   window.fetch = async function (input, init) {
     const url = (typeof input === 'string') ? input : input.url;
     const opts = init || {};
@@ -765,6 +765,7 @@ async function loadInitialData() {
   } catch(e) {
     console.warn('No se pudieron cargar los datos iniciales:', e);
   }
+  cargarFacturasEspera();
 }
 
 function renderCategories() {
@@ -850,6 +851,7 @@ function renderProducts() {
 }
 
 function renderCart() {
+  pintarContadorEspera();
   DOM.cartItemsContainer.innerHTML = '';
   
   if (STATE.cart.length === 0) {
@@ -971,8 +973,9 @@ async function quickPay(method, currency) {
     }],
     tasas: STATE.tasas,
     cliente_id: null,
-    notas: 'Pago rápido',
-    uid: nuevoUidVenta()
+    notas: notasConCliente('Pago rápido'),
+    uid: nuevoUidVenta(),
+    espera_id: STATE.esperaActual ? STATE.esperaActual.id : undefined
   };
 
   if (estaSinConexion()) { guardarVentaPendiente(payload); return; }
@@ -999,6 +1002,7 @@ async function quickPay(method, currency) {
     }
     
     const resData = await response.json();
+    ventaCobradaDesdeEspera();
     STATE.cart = [];
     renderCart();
     await loadProductsFromAPI();
@@ -1494,8 +1498,9 @@ async function submitPayment() {
     pagos: isCortesia ? [] : pagos,
     tasas: { USD: rateUsd, VES: rateVes },
     tipo_transaccion: isCortesia ? 'Cortesia' : 'Venta',
-    notas: DOM.saleNotes.value || (isCortesia ? 'Cortesía' : 'Venta desde Terminal POS'),
-    cliente_id: clienteId
+    notas: notasConCliente(DOM.saleNotes.value || (isCortesia ? 'Cortesía' : 'Venta desde Terminal POS')),
+    cliente_id: clienteId,
+    espera_id: STATE.esperaActual ? STATE.esperaActual.id : undefined
   };
 
   // Código único de la venta: si se reenvía (corte de red, cola sin internet) el servidor
@@ -1512,9 +1517,11 @@ async function submitPayment() {
       const data = await res.json();
       if (res.status === 201) {
         showReceipt(data);
+        ventaCobradaDesdeEspera();
         // Recargar productos del servidor
         await loadProductsFromAPI();
       } else if (res.status === 200 && data.duplicada) {
+        ventaCobradaDesdeEspera();
         showToast('Esta venta ya estaba registrada.', 'success');
         closePaymentModal();
         resetSale();
@@ -1606,6 +1613,7 @@ function guardarVentaPendiente(payload) {
   });
   renderProducts();
 
+  ventaCobradaDesdeEspera();
   mostrarReciboPendiente(payload, venta.uid);
   pintarAvisoConexion();
   if (typeof loadHistorial === 'function' && document.getElementById('tbody-historial')) loadHistorial();
@@ -1906,9 +1914,10 @@ async function submitCortesiaGym() {
       tasas: { USD: STATE.tasas.USD, VES: STATE.tasas.VES },
       tipo_transaccion: 'Venta',
       cortesia_gym: true,
-      notas: 'Cortesía Gym (paga el gimnasio, solo costo)',
+      notas: notasConCliente('Cortesía Gym (paga el gimnasio, solo costo)'),
       cliente_id: clienteId,
-      uid: nuevoUidVenta()
+      uid: nuevoUidVenta(),
+      espera_id: STATE.esperaActual ? STATE.esperaActual.id : undefined
     };
 
     if (estaSinConexion()) { guardarVentaPendiente(payload); return; }
@@ -1927,6 +1936,7 @@ async function submitCortesiaGym() {
     const data = await res.json();
     if (res.status === 201) {
       showReceipt(data);
+      ventaCobradaDesdeEspera();
       await loadProductsFromAPI();
       if (typeof loadClientesData === 'function') loadClientesData();
       showToast('Cortesía Gym registrada. Quedó a crédito del gimnasio.', 'success');
@@ -4778,6 +4788,11 @@ async function cerrarTurnoActual() {
     }
   }
 
+  // Facturas en espera sin cobrar: no entran en el cierre (no se han cobrado)
+  await cargarFacturasEspera();
+  if (facturasEspera.length && !confirm(`⚠️ Hay ${facturasEspera.length} factura(s) en espera sin cobrar: ${facturasEspera.map(f => f.nombre).join(', ')}.\n\n` +
+    'No entran en este cierre porque no se han cobrado; quedan guardadas para el próximo turno.\n\n¿Cerrar la caja de todos modos?')) return;
+
   // 0. Conteo de la nevera: obligatorio en cada cierre, antes del arqueo
   const pasoNevera = await pasoConteoNevera();
   if (!pasoNevera.ok) return;
@@ -7479,3 +7494,189 @@ window.verInventarioProductoPorProducto = function (mes) {
   const sel = document.getElementById('inv-mes');
   if (sel) { sel.value = mes; loadInventarioMensual(); }
 };
+
+// ============================================
+// FACTURAS EN ESPERA: el pedido se guarda con el nombre del cliente para cobrarlo después.
+// Se guardan en el servidor (se ven desde cualquier dispositivo). El stock y la caja se
+// mueven solo al cobrar: la venta lleva espera_id y el servidor la quita de la lista.
+// ============================================
+var facturasEspera = []; // var: renderCart puede usarla antes de que se ejecute esta línea
+STATE.esperaActual = null; // { id, nombre, telefono, notas } si el carrito viene de una factura en espera
+
+function totalCarritoYResumen() {
+  const resumen = STATE.cart.map(item => {
+    const p = STATE.products.find(x => x.id === item.producto_id);
+    return `${item.cantidad}x ${p ? p.nombre : 'Producto'}`;
+  }).join(', ');
+  return { total: calculateCartTotal(), resumen };
+}
+
+// Notas de la venta con el nombre del cliente cuando viene de una factura en espera
+function notasConCliente(base) {
+  const e = STATE.esperaActual;
+  return e ? `${base} · Cliente: ${e.nombre}${e.telefono ? ' (' + e.telefono + ')' : ''}` : base;
+}
+
+async function cargarFacturasEspera() {
+  try {
+    const res = await fetch('/api/ventas-espera');
+    if (res.ok) {
+      const lista = await res.json();
+      // Las que ya se cobraron sin internet (en la cola de la tablet) no se muestran,
+      // para no cobrarlas dos veces mientras se suben
+      const cobradas = new Set(ventasPendientes().map(v => Number(v.payload && v.payload.espera_id)).filter(Boolean));
+      facturasEspera = lista.filter(f => !cobradas.has(Number(f.id)));
+    }
+  } catch (e) { /* sin conexión: se mantiene la lista anterior */ }
+  pintarContadorEspera();
+}
+
+function pintarContadorEspera() {
+  const cont = document.getElementById('espera-count');
+  if (cont) cont.textContent = facturasEspera.length;
+  const btnVer = document.getElementById('btn-ver-espera');
+  if (btnVer) btnVer.classList.toggle('espera-hay', facturasEspera.length > 0);
+  const btnPoner = document.getElementById('btn-poner-espera');
+  if (btnPoner) btnPoner.disabled = STATE.cart.length === 0;
+  const banner = document.getElementById('espera-actual');
+  if (banner) {
+    const e = STATE.esperaActual;
+    banner.style.display = e ? 'flex' : 'none';
+    banner.innerHTML = e ? `<span>📋 Factura en espera de <strong>${escHtml(e.nombre)}</strong>${e.telefono ? ' · ' + escHtml(e.telefono) : ''}</span>
+      <button type="button" title="Soltar: el carrito deja de estar ligado a esta factura (la factura sigue guardada)" onclick="soltarFacturaEspera()">✕</button>` : '';
+  }
+}
+
+window.abrirPonerEnEspera = function () {
+  if (!STATE.cart.length) { showToast('El carrito está vacío.', 'warning'); return; }
+  if (!hayTurnoAbierto()) { avisarSinTurno(); return; }
+  if (estaSinConexion()) { alert('Sin conexión. Las facturas en espera necesitan internet para guardarse.'); return; }
+  const e = STATE.esperaActual;
+  const { total } = totalCarritoYResumen();
+  openGenericModal(e ? `Actualizar factura en espera — ${e.nombre}` : 'Poner factura en espera', `
+    <p class="text-muted" style="margin-bottom:12px;">El pedido queda guardado con el nombre del cliente para cobrarlo después.
+      Total: <strong>$${numTicket(total)} COP</strong>. No descuenta inventario hasta que se cobre.</p>
+    <div class="form-group">
+      <label>Nombre del cliente *</label>
+      <input type="text" id="espera-nombre" maxlength="80" placeholder="Ej: María (la de la toalla azul)" value="${escHtml(e ? e.nombre : '')}">
+    </div>
+    <div class="form-group">
+      <label>Teléfono (opcional)</label>
+      <input type="tel" id="espera-telefono" maxlength="30" placeholder="0414 1234567" value="${escHtml(e && e.telefono ? e.telefono : '')}">
+    </div>
+    <div class="form-group">
+      <label>Nota (opcional)</label>
+      <input type="text" id="espera-notas" maxlength="300" placeholder="Ej: paga al salir del entrenamiento" value="${escHtml(e && e.notas ? e.notas : '')}">
+    </div>`, async () => {
+    const nombre = document.getElementById('espera-nombre').value.trim();
+    if (!nombre) { showToast('Escribe el nombre del cliente.', 'warning'); document.getElementById('espera-nombre').focus(); return; }
+    const datos = {
+      nombre,
+      telefono: document.getElementById('espera-telefono').value.trim(),
+      notas: document.getElementById('espera-notas').value.trim(),
+      items: JSON.parse(JSON.stringify(STATE.cart)),
+      ...totalCarritoYResumen()
+    };
+    DOM.btnSubmitGeneric.disabled = true;
+    try {
+      let res = await fetch(e ? `/api/ventas-espera/${e.id}` : '/api/ventas-espera', {
+        method: e ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(datos)
+      });
+      if (e && res.status === 404) {
+        // La factura original ya no existe (se eliminó en otro dispositivo): se guarda como nueva
+        res = await fetch('/api/ventas-espera', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(datos) });
+      }
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'No se pudo guardar.');
+      closeGenericModal();
+      STATE.cart = [];
+      STATE.esperaActual = null;
+      renderCart();
+      showToast(`Factura de ${nombre} puesta en espera.`, 'success');
+      cargarFacturasEspera();
+    } catch (err) {
+      showToast(err.message, 'danger');
+      DOM.btnSubmitGeneric.disabled = false;
+    }
+  });
+  DOM.btnSubmitGeneric.innerHTML = '<i data-lucide="pause-circle"></i> Poner en espera';
+  lucide.createIcons();
+  setTimeout(() => document.getElementById('espera-nombre')?.focus(), 100);
+};
+
+window.verFacturasEspera = async function () {
+  await cargarFacturasEspera();
+  const filas = facturasEspera.map(f => `
+    <div class="espera-card">
+      <div class="espera-card-head">
+        <strong>${escHtml(f.nombre)}</strong>
+        <span class="font-outfit">$${numTicket(f.total)}</span>
+      </div>
+      ${f.telefono ? `<div class="text-muted" style="font-size:0.8rem;">📞 ${escHtml(f.telefono)}</div>` : ''}
+      <div style="font-size:0.85rem; margin:4px 0;">${escHtml(f.resumen || '')}</div>
+      ${f.notas ? `<div class="text-muted" style="font-size:0.8rem;">📝 ${escHtml(f.notas)}</div>` : ''}
+      <div class="espera-card-pie">
+        <span class="text-muted" style="font-size:0.75rem;">${fechaCorta(f.actualizado_en || f.creado_en)} · ${escHtml(f.usuario_nombre || '—')}</span>
+        <span style="display:flex; gap:6px;">
+          <button class="action-btn btn-mini" style="background:var(--danger); color:#fff; border:none;" onclick="eliminarFacturaEspera(${f.id})">Eliminar</button>
+          <button class="action-btn btn-primary btn-mini" onclick="retomarFacturaEspera(${f.id})">Retomar</button>
+        </span>
+      </div>
+    </div>`).join('');
+  openGenericModal(`Facturas en espera (${facturasEspera.length})`,
+    filas || '<p class="text-muted" style="text-align:center; padding:20px;">No hay facturas en espera.</p>', () => closeGenericModal());
+  DOM.btnSubmitGeneric.textContent = 'Cerrar';
+};
+
+window.retomarFacturaEspera = function (id) {
+  const f = facturasEspera.find(x => x.id === id);
+  if (!f) return;
+  if (STATE.cart.length && !(STATE.esperaActual && STATE.esperaActual.id === id)) {
+    if (!confirm('El carrito actual tiene productos y se reemplazará por la factura de ' + f.nombre + '.\n\nSi quieres conservarlo, cancela y ponlo en espera primero. ¿Continuar?')) return;
+  }
+  const items = (f.items || []).filter(it => STATE.products.some(p => p.id === it.producto_id));
+  if (items.length < (f.items || []).length) showToast('Algún producto de la factura ya no está en el catálogo y se quitó.', 'warning');
+  STATE.cart = items;
+  STATE.esperaActual = { id: f.id, nombre: f.nombre, telefono: f.telefono, notas: f.notas };
+  closeGenericModal();
+  renderCart();
+  showToast(`Factura de ${f.nombre} en el carrito: puedes agregar productos o cobrarla.`, 'success');
+};
+
+window.eliminarFacturaEspera = async function (id) {
+  const f = facturasEspera.find(x => x.id === id);
+  if (!f || !confirm(`¿Eliminar la factura en espera de ${f.nombre} ($${numTicket(f.total)})?\n\nNo se cobra nada: solo se borra de la lista.`)) return;
+  try {
+    const res = await fetch(`/api/ventas-espera/${id}`, { method: 'DELETE' });
+    const d = await res.json();
+    if (!res.ok && !d.no_existe) throw new Error(d.error || 'No se pudo eliminar.');
+    if (STATE.esperaActual && STATE.esperaActual.id === id) STATE.esperaActual = null;
+    showToast('Factura en espera eliminada.', 'success');
+    verFacturasEspera();
+  } catch (e) {
+    showToast(e.message, 'danger');
+  }
+};
+
+window.soltarFacturaEspera = function () {
+  STATE.esperaActual = null;
+  pintarContadorEspera();
+};
+
+// Se cobró la factura que estaba en el carrito: el servidor ya la quitó de la lista
+function ventaCobradaDesdeEspera() {
+  const e = STATE.esperaActual;
+  if (!e) return;
+  STATE.esperaActual = null;
+  titulosRecibo('¡Venta Procesada!', `Cliente: ${e.nombre}`);
+  facturasEspera = facturasEspera.filter(f => f.id !== e.id);
+  pintarContadorEspera();
+  setTimeout(cargarFacturasEspera, 800);
+}
+
+// Otras tablets pueden poner facturas en espera: se refresca el contador cada minuto
+setInterval(() => {
+  if (!estaSinConexion() && sessionStorage.getItem('bf360_auth') && hayTurnoAbierto()) cargarFacturasEspera();
+}, 60000);

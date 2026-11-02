@@ -135,6 +135,7 @@ export async function initializeDatabase() {
         creado_en TEXT
       )`);
       await crearTablasConteos();
+      await crearTablaVentasEspera();
 
       // Desglose del arqueo de cada turno (ventas vs abonos) para el cierre consolidado
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_ventas_cop DOUBLE PRECISION;');
@@ -740,6 +741,7 @@ async function runMigrations() {
     creado_en TEXT
   )`);
   await crearTablasConteos();
+  await crearTablaVentasEspera();
   // Desglose del arqueo de cada turno (ventas vs abonos) para el cierre consolidado
   try { await db.execute("ALTER TABLE sesiones_caja ADD COLUMN declarado_ventas_cop REAL"); } catch(e) {}
   try { await db.execute("ALTER TABLE sesiones_caja ADD COLUMN declarado_abonos_cop REAL"); } catch(e) {}
@@ -989,6 +991,24 @@ async function crearTablasConteos() {
     reabierto_por TEXT,
     autorizado_por TEXT,
     datos TEXT
+  )`);
+}
+
+// Facturas en espera (pedidos con nombre del cliente para cobrar después; ver esperaController.js)
+async function crearTablaVentasEspera() {
+  const pg = !!usePostgres;
+  await db.execute(`CREATE TABLE IF NOT EXISTS ventas_espera (
+    id ${pg ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
+    nombre TEXT NOT NULL,
+    telefono TEXT,
+    notas TEXT,
+    items TEXT NOT NULL,
+    total ${pg ? 'DOUBLE PRECISION' : 'REAL'} NOT NULL DEFAULT 0,
+    resumen TEXT,
+    usuario_id INTEGER,
+    usuario_nombre TEXT,
+    creado_en TEXT NOT NULL,
+    actualizado_en TEXT
   )`);
 }
 
