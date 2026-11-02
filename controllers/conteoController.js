@@ -288,7 +288,8 @@ function filaCierreInventario(c) {
     items_contados: c.items_contados === null ? null : Number(c.items_contados),
     items_con_diferencia: c.items_con_diferencia === null ? null : Number(c.items_con_diferencia),
     ajustado: !!Number(c.ajustado), ajustado_por: c.ajustado_por || null,
-    autorizado_por: c.autorizado_por || null
+    autorizado_por: c.autorizado_por || null,
+    reaperturas: Number(c.reaperturas) || 0
   };
 }
 
@@ -303,10 +304,11 @@ export async function getInventarioMensual(req, res) {
       const c = filaCierreInventario(cierre);
       return res.json({ mes, cierre: { id: c.id, mes, estado: c.estado, usuario_nombre: c.usuario_nombre, cerrado_en: c.cerrado_en, autorizado_por: c.autorizado_por }, items: [] });
     }
+    const reaperturas = req.autorizadoPor ? [] : await historialReaperturas(mes);
     if (cierre && cierre.estado === 'cerrado') {
       const items = await db.query('SELECT * FROM cierres_inventario_items WHERE cierre_id = $1 ORDER BY seccion, nombre', [cierre.id]);
       return res.json({
-        mes, cierre: filaCierreInventario(cierre),
+        mes, cierre: filaCierreInventario(cierre), reaperturas,
         items: items.map(i => ({
           insumo_id: i.insumo_id, nombre: i.nombre, unidad: i.unidad, seccion: i.seccion,
           contado: num(i.contado), esperado: num(i.esperado), diferencia: num(i.diferencia),
@@ -326,7 +328,7 @@ export async function getInventarioMensual(req, res) {
       insumo_id: i.id, nombre: i.nombre.trim(), unidad: i.unidad_medida, seccion: i.seccion,
       contado: guardados.has(Number(i.id)) ? guardados.get(Number(i.id)) : null
     }));
-    return res.json({ mes, cierre: filaCierreInventario(cierre), items });
+    return res.json({ mes, cierre: filaCierreInventario(cierre), reaperturas, items });
   } catch (e) {
     return responderError(res, e, 'Error al cargar el inventario mensual:');
   }
@@ -503,4 +505,58 @@ export function requiereAutorizacionInventario(req, res, next) {
   }
   req.autorizadoPor = p.admin;
   next();
+}
+
+// ============================================
+// VOLVER A HACER un inventario mensual ya cerrado: solo con la clave del administrador.
+// Se guarda una copia del cierre anterior (historial) y el mes vuelve a borrador con lo
+// contado, para corregirlo y cerrarlo de nuevo. Si el stock ya se había ajustado, ese ajuste
+// queda hecho y el nuevo conteo se compara con el stock actual.
+// ============================================
+async function historialReaperturas(mes) {
+  const filas = await db.query('SELECT fecha, reabierto_por, autorizado_por, datos FROM cierres_inventario_reaperturas WHERE mes = $1 ORDER BY id', [mes]);
+  return filas.map(f => {
+    let d = {};
+    try { d = JSON.parse(f.datos || '{}'); } catch (e) { /* copia dañada */ }
+    return {
+      fecha: f.fecha, reabierto_por: f.reabierto_por, autorizado_por: f.autorizado_por,
+      cerrado_en: d.cerrado_en || null, registrado_por: d.usuario_nombre || null,
+      valor_sistema: num(d.valor_sistema), valor_contado: num(d.valor_contado),
+      faltante_cop: num(d.faltante_cop), sobrante_cop: num(d.sobrante_cop),
+      items_con_diferencia: d.items_con_diferencia ?? null, ajustado: !!Number(d.ajustado)
+    };
+  });
+}
+
+// POST /api/inventario-mensual/reabrir  { mes, admin_password }
+export async function reabrirInventarioMensual(req, res) {
+  const { mes, admin_password } = req.body || {};
+  if (!MES_VALIDO.test(mes || '')) return res.status(400).json({ error: 'Mes inválido (formato AAAA-MM).' });
+  try {
+    const r = await validarPasswordAdmin(req, admin_password);
+    if (!r.ok) return res.status(r.status).json({ error: r.error });
+    await db.transaction(async (tx) => {
+      const c = (await tx.query('SELECT * FROM cierres_inventario WHERE mes = $1', [mes]))[0];
+      if (!c) throw err(404, 'No hay inventario de ese mes.');
+      if (c.estado !== 'cerrado') throw err(400, 'Este inventario no está cerrado: se puede seguir contando.');
+      const items = await tx.query('SELECT nombre, unidad, seccion, contado, esperado, diferencia, costo_unitario FROM cierres_inventario_items WHERE cierre_id = $1', [c.id]);
+      const copia = {
+        cerrado_en: c.cerrado_en, usuario_nombre: c.usuario_nombre, autorizado_por: c.autorizado_por,
+        valor_sistema: c.valor_sistema, valor_contado: c.valor_contado, faltante_cop: c.faltante_cop, sobrante_cop: c.sobrante_cop,
+        items_contados: c.items_contados, items_con_diferencia: c.items_con_diferencia, ajustado: c.ajustado, items
+      };
+      await tx.execute('INSERT INTO cierres_inventario_reaperturas (cierre_id, mes, fecha, reabierto_por, autorizado_por, datos) VALUES ($1, $2, $3, $4, $5, $6)',
+        [c.id, mes, localNow(), req.usuario?.nombre || null, r.admin.nombre, JSON.stringify(copia)]);
+      await tx.execute('UPDATE cierres_inventario_items SET esperado = NULL, diferencia = NULL WHERE cierre_id = $1', [c.id]);
+      await tx.execute(`UPDATE cierres_inventario SET estado = 'borrador', cerrado_en = NULL, valor_sistema = NULL, valor_contado = NULL,
+          faltante_cop = NULL, sobrante_cop = NULL, items_contados = NULL, items_con_diferencia = NULL,
+          ajustado = 0, ajustado_por = NULL, ajustado_en = NULL, autorizado_por = NULL, reaperturas = COALESCE(reaperturas, 0) + 1
+        WHERE id = $1`, [c.id]);
+    });
+    // Quien lo reabre puede seguir contando de una vez (misma autorización que al entrar)
+    const autorizacion = firmarAutorizacion({ tipo: 'inventario-mensual', usuario_id: req.usuario.usuario_id, admin: r.admin.nombre }, DURACION_AUTORIZACION);
+    return res.json({ ok: true, autorizacion, admin: r.admin.nombre });
+  } catch (e) {
+    return responderError(res, e, 'Error al reabrir el inventario mensual:');
+  }
 }

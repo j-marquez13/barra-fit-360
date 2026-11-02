@@ -978,6 +978,18 @@ async function crearTablasConteos() {
   // Quién autorizó con su clave el inventario que registró el cajero
   if (pg) await db.execute('ALTER TABLE cierres_inventario ADD COLUMN IF NOT EXISTS autorizado_por TEXT');
   else { try { await db.execute('ALTER TABLE cierres_inventario ADD COLUMN autorizado_por TEXT'); } catch (e) { /* ya existe */ } }
+  // Veces que se reabrió para volver a contarlo (con la clave del admin) y copia de cada cierre anterior
+  if (pg) await db.execute('ALTER TABLE cierres_inventario ADD COLUMN IF NOT EXISTS reaperturas INTEGER NOT NULL DEFAULT 0');
+  else { try { await db.execute('ALTER TABLE cierres_inventario ADD COLUMN reaperturas INTEGER NOT NULL DEFAULT 0'); } catch (e) { /* ya existe */ } }
+  await db.execute(`CREATE TABLE IF NOT EXISTS cierres_inventario_reaperturas (
+    id ${id},
+    cierre_id INTEGER NOT NULL,
+    mes TEXT NOT NULL,
+    fecha TEXT NOT NULL,
+    reabierto_por TEXT,
+    autorizado_por TEXT,
+    datos TEXT
+  )`);
 }
 
 async function seedData() {

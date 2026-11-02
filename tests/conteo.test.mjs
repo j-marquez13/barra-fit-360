@@ -126,6 +126,25 @@ check('cajero: ya cerrado, no ve la comparación con el sistema', r.status === 2
 r = await api('GET', `/api/admin/inventario-mensual?mes=${mesAnterior}`, null, t);
 check('admin lo revisa: quién contó, quién autorizó y la comparación', r.status === 200 && r.data.cierre.usuario_nombre === 'Cajero Inventario' && r.data.cierre.autorizado_por === 'Admin Principal' && r.data.items.find(i => i.insumo_id === vaso).diferencia === -1, r.data.cierre);
 
+// VOLVER A HACER el inventario cerrado: solo con la clave del administrador
+r = await api('POST', '/api/inventario-mensual/reabrir', { mes: mesAnterior }, caj);
+check('reabrir sin clave -> 400', r.status === 400, r);
+r = await api('POST', '/api/inventario-mensual/reabrir', { mes: mesAnterior, admin_password: 'mala' }, caj);
+check('reabrir con clave equivocada -> 403', r.status === 403, r);
+r = await api('POST', '/api/inventario-mensual/reabrir', { mes: mesAnterior, admin_password: 'AdminPrueba1' }, caj);
+const autz2 = r.data && r.data.autorizacion;
+check('reabrir con la clave del admin -> el cajero puede seguir contando', r.status === 200 && !!autz2, r);
+r = await api('POST', '/api/inventario-mensual/reabrir', { mes: mesAnterior, admin_password: 'AdminPrueba1' }, caj);
+check('no se reabre lo que ya está abierto', r.status === 400, r);
+r = await api('GET', `/api/admin/inventario-mensual?mes=${mesAnterior}`, null, t);
+check('reabierto: vuelve a borrador con lo contado y guarda el cierre anterior', r.data.cierre.estado === 'borrador' && r.data.cierre.reaperturas === 1 &&
+  r.data.items.find(i => i.insumo_id === vaso).contado === 44 && r.data.reaperturas.length === 1 && r.data.reaperturas[0].autorizado_por === 'Admin Principal' && near(r.data.reaperturas[0].faltante_cop, 100), r.data);
+const res2 = await fetch(BASE + '/api/inventario-mensual', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-auth-token': caj, 'x-autorizacion-admin': autz2 },
+  body: JSON.stringify({ mes: mesAnterior, conteos: [{ insumo_id: lata, contado: 9 }, { insumo_id: vaso, contado: 45 }], cerrar: true }) });
+check('se vuelve a contar y cerrar', res2.status === 200);
+r = await api('GET', `/api/admin/inventario-mensual?mes=${mesAnterior}`, null, t);
+check('el nuevo cierre corrige la diferencia y mantiene el historial', r.data.cierre.estado === 'cerrado' && r.data.items.find(i => i.insumo_id === vaso).diferencia === 0 && r.data.reaperturas.length === 1, r.data.cierre);
+
 // Dejar una caja abierta para revisar la interfaz
 await api('POST', '/api/caja/abrir', { fondo_inicial_cop: 20000, turno: 'Tarde' }, t);
 console.log(`\nRESULTADO: ${fallos ? fallos + ' FALLAS' : 'todo OK'}`);

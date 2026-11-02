@@ -7072,6 +7072,7 @@ function pintarInventarioMensual() {
   if (!d || !cont) return;
   if (d.cierre && d.cierre.estado === 'cerrado') { pintarInventarioCerrado(d, cont); return; }
   pintarFormularioInventario(cont, d, (conteos, cerrar) => guardarInventarioMensualUI(conteos, cerrar));
+  if (d.reaperturas && d.reaperturas.length) cont.querySelector('.inv-aviso')?.insertAdjacentHTML('afterend', htmlReaperturas(d.reaperturas));
 }
 
 // Formulario del conteo mensual (a ciegas). Lo usan el admin (Cierres → Inventario Mensual)
@@ -7159,32 +7160,36 @@ function pintarInventarioCerrado(d, cont) {
     </div>
     <div class="inv-kpis">
       <div class="inv-kpi"><span>Según el sistema</span><strong>$${numTicket(c.valor_sistema)}</strong></div>
-      <div class="inv-kpi"><span>Contado</span><strong>$${numTicket(c.valor_contado)}</strong></div>
+      <div class="inv-kpi"><span>Físico (contado)</span><strong>$${numTicket(c.valor_contado)}</strong></div>
       <div class="inv-kpi"><span>Faltantes</span><strong style="color:var(--danger);">-$${numTicket(c.faltante_cop)}</strong></div>
       <div class="inv-kpi"><span>Sobrantes</span><strong style="color:var(--warning);">+$${numTicket(c.sobrante_cop)}</strong></div>
       <div class="inv-kpi"><span>Diferencia neta</span><strong style="color:${neta < 0 ? 'var(--danger)' : 'var(--success)'};">${neta < 0 ? '-' : '+'}$${numTicket(Math.abs(neta))} <small>(${pct.toLocaleString('de-DE', { maximumFractionDigits: 1 })}%)</small></strong></div>
     </div>
+    ${htmlReaperturas(d.reaperturas)}
+    <h4 style="margin:4px 0 8px;"><i data-lucide="list"></i> Producto por producto: sistema vs físico</h4>
     <div class="inv-barra">
-      <label style="display:flex; align-items:center; gap:6px; font-size:0.85rem; color:var(--color-muted);"><input type="checkbox" id="inv-solo-dif" checked> Solo con diferencia</label>
-      <span style="flex:1;"></span>
+      <input type="search" class="date-picker" id="inv-buscar-cerrado" placeholder="🔍 Buscar producto…" style="flex:1; min-width:180px;">
+      <label style="display:flex; align-items:center; gap:6px; font-size:0.85rem; color:var(--color-muted);"><input type="checkbox" id="inv-solo-dif"> Solo con diferencia</label>
+      <button class="action-btn" id="btn-inv-reabrir"><i data-lucide="rotate-ccw"></i> Volver a hacer</button>
       ${!c.ajustado && conDif.length ? '<button class="action-btn btn-primary" id="btn-inv-ajustar"><i data-lucide="wrench"></i> Ajustar stock al conteo</button>' : ''}
     </div>
     <div class="data-table-container">
       <table class="data-table">
-        <thead><tr><th>Sección</th><th>Producto</th><th>Contado</th><th>Sistema</th><th>Diferencia</th><th>Valor (costo)</th></tr></thead>
+        <thead><tr><th>Sección</th><th>Producto</th><th>Sistema</th><th>Físico (contado)</th><th>Diferencia</th><th>Valor (costo)</th></tr></thead>
         <tbody id="inv-tabla-cerrado"></tbody>
       </table>
     </div>`;
   const pintarFilas = () => {
     const solo = document.getElementById('inv-solo-dif').checked;
-    const filas = (solo ? conDif : d.items).map(i => {
+    const q = (document.getElementById('inv-buscar-cerrado').value || '').trim().toLowerCase();
+    const filas = (solo ? conDif : d.items).filter(i => !q || i.nombre.toLowerCase().includes(q)).map(i => {
       const dif = i.diferencia || 0;
       const cuadra = Math.abs(dif) <= 0.001;
       return `<tr>
         <td class="text-muted">${escHtml(i.seccion || '')}</td>
         <td>${escHtml(i.nombre)}</td>
-        <td class="font-outfit">${cantInv(i.contado)} <span class="text-muted" style="font-size:11px;">${escHtml(i.unidad || '')}</span></td>
-        <td class="font-outfit">${cantInv(i.esperado)}</td>
+        <td class="font-outfit">${cantInv(i.esperado)} <span class="text-muted" style="font-size:11px;">${escHtml(i.unidad || '')}</span></td>
+        <td class="font-outfit">${cantInv(i.contado)}</td>
         <td class="font-outfit" style="font-weight:bold; color:${cuadra ? 'var(--success)' : dif < 0 ? 'var(--danger)' : 'var(--warning)'};">${cuadra ? '0' : (dif < 0 ? '' : '+') + cantInv(dif)}</td>
         <td class="font-outfit">${cuadra ? '—' : (dif < 0 ? '-' : '+') + '$' + numTicket(Math.abs(i.valor_diferencia))}</td>
       </tr>`;
@@ -7192,7 +7197,9 @@ function pintarInventarioCerrado(d, cont) {
     document.getElementById('inv-tabla-cerrado').innerHTML = filas || '<tr><td colspan="6" class="loading-cell">✅ Todo lo contado cuadra con el sistema.</td></tr>';
   };
   document.getElementById('inv-solo-dif').addEventListener('change', pintarFilas);
+  document.getElementById('inv-buscar-cerrado').addEventListener('input', pintarFilas);
   pintarFilas();
+  document.getElementById('btn-inv-reabrir').onclick = () => reabrirInventario(d.mes, !!c.ajustado, () => loadInventarioMensual());
   const btnAjustar = document.getElementById('btn-inv-ajustar');
   if (btnAjustar) btnAjustar.onclick = async () => {
     if (!confirm(`¿Ajustar el stock del sistema a lo contado en ${nombreMes(d.mes)}?\n\n` +
@@ -7233,6 +7240,7 @@ async function pintarInventarioEnCierreMensual(mes, utilidadMes) {
       <div class="ctd-row"><span>Sobrantes</span><strong class="ctd-mono" style="color:var(--warning);">+$${numTicket(inv.sobrante_cop)}</strong></div>
       <div class="ctd-foot-row ${neta < 0 ? 'ctd-foot-danger' : 'ctd-foot-total'}"><span>Diferencia neta</span><strong class="ctd-mono">${neta < 0 ? '-' : '+'}$${numTicket(Math.abs(neta))} (${pct.toLocaleString('de-DE', { maximumFractionDigits: 1 })}%)</strong></div>
       <div class="ctd-row" style="font-size:12px;"><span class="text-muted">${inv.items_contados} contados · ${inv.items_con_diferencia} con diferencia · ${inv.ajustado ? 'stock ya ajustado' : 'stock sin ajustar'}</span></div>
+      <div class="ctd-row"><button class="action-btn btn-mini" onclick="verInventarioProductoPorProducto('${escHtml(mes)}')"><i data-lucide="list"></i> Ver sistema vs físico de cada producto</button></div>
       ${d.top_faltantes.length ? `<div class="ctd-row" style="font-size:12px; display:block;"><span class="text-muted">Mayores faltantes:</span> ${d.top_faltantes.map(f => `${escHtml(f.nombre)} (${cantInv(f.diferencia)})`).join(', ')}</div>` : ''}`
       : `<div class="ctd-row"><span class="text-muted">Todavía no se ha cerrado el inventario de este mes. Hazlo en <strong>Cierres → Inventario Mensual</strong>.</span></div>`;
 
@@ -7363,7 +7371,13 @@ async function cargarInventarioCajero() {
           <div style="font-size:2.5rem;">✅</div>
           <h3>El inventario de ${escHtml(nombreMes(d.mes))} ya está cerrado</h3>
           <p class="text-muted">Lo registró ${escHtml(d.cierre.usuario_nombre || '—')} el ${fechaCorta(d.cierre.cerrado_en)}${d.cierre.autorizado_por ? `, autorizado por ${escHtml(d.cierre.autorizado_por)}` : ''}. El administrador lo revisa.</p>
+          <button class="action-btn" id="btn-invc-reabrir"><i data-lucide="rotate-ccw"></i> Volver a hacerlo (clave del administrador)</button>
         </div>`;
+      document.getElementById('btn-invc-reabrir').onclick = () => reabrirInventario(d.mes, false, (r) => {
+        autorizacionInventario = { token: r.autorizacion, admin: r.admin };
+        cargarInventarioCajero();
+      });
+      lucide.createIcons();
       return;
     }
     pintarFormularioInventario(cont, d, guardarInventarioCajero);
@@ -7404,3 +7418,64 @@ async function guardarInventarioCajero(conteos, cerrar) {
     showToast(e.message, 'danger');
   }
 }
+
+// Historial de veces que se volvió a hacer el inventario del mes (con los totales del cierre anterior)
+function htmlReaperturas(lista) {
+  if (!lista || !lista.length) return '';
+  return `
+    <div class="inv-aviso" style="border-color:var(--warning);">
+      <strong>🔁 Este inventario se volvió a hacer ${lista.length} ${lista.length === 1 ? 'vez' : 'veces'}:</strong>
+      <ul style="margin:6px 0 0 18px; font-size:0.85rem; line-height:1.6;">${lista.map(r => `
+        <li>${fechaCorta(r.fecha)} · reabierto por ${escHtml(r.reabierto_por || '—')}, autorizó ${escHtml(r.autorizado_por || '—')}.
+          Cierre anterior (${escHtml(r.registrado_por || '—')}): sistema $${numTicket(r.valor_sistema)} · físico $${numTicket(r.valor_contado)} ·
+          <span style="color:var(--danger);">faltante -$${numTicket(r.faltante_cop)}</span>${r.ajustado ? ' · ya se había ajustado el stock' : ''}</li>`).join('')}
+      </ul>
+    </div>`;
+}
+
+// Volver a hacer un inventario mensual cerrado: siempre con la clave del administrador
+function reabrirInventario(mes, estabaAjustado, alTerminar) {
+  openGenericModal('🔒 Volver a hacer el inventario', `
+    <p style="margin-bottom:10px;">Se reabrirá el inventario de <strong>${escHtml(nombreMes(mes))}</strong> para volver a contarlo.</p>
+    <ul class="text-muted" style="margin:0 0 12px 18px; font-size:0.85rem; line-height:1.5;">
+      <li>Lo contado se mantiene, para corregir solo lo que haga falta.</li>
+      <li>El cierre anterior queda guardado en el historial.</li>
+      ${estabaAjustado ? '<li>El stock ya se había ajustado: ese ajuste se mantiene y el nuevo conteo se compara con el stock actual.</li>' : ''}
+    </ul>
+    <div class="form-group">
+      <label>Contraseña de Administrador</label>
+      <input type="password" id="reabrir-admin-pass" placeholder="Clave del administrador" autocomplete="new-password">
+    </div>`, async () => {
+    const pass = document.getElementById('reabrir-admin-pass').value;
+    if (!pass) { showToast('Escribe la clave del administrador.', 'warning'); return; }
+    DOM.btnSubmitGeneric.disabled = true;
+    try {
+      const res = await fetch('/api/inventario-mensual/reabrir', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mes, admin_password: pass })
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'No se pudo reabrir.');
+      closeGenericModal();
+      showToast(`Inventario de ${nombreMes(mes)} reabierto (autorizó ${d.admin}).`, 'success');
+      alTerminar(d);
+    } catch (e) {
+      showToast(e.message, 'danger');
+      DOM.btnSubmitGeneric.disabled = false;
+      const inp = document.getElementById('reabrir-admin-pass');
+      if (inp) { inp.value = ''; inp.focus(); }
+    }
+  });
+  DOM.btnSubmitGeneric.innerHTML = '<i data-lucide="rotate-ccw"></i> Reabrir';
+  lucide.createIcons();
+  setTimeout(() => document.getElementById('reabrir-admin-pass')?.focus(), 100);
+}
+
+// Desde el Cierre Mensual: abrir Cierres → Inventario Mensual en ese mes
+window.verInventarioProductoPorProducto = function (mes) {
+  switchView('cierres');
+  document.querySelector('[data-cierres-tab="inventario"]')?.click();
+  const sel = document.getElementById('inv-mes');
+  if (sel) { sel.value = mes; loadInventarioMensual(); }
+};
