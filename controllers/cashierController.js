@@ -423,13 +423,26 @@ export async function cierreDia(req, res) {
       WHERE ${dateExpr('fecha_apertura')} = $1 AND estado = 'Cerrada'
     `, [fecha]);
 
-    // Desglose por método de pago (ventas de contado y abonos) del día
+    // Desglose por método de pago (ventas de contado y abonos) del día.
+    // Se suman los pagos registrados DENTRO de los turnos cerrados de ese día (los mismos que
+    // suma el total y el historial), no los pagos por su propia fecha: así un turno que cruza
+    // la medianoche cuenta completo en su día, y un turno aún abierto no se cuela.
+    // Los montos son los registrados en cada pago (no se recalcula ninguna tasa).
+    // fecha_cierre se guarda en hora local; en SQLite los pagos están en UTC (+4 h).
+    const cierreExpr = isPostgres()
+      ? 's.fecha_cierre'
+      : "datetime(replace(substr(s.fecha_cierre, 1, 19), 'T', ' '), '+4 hours')";
+    const turnosDelDia = `
+      JOIN sesiones_caja s
+        ON s.estado = 'Cerrada' AND ${dateExpr('s.fecha_apertura')} = $1
+       AND {fecha} >= s.fecha_apertura AND {fecha} <= ${cierreExpr}`;
     const ventasDetalleQuery = `
       SELECT pv.moneda, pv.metodo_pago,
              SUM(pv.monto_original) as total_original, MIN(pv.tasa_cambio) as tasa_min, MAX(pv.tasa_cambio) as tasa_max,
              SUM(pv.monto_base) as total_base
       FROM pagos_ventas pv JOIN ventas v ON pv.venta_id = v.id
-      WHERE ${dateExpr('pv.fecha')} = $1 AND pv.metodo_pago != 'Crédito' AND v.tipo_transaccion != 'Anulada'
+      ${turnosDelDia.replaceAll('{fecha}', 'pv.fecha')}
+      WHERE pv.metodo_pago != 'Crédito' AND v.tipo_transaccion != 'Anulada'
       GROUP BY pv.moneda, pv.metodo_pago
     `;
     const ventasDetalleData = await db.query(ventasDetalleQuery, [fecha]);
@@ -439,7 +452,7 @@ export async function cierreDia(req, res) {
              SUM(pa.monto_original) as total_original, MIN(pa.tasa_cambio) as tasa_min, MAX(pa.tasa_cambio) as tasa_max,
              SUM(pa.monto_base) as total_base
       FROM pagos_abonos pa
-      WHERE ${dateExpr('pa.fecha')} = $1
+      ${turnosDelDia.replaceAll('{fecha}', 'pa.fecha')}
       GROUP BY pa.moneda, pa.metodo_pago
     `;
     const abonosDetalleData = await db.query(abonosDetalleQuery, [fecha]);

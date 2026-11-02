@@ -1527,6 +1527,17 @@
             <div class="kpi-card"><div class="kpi-value">Cargando...</div></div>
           </div>
 
+          <!-- RESPALDO DE DATOS (solo administrador; app3.js la muestra) -->
+          <div id="respaldo-card" style="display:none; margin-top: 2rem; border: 1px solid var(--border-glass); border-radius: 12px; padding: 20px; background: var(--bg-card);">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+              <div>
+                <h3 style="margin:0; font-size:1.05rem;"><i data-lucide="database-backup" style="width:18px; height:18px; vertical-align:-3px;"></i> Respaldo de datos</h3>
+                <p class="text-muted" style="margin:6px 0 0; font-size:0.85rem;" id="respaldo-estado">Cada noche el sistema te envía por WhatsApp una copia de todos los datos.</p>
+              </div>
+              <button class="action-btn btn-primary" id="btn-descargar-respaldo" onclick="descargarRespaldo()"><i data-lucide="download"></i> Descargar respaldo ahora</button>
+            </div>
+          </div>
+
           <!-- ZONA DE PELIGRO: Reset del Sistema -->
           <div id="reset-zona-peligro" style="margin-top: 3rem; border: 2px solid #ef4444; border-radius: 12px; padding: 24px; background: rgba(239, 68, 68, 0.04);">
             <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
@@ -2535,7 +2546,7 @@
     </div>
   </div>
 
-  <script src="app3.js?v=62"></script>
+  <script src="app3.js?v=63"></script>
   <script src="whatsapp.js?v=7"></script>
 <!-- Script to automatically replace commas with dots in number inputs -->
   <script>

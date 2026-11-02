@@ -19,6 +19,7 @@ import { signToken, verifyToken, requireAuth, requireAdmin, requirePermiso, revo
 import * as whatsapp from './controllers/whatsappController.js';
 import { iniciarMantenerDespierto } from './mantenerDespierto.js';
 import { obtenerTasas, fijarTasa, historialTasas } from './tasas.js';
+import { generarRespaldo } from './respaldo.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -434,7 +435,16 @@ app.get('/api/tesoreria/saldos', tesoreria, getSaldos);
 app.get('/api/backup', requireAdmin, async (req, res) => {
   const isPg = !!(process.env.DATABASE_URL || process.env.PGHOST);
   if (isPg) {
-    return res.status(400).send('La base de datos actual es PostgreSQL, no SQLite. El respaldo debe hacerse desde Railway.');
+    // PostgreSQL (Neon): todos los datos en un archivo JSON comprimido
+    try {
+      const r = await generarRespaldo();
+      res.setHeader('Content-Type', 'application/gzip');
+      res.setHeader('Content-Disposition', `attachment; filename="${r.nombreArchivo}"`);
+      return res.send(r.buffer);
+    } catch (e) {
+      console.error('Error generando el respaldo:', e);
+      return res.status(500).send('No se pudo generar el respaldo.');
+    }
   }
   
   const fs = await import('fs');
@@ -524,6 +534,7 @@ app.post('/api/whatsapp/reporte-semanal/config', credito, whatsapp.reporteSemana
 app.post('/api/whatsapp/reporte-semanal/enviar', credito, whatsapp.reporteSemanalEnviarAhora);
 // Aviso de inicio de turno (solo administrador)
 app.get('/api/whatsapp/aviso-turno/estado', requireAdmin, whatsapp.avisoTurnoEstado);
+app.get('/api/respaldo/estado', requireAdmin, whatsapp.respaldoEstado);
 app.post('/api/whatsapp/aviso-turno/config', requireAdmin, whatsapp.avisoTurnoGuardarConfig);
 app.post('/api/whatsapp/aviso-turno/probar', requireAdmin, whatsapp.avisoTurnoProbar);
 

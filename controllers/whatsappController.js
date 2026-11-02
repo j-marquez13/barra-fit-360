@@ -2,6 +2,7 @@
 // Controlador de Recordatorios WhatsApp (Baileys)
 // Sesión persistente en Neon + envío masivo con límite diario.
 // ============================================
+import { generarRespaldo } from '../respaldo.js';
 import makeWASocket, {
   initAuthCreds,
   BufferJSON,
@@ -431,9 +432,65 @@ function registrarApagado() {
 // vivo unos segundos; así alcanza a guardar sus claves antes de que este las cargue.
 const ESPERA_INICIO_MS = parseInt(process.env.WA_ESPERA_INICIO_MS || '15000', 10);
 
+// ============================================
+// RESPALDO DIARIO POR WHATSAPP: cada noche (desde las 21:30, hora de Venezuela) se envía al
+// número del dueño (el del resumen semanal) un archivo con todos los datos. Si WhatsApp no
+// está conectado se reintenta cada 15 minutos mientras el servidor esté despierto.
+// ============================================
+const RESPALDO_HORA_MIN = 21 * 60 + 30;
+
+async function checkYEnviarRespaldo() {
+  try {
+    if (process.env.RESPALDO_DIARIO === '0') return;
+    const local = localDateTime();
+    const hoy = local.toISOString().slice(0, 10);
+    if (local.getUTCHours() * 60 + local.getUTCMinutes() < RESPALDO_HORA_MIN) return;
+    if ((await getConfig('respaldo_ultimo_envio')) === hoy) return;
+    if (status !== 'conectado' || !sock) return;
+    const telefono = normalizePhone(await getConfig('reporte_semanal_telefono'));
+    if (!telefono) return;
+    const r = await generarRespaldo();
+    await sock.sendMessage(toJid(telefono), {
+      document: r.buffer,
+      mimetype: 'application/gzip',
+      fileName: r.nombreArchivo,
+      caption: `🗄️ Respaldo diario de Fit 360 (${hoy}) · ${r.resumen.filas} registros.\nGuárdalo: sirve para recuperar los datos si algo se borra por error.`
+    });
+    await setConfig('respaldo_ultimo_envio', hoy);
+    await logEnvio(telefono, `Respaldo ${r.nombreArchivo}`, 'respaldo');
+    logger.info(`🗄️ Respaldo diario enviado (${r.resumen.filas} registros).`);
+  } catch (e) {
+    logger.error('Error enviando el respaldo diario:', e.message);
+  }
+}
+
+let respaldoTimer = null;
+function startRespaldoScheduler() {
+  if (respaldoTimer) return;
+  respaldoTimer = setInterval(checkYEnviarRespaldo, 15 * 60 * 1000);
+  setTimeout(checkYEnviarRespaldo, 2 * 60 * 1000);
+}
+
+// GET /api/respaldo/estado (admin): último respaldo enviado y a qué número
+export async function respaldoEstado(req, res) {
+  try {
+    const tel = normalizePhone(await getConfig('reporte_semanal_telefono'));
+    res.json({
+      ultimo_envio: await getConfig('respaldo_ultimo_envio'),
+      hora: '21:30',
+      destino: tel ? tel.slice(0, 5) + '****' + tel.slice(-2) : null,
+      whatsapp_conectado: status === 'conectado' && !!sock,
+      activado: process.env.RESPALDO_DIARIO !== '0'
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+}
+
 export function initWhatsApp() {
   startWatchdog();
   startReporteSemanalScheduler();
+  startRespaldoScheduler();
   registrarApagado();
   limpiarMensajesViejos();
   (async () => {
@@ -693,7 +750,7 @@ export async function progreso(req, res) {
 // RESUMEN SEMANAL DE COBRANZA (automatizado)
 // ============================================
 const REPORTE_SEMANAL_DEFECTO = {
-  telefono: '584247805402',
+  telefono: '',      // el número se configura en Cuentas por Cobrar → WhatsApp (no va escrito en el código)
   dia: 1,            // 1 = Lunes (0=Dom ... 6=Sáb)
   hora: '08:00'
 };
@@ -860,7 +917,7 @@ async function getAvisoTurnoConfig() {
   const raw = await getConfig('aviso_turno_telefonos');
   // Por defecto, el mismo número que recibe el resumen semanal (el del dueño)
   const telefonos = raw === null
-    ? [(await getConfig('reporte_semanal_telefono')) || REPORTE_SEMANAL_DEFECTO.telefono]
+    ? [(await getConfig('reporte_semanal_telefono')) || REPORTE_SEMANAL_DEFECTO.telefono].filter(Boolean)
     : raw.split(',').map(s => s.trim()).filter(Boolean);
   const activado = (await getConfig('aviso_turno_activado')) !== '0';
   return { telefonos, activado };

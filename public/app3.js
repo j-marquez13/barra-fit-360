@@ -631,7 +631,7 @@ function switchView(viewName) {
   if (viewName === 'credito') loadClientesData();
   if (viewName === 'reportes') loadCierreDiario();
   if (viewName === 'caja') loadCajaData();
-  if (viewName === 'tesoreria') loadTesoreriaData();
+  if (viewName === 'tesoreria') { loadTesoreriaData(); cargarEstadoRespaldo(); }
   if (viewName === 'usuarios') loadUsuariosData();
   if (viewName === 'cierres') loadCierresAdmin();
   if (viewName === 'inventario-mes') abrirInventarioCajero();
@@ -7680,3 +7680,52 @@ function ventaCobradaDesdeEspera() {
 setInterval(() => {
   if (!estaSinConexion() && sessionStorage.getItem('bf360_auth') && hayTurnoAbierto()) cargarFacturasEspera();
 }, 60000);
+
+// ============================================
+// RESPALDO DE DATOS (Tesorería, solo administrador)
+// ============================================
+async function cargarEstadoRespaldo() {
+  const card = document.getElementById('respaldo-card');
+  if (!card) return;
+  try {
+    const res = await fetch('/api/respaldo/estado');
+    if (!res.ok) { card.style.display = 'none'; return; } // no es administrador
+    const d = await res.json();
+    card.style.display = '';
+    const partes = [];
+    if (d.activado && d.destino) partes.push(`Cada noche (desde las ${d.hora}) se envía una copia de todos los datos por WhatsApp al ${escHtml(d.destino)}.`);
+    else partes.push('El respaldo automático por WhatsApp no tiene número configurado (Cuentas por Cobrar → WhatsApp, resumen semanal).');
+    partes.push(d.ultimo_envio ? `Último enviado: <strong>${escHtml(d.ultimo_envio.split('-').reverse().join('/'))}</strong>.` : 'Todavía no se ha enviado ninguno.');
+    if (!d.whatsapp_conectado) partes.push('<span style="color:var(--warning);">WhatsApp no está conectado ahora.</span>');
+    document.getElementById('respaldo-estado').innerHTML = partes.join(' ');
+    lucide.createIcons();
+  } catch (e) { card.style.display = 'none'; }
+}
+
+window.descargarRespaldo = async function () {
+  const btn = document.getElementById('btn-descargar-respaldo');
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i data-lucide="loader"></i> Generando…';
+  lucide.createIcons();
+  try {
+    const res = await fetch('/api/backup');
+    if (!res.ok) throw new Error((await res.text()) || 'No se pudo generar el respaldo.');
+    const nombre = (res.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/)?.[1] || `respaldo_fit360_${localDateStr()}.json.gz`;
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nombre;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    showToast('Respaldo descargado. Guárdalo en un lugar seguro (Drive, correo…).', 'success');
+  } catch (e) {
+    showToast(e.message, 'danger');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = original;
+    lucide.createIcons();
+  }
+};
