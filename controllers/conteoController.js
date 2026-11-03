@@ -269,7 +269,8 @@ const MES_VALIDO = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 async function seccionesInsumos(q = db.query) {
   const nevera = new Set((await insumosNevera(q)).map(i => Number(i.id)));
-  const todos = await q('SELECT id, nombre, unidad_medida, stock_actual, costo_unitario, es_para_batidos, es_base_liquida, es_sabor_batido FROM insumos ORDER BY nombre ASC');
+  // Los que no tienen stock fijo ni costo no se cuentan: no aportan nada al cierre del mes
+  const todos = await q('SELECT id, nombre, unidad_medida, stock_actual, costo_unitario, es_para_batidos, es_base_liquida, es_sabor_batido FROM insumos WHERE COALESCE(stock_fijo, 0) > 0 OR COALESCE(costo_unitario, 0) > 0 ORDER BY nombre ASC');
   const si = (v) => v === true || v === 1 || v === '1' || v === 't';
   return todos.map(i => ({
     ...i,
