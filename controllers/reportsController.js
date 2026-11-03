@@ -1,5 +1,46 @@
 import * as db from '../db.js';
-import { localDate, dateExpr, dateAgo } from '../db.js';
+import { localDate, dateExpr, dateAgo, isPostgres } from '../db.js';
+
+// Fecha y hora de Venezuela para mostrar (PostgreSQL guarda hora local; SQLite, UTC)
+function fechaHora(v) {
+  if (!v) return '';
+  const d = v instanceof Date ? v : new Date(isPostgres() || /[zZ]|[+-]\d\d:?\d\d$/.test(v) ? v : String(v).replace(' ', 'T') + 'Z');
+  if (isNaN(d)) return String(v);
+  return d.toLocaleString('es-VE', { timeZone: 'America/Caracas', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+/**
+ * Ventas a crédito con el nombre del cliente (quién quedó debiendo) y sus productos.
+ * Devuelve { ventas: [...], por_cliente: [...] } para los reportes y el ticket de cierre.
+ */
+export async function ventasACredito(where, params, join = '') {
+  const filas = await db.query(`
+    SELECT v.id AS venta_id, v.fecha, v.cliente_id, c.nombre AS cliente, c.saldo_deudor, SUM(pv.monto_base) AS monto
+    FROM pagos_ventas pv JOIN ventas v ON pv.venta_id = v.id ${join}
+    LEFT JOIN clientes c ON c.id = v.cliente_id
+    WHERE ${where} AND v.tipo_transaccion = 'Venta' AND pv.metodo_pago = 'Crédito'
+    GROUP BY v.id, v.fecha, v.cliente_id, c.nombre, c.saldo_deudor
+    ORDER BY v.fecha ASC`, params);
+  const productos = {};
+  if (filas.length) {
+    const ids = filas.map(f => Number(f.venta_id));
+    const det = await db.query(`SELECT dv.venta_id, dv.cantidad, p.nombre FROM detalle_ventas dv JOIN productos p ON p.id = dv.producto_id
+      WHERE dv.venta_id IN (${ids.map((_, i) => '$' + (i + 1)).join(', ')})`, ids);
+    for (const d of det) (productos[d.venta_id] = productos[d.venta_id] || []).push(`${parseFloat(d.cantidad)}x ${d.nombre}`);
+  }
+  const ventas = filas.map(f => ({
+    venta_id: f.venta_id, fecha: fechaHora(f.fecha), cliente: f.cliente || 'Sin cliente', cliente_id: f.cliente_id,
+    monto: parseFloat(f.monto) || 0, productos: (productos[f.venta_id] || []).join(', ')
+  }));
+  const grupos = {};
+  for (const f of filas) {
+    const k = f.cliente_id || 0;
+    grupos[k] = grupos[k] || { cliente: f.cliente || 'Sin cliente', cliente_id: f.cliente_id, ventas: 0, total: 0, debe_hoy: f.saldo_deudor !== null && f.saldo_deudor !== undefined ? parseFloat(f.saldo_deudor) : null };
+    grupos[k].ventas++;
+    grupos[k].total += parseFloat(f.monto) || 0;
+  }
+  return { ventas, por_cliente: Object.values(grupos).sort((a, b) => b.total - a.total) };
+}
 
 /**
  * Controlador de Reportes — Cierre Diario, Cierre Semanal e Historial
@@ -146,8 +187,11 @@ export async function cierreDiario(req, res) {
       WHERE ${dateFilter} GROUP BY v.id ORDER BY v.fecha DESC
     `, [fecha]);
 
+    const creditos = await ventasACredito(dateFilter, [fecha]);
+
     return res.json({
       fecha,
+      creditos,
       resumen: {
         total_transacciones: parseInt(ventasResumen[0]?.total_transacciones || 0),
         ingresos_totales_cop: ventasContadoCop,
@@ -431,8 +475,11 @@ export async function cierreRango(req, res) {
     const utilidadNeta = totalVentas - costoProduccion - totalMermas;
     const margenUtilidad = totalVentas > 0 ? Math.round((utilidadNeta / totalVentas) * 10000) / 100 : 0;
 
+    const creditos = await ventasACredito(`${dateFilterVentas} ${turnoCondition}`, params, turnoJoin);
+
     return res.json({
       periodo: { desde, hasta, turno_desde: turnoDesde, turno_hasta: turnoHasta },
+      creditos,
       resumen: {
         total_transacciones: parseInt(resumenRango[0]?.total_transacciones || 0),
         ingresos_totales_cop: ventasContadoCop,
@@ -460,66 +507,88 @@ export async function cierreRango(req, res) {
 // GET /api/reportes/ventas — Historial de ventas con filtros
 export async function historialVentas(req, res) {
   try {
-    const { desde, hasta, limit } = req.query;
+    const { desde, hasta } = req.query;
+    const incluirAnuladas = req.query.anuladas === '1' || req.query.anuladas === 'true';
+    const limite = Math.min(Math.max(parseInt(req.query.limit, 10) || 500, 1), 2000);
 
-    let conditions = [];
-    let params = [];
-    let paramIndex = 1;
+    const conditions = [];
+    const params = [];
+    if (desde) { params.push(desde); conditions.push(`${dateExpr('v.fecha')} >= $${params.length}`); }
+    if (hasta) { params.push(hasta); conditions.push(`${dateExpr('v.fecha')} <= $${params.length}`); }
+    if (!incluirAnuladas) conditions.push(`v.tipo_transaccion != 'Anulada'`);
+    const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    if (desde) {
-      conditions.push(`${dateExpr('v.fecha')} >= $${paramIndex}`);
-      params.push(desde);
-      paramIndex++;
-    }
-    if (hasta) {
-      conditions.push(`${dateExpr('v.fecha')} <= $${paramIndex}`);
-      params.push(hasta);
-      paramIndex++;
-    }
-
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')} AND v.tipo_transaccion != 'Anulada'` : `WHERE v.tipo_transaccion != 'Anulada'`;
-    const limitClause = `LIMIT ${parseInt(limit) || 50}`;
-
+    // Cajero y turno: el turno de caja en el que cayó la venta
     const ventas = await db.query(`
-      SELECT 
-        v.id,
-        v.fecha,
-        v.total,
-        v.tasa_cambio,
-        v.notas,
-        c.nombre as cliente_nombre
+      SELECT v.id, v.fecha, v.total, v.tasa_cambio, v.notas, v.tipo_transaccion, v.cliente_id,
+        c.nombre AS cliente_nombre,
+        (SELECT u.nombre FROM sesiones_caja s JOIN usuarios u ON u.id = s.usuario_id
+          WHERE v.fecha >= s.fecha_apertura AND (s.fecha_cierre IS NULL OR v.fecha <= s.fecha_cierre)
+          ORDER BY s.id DESC LIMIT 1) AS cajero,
+        (SELECT s.turno FROM sesiones_caja s
+          WHERE v.fecha >= s.fecha_apertura AND (s.fecha_cierre IS NULL OR v.fecha <= s.fecha_cierre)
+          ORDER BY s.id DESC LIMIT 1) AS turno
       FROM ventas v
       LEFT JOIN clientes c ON v.cliente_id = c.id
       ${whereClause}
-      ORDER BY v.fecha DESC
-      ${limitClause}
+      ORDER BY v.fecha DESC, v.id DESC
+      LIMIT ${limite}
     `, params);
 
-    // Para cada venta, obtener los detalles y pagos
-    const ventasDetalladas = [];
-    for (const venta of ventas) {
-      const detalles = await db.query(`
-        SELECT dv.cantidad, dv.precio_unitario, dv.subtotal, p.nombre as producto
-        FROM detalle_ventas dv
-        JOIN productos p ON dv.producto_id = p.id
-        WHERE dv.venta_id = $1
-      `, [venta.id]);
+    // Productos y pagos de todas las ventas en dos consultas (no una por venta)
+    const ids = ventas.map(v => Number(v.id));
+    const marcas = ids.map((_, i) => '$' + (i + 1)).join(', ');
+    const detalles = ids.length ? await db.query(`
+      SELECT dv.venta_id, dv.cantidad, dv.precio_unitario, dv.subtotal, p.nombre AS producto
+      FROM detalle_ventas dv JOIN productos p ON dv.producto_id = p.id
+      WHERE dv.venta_id IN (${marcas}) ORDER BY dv.id`, ids) : [];
+    const pagos = ids.length ? await db.query(`
+      SELECT venta_id, metodo_pago, moneda, monto_original, tasa_cambio, monto_base, referencia
+      FROM pagos_ventas WHERE venta_id IN (${marcas}) ORDER BY id`, ids) : [];
+    const agrupar = (filas) => filas.reduce((m, f) => { (m[f.venta_id] = m[f.venta_id] || []).push(f); return m; }, {});
+    const detPorVenta = agrupar(detalles), pagPorVenta = agrupar(pagos);
 
-      const pagos = await db.query(`
-        SELECT metodo_pago, moneda, monto_original, tasa_cambio, monto_base, referencia
-        FROM pagos_ventas
-        WHERE venta_id = $1
-      `, [venta.id]);
+    const fechaTexto = (v) => {
+      if (!v) return '';
+      const d = v instanceof Date ? v : new Date(isPostgres() || /[zZ]|[+-]\d\d:?\d\d$/.test(v) ? v : String(v).replace(' ', 'T') + 'Z');
+      return isNaN(d) ? String(v) : d.toLocaleString('es-VE', { timeZone: 'America/Caracas', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+    };
 
-      ventasDetalladas.push({
-        ...venta,
-        detalles,
-        pagos
-      });
-    }
+    const resumen = { ventas: 0, total_cop: 0, contado_cop: 0, credito_cop: 0, cortesias: 0, anuladas: 0, por_metodo: {} };
+    const ventasDetalladas = ventas.map(v => {
+      const pagosVenta = (pagPorVenta[v.id] || []).map(p => ({
+        metodo_pago: p.metodo_pago, moneda: p.moneda, monto_original: parseFloat(p.monto_original) || 0,
+        monto_base: parseFloat(p.monto_base) || 0, tasa_cambio: parseFloat(p.tasa_cambio) || 1, referencia: p.referencia || null
+      }));
+      if (v.tipo_transaccion === 'Anulada') resumen.anuladas++;
+      else {
+        resumen.ventas++;
+        resumen.total_cop += parseFloat(v.total) || 0;
+        if (v.tipo_transaccion === 'Cortesia') resumen.cortesias++;
+        for (const p of pagosVenta) {
+          if (p.metodo_pago === 'Crédito') resumen.credito_cop += p.monto_base; else resumen.contado_cop += p.monto_base;
+          const k = p.metodo_pago;
+          resumen.por_metodo[k] = resumen.por_metodo[k] || { moneda: p.moneda, monto: 0, cop: 0, pagos: 0 };
+          resumen.por_metodo[k].monto += p.monto_original;
+          resumen.por_metodo[k].cop += p.monto_base;
+          resumen.por_metodo[k].pagos++;
+        }
+      }
+      return {
+        ...v,
+        fecha_txt: fechaTexto(v.fecha),
+        detalles: (detPorVenta[v.id] || []).map(d => ({
+          producto: d.producto, cantidad: parseFloat(d.cantidad) || 0,
+          precio_unitario: parseFloat(d.precio_unitario) || 0, subtotal: parseFloat(d.subtotal) || 0
+        })),
+        pagos: pagosVenta
+      };
+    });
 
     return res.json({
       total_resultados: ventasDetalladas.length,
+      limite_alcanzado: ventasDetalladas.length === limite,
+      resumen,
       ventas: ventasDetalladas
     });
   } catch (error) {

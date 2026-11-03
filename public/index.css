@@ -4194,3 +4194,26 @@ select.receta-insumo option {
 .tes-saldo-fila td { font-weight: 700; background: var(--bg-surface); }
 .tes-mov-ajuste td, .tes-mov-aporte td, .tes-mov-retiro td { background: rgba(245, 158, 11, 0.06); }
 .tes-mov-anulacion td { opacity: 0.8; }
+.ctd-creditos { padding: 2px 0 6px 14px; font-size: 0.85rem; }
+.ctd-creditos .ctd-row { padding: 2px 0; }
+
+/* ============================================
+   HISTORIAL DE VENTAS
+   ============================================ */
+.hist-filtros { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+.hist-filtros #hist-buscar { flex: 1; min-width: 220px; }
+.hist-check { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--color-muted); }
+.hist-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-bottom: 8px; }
+.hist-kpi { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border-glass); background: var(--bg-card); }
+.hist-kpi span { font-size: 0.75rem; color: var(--color-muted); }
+.hist-kpi strong { font-family: var(--font-title); font-size: 1.1rem; }
+.hist-metodos { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.hist-chip { font-size: 0.8rem; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border-glass); background: var(--bg-surface); }
+.hist-chip-credito { border-color: var(--warning); color: var(--warning); }
+.hist-tabla td { vertical-align: top; }
+.hist-lista { font-size: 0.85rem; line-height: 1.5; }
+.hist-pago-credito { color: var(--warning); }
+.hist-tag { display: inline-block; margin-top: 3px; font-size: 0.7rem; font-weight: 700; padding: 1px 6px; border-radius: 6px; border: 1px solid var(--border-glass); }
+.hist-tag-anulada { color: var(--danger); border-color: var(--danger); }
+.hist-anulada td { opacity: 0.6; background: rgba(239, 68, 68, 0.05); }
+.hist-anular { width: auto; background: transparent !important; color: var(--danger) !important; border: 1px solid var(--danger) !important; white-space: nowrap; }

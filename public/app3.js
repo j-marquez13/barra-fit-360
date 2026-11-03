@@ -539,6 +539,9 @@ checkApiHealth();
   document.getElementById('btn-load-semanal')?.addEventListener('click', loadCierreSemanal);
   document.getElementById('btn-load-mensual')?.addEventListener('click', loadCierreMensual);
   document.getElementById('btn-load-historial')?.addEventListener('click', loadHistorial);
+  document.getElementById('hist-buscar')?.addEventListener('input', () => pintarHistorial());
+  document.getElementById('hist-metodo')?.addEventListener('change', () => pintarHistorial());
+  document.getElementById('hist-anuladas')?.addEventListener('change', loadHistorial);
 
   // Cierres (admin)
   document.getElementById('btn-load-cierres')?.addEventListener('click', loadCierresAdmin);
@@ -3332,6 +3335,7 @@ async function loadCierreDiario() {
     
     document.getElementById('kpi-ventas').textContent = `${data.resumen.ingresos_totales_cop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     document.getElementById('kpi-transacciones').textContent = `${data.resumen.total_transacciones} transacciones`;
+    pintarCreditosReporte('creditos-diario', data.creditos, true);
     if (document.getElementById('kpi-credito')) {
       document.getElementById('kpi-credito').textContent = `${(data.resumen.ventas_credito_cop || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}`;
     }
@@ -3486,6 +3490,7 @@ async function loadCierreSemanal() {
     if (turnoHasta) url += `&turno_hasta=${encodeURIComponent(turnoHasta)}`;
 
     const data = await fetch(url).then(r => r.json());
+    pintarCreditosReporte('creditos-semanal', data.creditos, true);
 
     const ingresos = data.resumen.ingresos_totales_cop || 0;
     const costo = data.resumen.costo_produccion || 0;
@@ -3578,6 +3583,7 @@ async function loadCierreMensual() {
     const hasta = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
     const data = await fetch(`/api/reportes/cierre-rango?desde=${desde}&hasta=${hasta}`).then(r => r.json());
+    pintarCreditosReporte('creditos-mensual', data.creditos, false);
 
     const ingresos = data.resumen.ingresos_totales_cop || 0;
     const costo = data.resumen.costo_produccion || 0;
@@ -3674,17 +3680,39 @@ async function loadCierreMensual() {
   }
 }
 
+// ============================================
+// HISTORIAL DE VENTAS: cada venta con quién la cobró, el cliente, los productos con su precio
+// y cada pago con su monto y moneda. Filtros por texto, método de pago y anuladas.
+// ============================================
+let historialDatos = null;
+
+function montoMoneda(monto, moneda) {
+  const m = String(moneda || 'COP').toUpperCase();
+  const v = (Number(monto) || 0).toLocaleString('de-DE', { minimumFractionDigits: m === 'COP' ? 0 : 2, maximumFractionDigits: 2 });
+  if (m === 'COP') return '$' + v;
+  if (m === 'VES') return 'Bs ' + v;
+  if (m === 'USD') return 'US$' + v;
+  return v + ' ' + m;
+}
+
+// Cliente de la venta: el de crédito, o el de la factura en espera (va en las notas)
+function clienteDeVenta(v) {
+  if (v.cliente_nombre) return v.cliente_nombre;
+  const m = /Cliente:\s*([^·\n]+)/.exec(v.notas || '');
+  return m ? m[1].trim() : '';
+}
+
 // Filas de las ventas hechas sin internet que todavía no llegan al servidor
 function filasVentasPendientes() {
-  const fmt = (n) => Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 });
   return ventasPendientes().slice().reverse().map(v => `
         <tr style="background-color:rgba(255,193,7,0.10);">
           <td><span style="font-size:0.8rem; font-weight:bold; color:#b58100;">⏳ Pendiente de subir</span></td>
-          <td>${new Date(v.fecha).toLocaleString('es-ES')}</td>
-          <td class="font-outfit">$${fmt(v.total)}</td>
+          <td style="white-space:nowrap;">${new Date(v.fecha).toLocaleString('es-VE', { timeZone: 'America/Caracas', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })}</td>
+          <td>${escHtml(v.cajero || '—')}</td>
+          <td>—</td>
           <td>${escHtml(v.resumen || '-')}</td>
           <td>${escHtml(v.pagos_resumen || '-')}</td>
-          <td>${escHtml(v.payload?.notas || '-')}</td>
+          <td class="font-outfit">$${numTicket(v.total)}</td>
           <td><span class="text-muted" style="font-size:0.8rem;">Sin internet</span></td>
         </tr>`).join('');
 }
@@ -3694,44 +3722,92 @@ async function loadHistorial() {
   const pendientesHtml = filasVentasPendientes();
   if (estaSinConexion()) {
     if (tbody) tbody.innerHTML = pendientesHtml ||
-      '<tr><td colspan="7" class="loading-cell">Sin conexión: solo se ven las ventas pendientes de esta tablet.</td></tr>';
+      '<tr><td colspan="8" class="loading-cell">Sin conexión: solo se ven las ventas pendientes de esta tablet.</td></tr>';
     return;
   }
   const desde = document.getElementById('hist-desde').value;
   const hasta = document.getElementById('hist-hasta').value;
+  const anuladas = document.getElementById('hist-anuladas')?.checked ? '&anuladas=1' : '';
+  tbody.innerHTML = '<tr><td colspan="8" class="loading-cell">Cargando…</td></tr>';
   try {
-    const data = await fetch(`/api/reportes/ventas?desde=${desde}&hasta=${hasta}`).then(r => r.json());
-
-    if (!data.ventas || data.ventas.length === 0) {
-      tbody.innerHTML = pendientesHtml || '<tr><td colspan="7" class="loading-cell">Sin ventas en el rango seleccionado.</td></tr>';
-      return;
-    }
-
-    tbody.innerHTML = pendientesHtml + data.ventas.map(v => {
-      const prods = v.detalles ? v.detalles.map(d => `${d.producto} x${d.cantidad}`).join(', ') : '-';
-      const metodos = v.pagos ? v.pagos.map(p => p.metodo_pago).join(', ') : '-';
-      const isAnulada = v.tipo_transaccion === 'Anulada';
-      const rowClass = isAnulada ? 'style="opacity:0.6; background-color:rgba(255,0,0,0.05);"' : '';
-      const actionBtn = isAnulada 
-        ? '<span class="text-danger" style="font-size:0.8rem; font-weight:bold;">ANULADA</span>' 
-        : `<button class="btn btn-sm btn-outline-danger" style="display:flex; align-items:center; gap:5px; padding: 4px 8px; font-size: 0.8rem;" onclick="window.showAnularVentaModal(${v.id})" title="Anular Venta"><i data-lucide="x-circle" style="width:14px; height:14px;"></i> Anular</button>`;
-        
-      return `
-        <tr ${rowClass}>
-          <td>#${v.id}</td>
-          <td>${new Date(v.fecha).toLocaleString('es-ES')}</td>
-          <td class="font-outfit">$${parseFloat(v.total).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}</td>
-          <td>${prods}</td>
-          <td>${metodos}</td>
-          <td>${v.notas || '-'}</td>
-          <td>${actionBtn}</td>
-        </tr>
-      `;
-    }).join('');
-    lucide.createIcons();
+    const res = await fetch(`/api/reportes/ventas?desde=${desde}&hasta=${hasta}${anuladas}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error');
+    historialDatos = data;
+    pintarHistorial();
   } catch (err) {
     console.error('Error cargando historial:', err);
+    tbody.innerHTML = `<tr><td colspan="8" class="loading-cell">Error: ${escHtml(err.message)}</td></tr>`;
   }
+}
+
+function pintarHistorial() {
+  const tbody = document.getElementById('tbody-historial');
+  const data = historialDatos;
+  if (!tbody || !data) return;
+  const q = (document.getElementById('hist-buscar')?.value || '').trim().toLowerCase();
+  const metodo = document.getElementById('hist-metodo')?.value || '';
+
+  const ventas = data.ventas.filter(v => {
+    if (metodo && !v.pagos.some(p => p.metodo_pago === metodo)) return false;
+    if (!q) return true;
+    const texto = [`#${v.id}`, v.cajero, clienteDeVenta(v), v.notas, ...v.detalles.map(d => d.producto), ...v.pagos.map(p => p.metodo_pago + ' ' + (p.referencia || ''))].join(' ').toLowerCase();
+    return texto.includes(q);
+  });
+
+  // Resumen (de lo que se ve con los filtros)
+  const activas = ventas.filter(v => v.tipo_transaccion !== 'Anulada');
+  const total = activas.reduce((s, v) => s + (parseFloat(v.total) || 0), 0);
+  const porMetodo = {};
+  let credito = 0;
+  activas.forEach(v => v.pagos.forEach(p => {
+    porMetodo[p.metodo_pago] = porMetodo[p.metodo_pago] || { moneda: p.moneda, monto: 0, cop: 0 };
+    porMetodo[p.metodo_pago].monto += p.monto_original;
+    porMetodo[p.metodo_pago].cop += p.monto_base;
+    if (p.metodo_pago === 'Crédito') credito += p.monto_base;
+  }));
+  const anuladasN = ventas.length - activas.length;
+  document.getElementById('hist-resumen').innerHTML = `
+    <div class="hist-kpis">
+      <div class="hist-kpi"><span>Ventas</span><strong>${activas.length}</strong></div>
+      <div class="hist-kpi"><span>Total vendido</span><strong>$${numTicket(total)}</strong></div>
+      <div class="hist-kpi"><span>Cobrado (contado)</span><strong style="color:var(--success);">$${numTicket(total - credito)}</strong></div>
+      <div class="hist-kpi"><span>A crédito</span><strong style="color:var(--warning);">$${numTicket(credito)}</strong></div>
+      ${anuladasN ? `<div class="hist-kpi"><span>Anuladas</span><strong style="color:var(--danger);">${anuladasN}</strong></div>` : ''}
+    </div>
+    <div class="hist-metodos"><span class="text-muted" style="font-size:0.8rem; align-self:center;">Recibido por método:</span>${Object.entries(porMetodo).sort((a, b) => b[1].cop - a[1].cop).map(([m, x]) =>
+      `<span class="hist-chip ${m === 'Crédito' ? 'hist-chip-credito' : ''}">${escHtml(m)}: <strong>${montoMoneda(x.monto, x.moneda)}</strong>${x.moneda !== 'COP' ? ` <small>(=$${numTicket(x.cop)})</small>` : ''}</span>`).join('')}</div>
+    ${data.limite_alcanzado ? '<div class="text-muted" style="font-size:0.8rem;">Se muestran las ventas más recientes del rango (hay más): acorta las fechas para verlas todas.</div>' : ''}`;
+
+  const filas = ventas.map(v => {
+    const anulada = v.tipo_transaccion === 'Anulada';
+    const cliente = clienteDeVenta(v);
+    const tipo = anulada ? '<span class="hist-tag hist-tag-anulada">ANULADA</span>'
+      : v.tipo_transaccion === 'Cortesia' ? '<span class="hist-tag">Cortesía</span>'
+      : /Cortesía Gym/i.test(v.notas || '') ? '<span class="hist-tag">Cortesía Gym</span>' : '';
+    const productos = v.detalles.map(d => `<div>${d.cantidad}x ${escHtml(d.producto)} <span class="text-muted">$${numTicket(d.subtotal)}</span></div>`).join('') || '—';
+    const pagos = v.pagos.map(p => p.metodo_pago === 'Crédito'
+      ? `<div class="hist-pago-credito">Crédito${cliente ? ': ' + escHtml(cliente) : ''} <strong>$${numTicket(p.monto_base)}</strong></div>`
+      : `<div>${escHtml(p.metodo_pago)} <strong>${montoMoneda(p.monto_original, p.moneda)}</strong>${p.moneda !== 'COP' ? ` <span class="text-muted">(=$${numTicket(p.monto_base)})</span>` : ''}${p.referencia ? ` <span class="text-muted">Ref ${escHtml(p.referencia)}</span>` : ''}</div>`).join('') || '—';
+    const notas = (v.notas || '').replace(/\s*\[ANULADA\]\s*/g, '').replace(/^(Venta desde Terminal POS|Pago rápido)( · )?/, '').replace(/Cliente:[^·]*(·)?/, '').trim();
+    const accion = anulada ? ''
+      : `<button class="action-btn btn-mini hist-anular" onclick="window.showAnularVentaModal(${v.id})" title="Anular venta"><i data-lucide="x-circle" style="width:14px; height:14px;"></i> Anular</button>`;
+    return `
+      <tr class="${anulada ? 'hist-anulada' : ''}">
+        <td><strong>#${v.id}</strong>${tipo ? '<br>' + tipo : ''}</td>
+        <td style="white-space:nowrap;">${escHtml(v.fecha_txt || '')}</td>
+        <td>${escHtml(v.cajero || '—')}${v.turno ? `<br><span class="text-muted" style="font-size:0.75rem;">${escHtml(v.turno)}</span>` : ''}</td>
+        <td>${cliente ? `<strong>${escHtml(cliente)}</strong>` : '<span class="text-muted">—</span>'}</td>
+        <td class="hist-lista">${productos}${notas ? `<div class="text-muted" style="font-size:0.75rem; margin-top:2px;">📝 ${escHtml(notas)}</div>` : ''}</td>
+        <td class="hist-lista">${pagos}</td>
+        <td class="font-outfit" style="font-weight:700; white-space:nowrap;">$${numTicket(parseFloat(v.total) || 0)}</td>
+        <td>${accion}</td>
+      </tr>`;
+  }).join('');
+
+  tbody.innerHTML = filasVentasPendientes() + (filas ||
+    `<tr><td colspan="8" class="loading-cell">${data.ventas.length ? 'Ninguna venta coincide con el filtro.' : 'Sin ventas en el rango seleccionado.'}</td></tr>`);
+  lucide.createIcons();
 }
 
 window.showAnularVentaModal = function(ventaId) {
@@ -5279,6 +5355,8 @@ async function cerrarTurnoActual() {
       setMonto('ticket-ventas-total', `$${fmtMoney(ventasContado)}`);
       setMonto('ticket-abonos-total', `$${fmtMoney(abonosTotal)}`);
       setMonto('ticket-credito', `$${fmtMoney(credito)}`);
+      const creditoClientes = document.getElementById('ticket-credito-clientes');
+      if (creditoClientes) creditoClientes.innerHTML = htmlCreditosTicket(d.resumen.creditos);
       setMonto('ticket-facturado', `$${fmtMoney(facturado)}`);
 
       // Rendimiento (solo costo de producción y utilidad neta)
@@ -5708,6 +5786,7 @@ window.verTicketTurno = async function(turnoId, fecha) {
         <table class="ctd-table"><thead><tr><th>Método</th><th>Monto</th><th>Tasa</th><th>Total</th></tr></thead>
           <tbody>${tabla(d.ventas_detalle)}</tbody></table>
         <div class="ctd-foot-row ctd-foot-danger"><span><i data-lucide="credit-card"></i> Cuentas por Cobrar (Crédito)</span><strong class="ctd-mono">$${fmt(d.total_ventas_credito_cop)}</strong></div>
+        ${htmlCreditosTicket(d.creditos)}
         <div class="ctd-foot-row ctd-foot-total"><span><i data-lucide="receipt"></i> Venta Total Facturada</span><strong class="ctd-mono">$${fmt(d.total_ventas_real_cop)}</strong></div>
       </section>
       <section class="ctd-card">
@@ -8009,3 +8088,38 @@ window.descargarRespaldo = async function () {
     lucide.createIcons();
   }
 };
+
+// ============================================
+// VENTAS A CRÉDITO CON NOMBRE (reportes y tickets): quién quedó debiendo
+// ============================================
+function pintarCreditosReporte(id, creditos, detallado) {
+  const sec = document.getElementById(id);
+  if (!sec) return;
+  if (!creditos || !creditos.ventas.length) { sec.style.display = 'none'; return; }
+  const fmt = (v) => numTicket(v);
+  const total = creditos.ventas.reduce((s, v) => s + v.monto, 0);
+  const resumen = `
+    <table class="data-table"><thead><tr><th>Cliente</th><th>Ventas</th><th>A crédito en estas fechas</th><th>Debe hoy (total)</th></tr></thead>
+      <tbody>${creditos.por_cliente.map(c => `
+        <tr><td><strong>${escHtml(c.cliente)}</strong></td><td>${c.ventas}</td>
+          <td class="font-outfit" style="color:var(--warning);">$${fmt(c.total)}</td>
+          <td class="font-outfit">${c.debe_hoy !== null ? '$' + fmt(c.debe_hoy) : '—'}</td></tr>`).join('')}
+      </tbody>
+      <tfoot><tr><td><strong>Total</strong></td><td>${creditos.ventas.length}</td><td class="font-outfit"><strong>$${fmt(total)}</strong></td><td></td></tr></tfoot>
+    </table>`;
+  const detalle = detallado ? `
+    <table class="data-table" style="margin-top:10px;"><thead><tr><th>Hora</th><th>Cliente</th><th>Venta</th><th>Productos</th><th>Monto</th></tr></thead>
+      <tbody>${creditos.ventas.map(v => `
+        <tr><td style="white-space:nowrap;">${escHtml(v.fecha)}</td><td>${escHtml(v.cliente)}</td><td>#${v.venta_id}</td>
+          <td>${escHtml(v.productos || '—')}</td><td class="font-outfit">$${fmt(v.monto)}</td></tr>`).join('')}
+      </tbody></table>` : '';
+  sec.querySelector('.creditos-reporte').innerHTML = `<div class="data-table-wrapper">${resumen}${detalle}</div>`;
+  sec.style.display = '';
+  lucide.createIcons();
+}
+
+function htmlCreditosTicket(porCliente) {
+  if (!porCliente || !porCliente.length) return '';
+  return `<div class="ctd-creditos">${porCliente.map(c =>
+    `<div class="ctd-row"><span>• ${escHtml(c.cliente)}${c.ventas > 1 ? ` (${c.ventas} ventas)` : ''}</span><strong class="ctd-mono">$${numTicket(c.total)}</strong></div>`).join('')}</div>`;
+}

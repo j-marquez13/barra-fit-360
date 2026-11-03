@@ -15,7 +15,7 @@
        bloqueando la página ~3 s y cambiando de versión sin aviso) -->
   <script src="vendor/lucide-1.57.0.min.js"></script>
   <!-- Estilos CSS -->
-  <link rel="stylesheet" href="index.css?v=29">
+  <link rel="stylesheet" href="index.css?v=31">
   <!-- PWA: instalable como aplicación en Chrome/Android/escritorio -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#0b0f1a">
@@ -1177,6 +1177,12 @@
               </div>
             </div>
 
+            <!-- Ventas a crédito: quién quedó debiendo (lo llena app3.js) -->
+            <div class="report-section" id="creditos-diario" style="display:none;">
+              <h4><i data-lucide="user-round-check"></i> Ventas a crédito del día — quién debe</h4>
+              <div class="creditos-reporte"></div>
+            </div>
+
             <!-- Desglose de Gastos Operativos -->
             <div class="report-section" id="section-gastos-desglose" style="display:none;">
               <h4><i data-lucide="receipt"></i> Desglose de Gastos Operativos</h4>
@@ -1328,6 +1334,12 @@
               </div>
             </div>
 
+            <!-- Ventas a crédito: quién quedó debiendo (lo llena app3.js) -->
+            <div class="report-section" id="creditos-semanal" style="display:none;">
+              <h4><i data-lucide="user-round-check"></i> Ventas a crédito — quién debe</h4>
+              <div class="creditos-reporte"></div>
+            </div>
+
             <!-- Top productos de la semana -->
             <div class="report-section">
               <h4><i data-lucide="trophy"></i> Top Productos del Período</h4>
@@ -1454,6 +1466,12 @@
               </div>
             </div>
 
+            <!-- Ventas a crédito: quién quedó debiendo (lo llena app3.js) -->
+            <div class="report-section" id="creditos-mensual" style="display:none;">
+              <h4><i data-lucide="user-round-check"></i> Ventas a crédito del mes — quién debe</h4>
+              <div class="creditos-reporte"></div>
+            </div>
+
             <!-- Top productos del mes -->
             <div class="report-section">
               <h4><i data-lucide="trophy"></i> Top Productos del Mes</h4>
@@ -1489,21 +1507,37 @@
                 </button>
               </div>
             </div>
+            <div class="hist-filtros">
+              <input type="search" id="hist-buscar" class="date-picker" placeholder="🔍 Cliente, producto, cajero, # de venta o referencia…">
+              <select id="hist-metodo" class="date-picker">
+                <option value="">Todos los métodos</option>
+                <option value="Efectivo COP">Efectivo COP</option>
+                <option value="Bancolombia">Bancolombia</option>
+                <option value="Efectivo USD">Efectivo USD</option>
+                <option value="Zelle">Zelle</option>
+                <option value="Binance">Binance</option>
+                <option value="Pago Móvil">Pago Móvil</option>
+                <option value="Crédito">Crédito</option>
+              </select>
+              <label class="hist-check"><input type="checkbox" id="hist-anuladas"> Ver anuladas</label>
+            </div>
+            <div id="hist-resumen"></div>
             <div class="data-table-wrapper">
-              <table class="data-table">
+              <table class="data-table hist-tabla">
                 <thead>
                   <tr>
-                    <th>ID</th>
-                    <th>Fecha</th>
-                    <th>Total COP</th>
+                    <th>Venta</th>
+                    <th>Fecha y hora</th>
+                    <th>Cajero</th>
+                    <th>Cliente</th>
                     <th>Productos</th>
-                    <th>Métodos de Pago</th>
-                    <th>Notas</th>
-                    <th>Acciones</th>
+                    <th>Pagos</th>
+                    <th>Total</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody id="tbody-historial">
-                  <tr><td colspan="7" class="loading-cell">Seleccione un rango de fechas y presione Buscar</td></tr>
+                  <tr><td colspan="8" class="loading-cell">Seleccione un rango de fechas y presione Buscar</td></tr>
                 </tbody>
               </table>
             </div>
@@ -2084,6 +2118,7 @@
               <span><i data-lucide="credit-card"></i> Cuentas por Cobrar (Crédito)</span>
               <strong class="ctd-mono" id="ticket-credito">$0</strong>
             </div>
+            <div id="ticket-credito-clientes"></div>
             <div class="ctd-foot-row ctd-foot-total">
               <span><i data-lucide="receipt"></i> Venta Total Facturada</span>
               <strong class="ctd-mono" id="ticket-facturado">$0</strong>
@@ -2568,7 +2603,7 @@
     </div>
   </div>
 
-  <script src="app3.js?v=65"></script>
+  <script src="app3.js?v=67"></script>
   <script src="whatsapp.js?v=7"></script>
 <!-- Script to automatically replace commas with dots in number inputs -->
   <script>

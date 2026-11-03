@@ -3,6 +3,7 @@ import { localNow, isPostgres, localDate, dateExpr } from '../db.js';
 import { obtenerTasas } from '../tasas.js';
 import { notificarInicioTurno } from './whatsappController.js';
 import { faltaConteoNevera, conteoNeveraDeSesion } from './conteoController.js';
+import { ventasACredito } from './reportsController.js';
 
 /**
  * Controlador de Arqueo y Sesiones de Caja (Turnos)
@@ -382,7 +383,8 @@ export async function ticketTurnoAdmin(req, res) {
       tasas: tasaUsd || tasaVes ? { USD: tasaUsd, VES: tasaVes } : null,
       cantidad_ventas: parseInt(conteo?.ventas || 0, 10),
       cantidad_anuladas: parseInt(conteo?.anuladas || 0, 10),
-      conteo_nevera: await conteoNeveraDeSesion(s.id)
+      conteo_nevera: await conteoNeveraDeSesion(s.id),
+      creditos: (await ventasACredito(`pv.fecha >= $1 AND pv.fecha <= ${hastaExpr}`, params)).por_cliente
     });
   } catch (error) {
     console.error('Error al obtener ticket del turno:', error);
@@ -769,7 +771,8 @@ export async function cerrarCaja(req, res) {
         ventas_detalle: ventasDetalle,
         abonos_detalle: abonosDetalle,
         diferencia: diferencia,
-        conteo_nevera: await conteoNeveraDeSesion(currentSession.id)
+        conteo_nevera: await conteoNeveraDeSesion(currentSession.id),
+        creditos: (await ventasACredito('pv.fecha >= $1', [fechaApertura])).por_cliente
       },
       sesion: sessionRes[0]
     });
