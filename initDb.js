@@ -139,6 +139,7 @@ export async function initializeDatabase() {
       await db.execute('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS activo INTEGER NOT NULL DEFAULT 1');
       await crearTablaAjustesTesoreria();
       await db.execute('ALTER TABLE ventas ADD COLUMN IF NOT EXISTS fecha_anulacion TIMESTAMP');
+      await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS detalle_declarado TEXT');
 
       // Desglose del arqueo de cada turno (ventas vs abonos) para el cierre consolidado
       await db.execute('ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS declarado_ventas_cop DOUBLE PRECISION;');
@@ -750,6 +751,8 @@ async function runMigrations() {
   await crearTablaAjustesTesoreria();
   // Cuándo se anuló cada venta (para la lista de movimientos de Tesorería)
   try { await db.execute('ALTER TABLE ventas ADD COLUMN fecha_anulacion TIMESTAMP'); } catch (e) { /* ya existe */ }
+  // Pagos que el cajero agregó uno por uno en el cierre (para el ticket del turno)
+  try { await db.execute('ALTER TABLE sesiones_caja ADD COLUMN detalle_declarado TEXT'); } catch (e) { /* ya existe */ }
   // Desglose del arqueo de cada turno (ventas vs abonos) para el cierre consolidado
   try { await db.execute("ALTER TABLE sesiones_caja ADD COLUMN declarado_ventas_cop REAL"); } catch(e) {}
   try { await db.execute("ALTER TABLE sesiones_caja ADD COLUMN declarado_abonos_cop REAL"); } catch(e) {}

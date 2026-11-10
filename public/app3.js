@@ -701,7 +701,7 @@ function pintarEstadoTasa() {
 
   // Sin tasa de hoy: deshabilitar cobros en USD/VES (pago rápido y modal de pago)
   const sinTasa = !hayTasaHoy();
-  ['pay-usd-cash', 'pay-usd-zelle', 'pay-ves-movil', 'pay-binance'].forEach(id => {
+  ['pay-usd-cash', 'pay-ves-movil', 'pay-binance'].forEach(id => {
     const el = document.getElementById(id);
     if (el) {
       if (el.dataset.placeholderOriginal === undefined) el.dataset.placeholderOriginal = el.placeholder || '';
@@ -1345,7 +1345,6 @@ function recalculatePayments() {
     { inputId: 'pay-cop-cash', rate: 1.0, calcId: null },
     { inputId: 'pay-cop-bank', rate: 1.0, calcId: null },
     { inputId: 'pay-usd-cash', rate: rateUsd, calcId: 'calc-usd-cash' },
-    { inputId: 'pay-usd-zelle', rate: rateUsd, calcId: 'calc-usd-zelle' },
     { inputId: 'pay-ves-movil', rate: rateVes, calcId: 'calc-ves-movil' },
     { inputId: 'pay-binance', rate: rateUsd, calcId: 'calc-binance' },
     { inputId: 'pay-credito', rate: 1.0, calcId: null }
@@ -1415,7 +1414,6 @@ async function submitPayment() {
     { inputId: 'pay-cop-cash', metodo: 'Efectivo COP', moneda: 'COP', refId: null },
     { inputId: 'pay-cop-bank', metodo: 'Bancolombia', moneda: 'COP', refId: 'ref-cop-bank' },
     { inputId: 'pay-usd-cash', metodo: 'Efectivo USD', moneda: 'USD', refId: null },
-    { inputId: 'pay-usd-zelle', metodo: 'Zelle', moneda: 'USD', refId: 'ref-usd-zelle' },
     { inputId: 'pay-ves-movil', metodo: 'Pago Móvil', moneda: 'VES', refId: 'ref-ves-movil' },
     { inputId: 'pay-binance', metodo: 'Binance', moneda: 'USD', refId: 'ref-binance' },
     { inputId: 'pay-credito', metodo: 'Crédito', moneda: 'COP', refId: null }
@@ -4019,7 +4017,6 @@ window.showRestockModal = function(insumoId, nombre) {
         <option value="Efectivo COP">Efectivo COP</option>
         <option value="Efectivo USD">Efectivo USD</option>
         <option value="Bancolombia">Bancolombia</option>
-        <option value="Zelle">Zelle</option>
         <option value="Pago Móvil">Pago Móvil</option>
         <option value="Binance">Binance</option>
       </select>
@@ -4559,7 +4556,6 @@ const ABONO_PAGO_ROW_HTML = `
         <option value="Efectivo COP">Efectivo COP</option>
         <option value="Bancolombia">Bancolombia</option>
         <option value="Efectivo USD">Efectivo USD</option>
-        <option value="Zelle">Zelle</option>
         <option value="Pago Móvil">Pago Móvil (VES)</option>
         <option value="Binance">Binance</option>
       </select>
@@ -4890,6 +4886,7 @@ function showToast(message, type = 'info') {
 // ============================================
 
 async function loadCajaData() {
+  document.body.classList.toggle('vista-cajero', !esAdminTes());
   if (!STATE.apiOnline) {
     document.getElementById('arqueo-estado-container').innerHTML = '<div class="loading-cell">Modo Local. Conecta al servidor para usar la Caja.</div>';
     return;
@@ -4951,7 +4948,8 @@ async function loadCajaData() {
           </button>
         </div>
 
-        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; margin-bottom:20px;">
+        <div class="caja-nota-cajero">🔒 Los montos del turno solo los ve el administrador. Al cerrar la caja, escribe lo que recibiste y el sistema lo compara.</div>
+        <div class="caja-montos-turno" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; margin-bottom:20px;">
           
           <!-- Tarjeta COP -->
           <div class="kpi-card" style="background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, rgba(0,255,200,0.05) 100%); border-top: 3px solid var(--success); display:block; padding: 20px; transition: transform 0.2s ease;">
@@ -5109,35 +5107,8 @@ async function cerrarTurnoActual() {
     // que se gestionan aparte y no afectan el arqueo de caja)
     totalEsperado = ventasCop + abonosCop;
 
-    // Totales esperados por método de pago (para conciliación visual del cajero)
-    const ventasMetodo = arqueo.ventas_detalle || {};
-    const abonosMetodo = arqueo.abonos_detalle || {};
-    const metodoVentas = (metodo, moneda) => parseFloat(ventasMetodo[moneda]?.[metodo]) || 0;
-    const metodoAbonos = (metodo, moneda) => parseFloat(abonosMetodo[moneda]?.[metodo]) || 0;
-
-    const fmtEsperado = (v, simbolo) =>
-      `${Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} ${simbolo}`;
-
-    document.getElementById('cc-esp-pago-movil').textContent = `Esperado: ${fmtEsperado(metodoVentas('Pago Móvil', 'VES'), 'Bs')}`;
-    document.getElementById('cc-esp-zelle').textContent = `Esperado: ${fmtEsperado(metodoVentas('Zelle', 'USD'), 'USD')}`;
-    document.getElementById('cc-esp-binance').textContent = `Esperado: ${fmtEsperado(metodoVentas('Binance', 'USD'), 'USD')}`;
-    document.getElementById('cc-esp-pesos').textContent = `Esperado: ${fmtEsperado(metodoVentas('Efectivo COP', 'COP'), 'COP')}`;
-    document.getElementById('cc-esp-bancolombia').textContent = `Esperado: ${fmtEsperado(metodoVentas('Bancolombia', 'COP'), 'COP')}`;
-    document.getElementById('cc-esp-usd').textContent = `Esperado: ${fmtEsperado(metodoVentas('Efectivo USD', 'USD'), 'USD')}`;
-
-    document.getElementById('cc-esp-abono-pago-movil').textContent = `Esperado: ${fmtEsperado(metodoAbonos('Pago Móvil', 'VES'), 'Bs')}`;
-    document.getElementById('cc-esp-abono-zelle').textContent = `Esperado: ${fmtEsperado(metodoAbonos('Zelle', 'USD'), 'USD')}`;
-    document.getElementById('cc-esp-abono-binance').textContent = `Esperado: ${fmtEsperado(metodoAbonos('Binance', 'USD'), 'USD')}`;
-    document.getElementById('cc-esp-abono-pesos').textContent = `Esperado: ${fmtEsperado(metodoAbonos('Efectivo COP', 'COP'), 'COP')}`;
-    document.getElementById('cc-esp-abono-bancolombia').textContent = `Esperado: ${fmtEsperado(metodoAbonos('Bancolombia', 'COP'), 'COP')}`;
-    document.getElementById('cc-esp-abono-usd').textContent = `Esperado: ${fmtEsperado(metodoAbonos('Efectivo USD', 'USD'), 'USD')}`;
-
-    // Actualizar UI - Valores Teóricos
-    document.getElementById('cc-total-ventas').textContent = `$${ventasCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
-    document.getElementById('cc-total-credito').textContent = `$${creditoVentaCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
-    document.getElementById('cc-total-abonos').textContent = `$${abonosCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
-    document.getElementById('cc-total-gastos').textContent = `-$${gastosCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
-    document.getElementById('cc-fondo-base').textContent = `$${fondoBaseCop.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP + $${fondoBaseUsd.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} USD`;
+    // Cierre a ciegas: no se muestran los montos esperados, solo el fondo de caja
+    document.getElementById('cc-fondo-base').textContent = `$${numTicket(fondoBaseCop)} COP + US$${numTicket(fondoBaseUsd)}`;
 
   } catch (err) {
     console.error('Error al cargar estado para cierre', err);
@@ -5146,13 +5117,7 @@ async function cerrarTurnoActual() {
     return;
   }
 
-  // 2. Setup de inputs y cálculos en tiempo real
-  const inputs = [
-    'cc-dec-pago-movil', 'cc-dec-zelle', 'cc-dec-binance', 'cc-dec-pesos', 'cc-dec-bancolombia', 'cc-dec-usd',
-    'cc-dec-abono-pago-movil', 'cc-dec-abono-zelle', 'cc-dec-abono-binance', 'cc-dec-abono-pesos', 'cc-dec-abono-bancolombia', 'cc-dec-abono-usd'
-  ];
-
-  // Verificación del fondo de caja (Sí / No)
+  // 2. Fondo de caja (Sí / No) y formulario a ciegas (pagos digitales uno por uno, efectivo en total)
   const fondoCompletoChk = document.getElementById('cc-fondo-completo');
   const fondoCompletoTxt = document.getElementById('cc-fondo-completo-txt');
   const updateFondoCompleto = () => {
@@ -5161,76 +5126,8 @@ async function cerrarTurnoActual() {
       fondoCompletoTxt.style.color = fondoCompletoChk.checked ? 'var(--success)' : 'var(--danger)';
     }
   };
-  if (fondoCompletoChk) {
-    fondoCompletoChk.addEventListener('change', updateFondoCompleto);
-    updateFondoCompleto();
-  }
-
-  // Limpiar inputs
-  inputs.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = '0';
-  });
-
-  const actualizarDiffBox = (boxId, valueId, statusId, diferencia) => {
-    const box = document.getElementById(boxId);
-    const value = document.getElementById(valueId);
-    const status = document.getElementById(statusId);
-    if (!box || !value || !status) return;
-    box.className = 'cierre-diff-box';
-    if (Math.abs(diferencia) < 100) {
-      box.classList.add('diff-perfect');
-      status.textContent = 'CUADRE PERFECTO';
-      value.textContent = '$0 COP';
-    } else if (diferencia < 0) {
-      box.classList.add('diff-missing');
-      status.textContent = 'FALTANTE EN CAJA';
-      value.textContent = `-$${Math.abs(diferencia).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
-    } else {
-      box.classList.add('diff-extra');
-      status.textContent = 'SOBRANTE EN CAJA';
-      value.textContent = `+$${Math.abs(diferencia).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} COP`;
-    }
-  };
-
-  const calcularDiferenciaReal = () => {
-    const get = (id) => parseFloat(document.getElementById(id).value) || 0;
-    const rateUsd = parseFloat(STATE.tasasRef.USD) || 1;
-    const rateVes = parseFloat(STATE.tasasRef.VES) || 1;
-
-    const vPagoMovil = get('cc-dec-pago-movil');
-    const vZelle = get('cc-dec-zelle');
-    const vBinance = get('cc-dec-binance');
-    const vUsd = get('cc-dec-usd');
-    const vPesos = get('cc-dec-pesos');
-    const vBanco = get('cc-dec-bancolombia');
-    const declaradoVentasCop = vPesos + vBanco + ((vZelle + vBinance + vUsd) * rateUsd) + (vPagoMovil * rateVes);
-
-    const aPagoMovil = get('cc-dec-abono-pago-movil');
-    const aZelle = get('cc-dec-abono-zelle');
-    const aBinance = get('cc-dec-abono-binance');
-    const aUsd = get('cc-dec-abono-usd');
-    const aPesos = get('cc-dec-abono-pesos');
-    const aBanco = get('cc-dec-abono-bancolombia');
-    const declaradoAbonosCop = aPesos + aBanco + ((aZelle + aBinance + aUsd) * rateUsd) + (aPagoMovil * rateVes);
-
-    // Los gastos de tesorería NO descuentan del efectivo: la diferencia se mide
-    // estrictamente entre lo declarado en caja y las ventas contadas.
-    const diferenciaVentas = declaradoVentasCop - ventasCop;
-    const diferenciaAbonos = declaradoAbonosCop - abonosCop;
-
-    actualizarDiffBox('cc-diff-ventas-box', 'cc-diferencia-ventas', 'cc-diff-ventas-status', diferenciaVentas);
-    actualizarDiffBox('cc-diff-abonos-box', 'cc-diferencia-abonos', 'cc-diff-abonos-status', diferenciaAbonos);
-  };
-
-  // Bind listeners
-  inputs.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.addEventListener('input', calcularDiferenciaReal);
-  });
-  
-  // Calcular inicial (puros ceros)
-  calcularDiferenciaReal();
+  if (fondoCompletoChk) { fondoCompletoChk.onchange = updateFondoCompleto; updateFondoCompleto(); }
+  montarArqueoCiego();
 
   // 3. Botones del Modal
   const btnClose = document.getElementById('btn-close-cierre');
@@ -5245,6 +5142,24 @@ async function cerrarTurnoActual() {
   btnCancel.onclick = closeCierre;
 
   btnConfirm.onclick = async () => {
+    // Revisión a ciegas (una sola vez): si algo no cuadra se avisa QUÉ método, sin decir cuánto
+    let revisar = [];
+    if (!btnConfirm.dataset.revisado) {
+      btnConfirm.disabled = true;
+      revisar = await verificarArqueoCiego();
+      btnConfirm.disabled = false;
+      if (revisar === null) return;
+      if (revisar.length) {
+        btnConfirm.dataset.revisado = JSON.stringify(revisar);
+        mostrarRevisionArqueo(revisar);
+        btnConfirm.innerHTML = '<i data-lucide="check-square"></i> Cerrar de todos modos';
+        lucide.createIcons();
+        return;
+      }
+    } else {
+      try { revisar = JSON.parse(btnConfirm.dataset.revisado); } catch (e) { revisar = []; }
+    }
+    ultimoDetalleArqueo = detalleArqueoCiego(revisar);
     btnConfirm.disabled = true;
     btnConfirm.innerHTML = '<i data-lucide="loader"></i> Procesando...';
     lucide.createIcons();
@@ -5294,6 +5209,7 @@ async function cerrarTurnoActual() {
           declarado_efectivo_usd: decUsd,
           declarado_ventas_cop: declaradoVentasCop,
           declarado_abonos_cop: declaradoAbonosCop,
+          detalle_declarado: ultimoDetalleArqueo,
           tasas: { USD: rateUsd, VES: rateVes }
         })
       });
@@ -5403,6 +5319,8 @@ async function cerrarTurnoActual() {
       if (arqueoTurno) { arqueoTurno.innerHTML = htmlArqueoMetodos(vDet, aDet, d.resumen); lucide.createIcons(); }
       const conteoTicket = document.getElementById('ticket-conteo-nevera');
       if (conteoTicket) { conteoTicket.innerHTML = htmlConteoNevera(d.resumen.conteo_nevera); lucide.createIcons(); }
+      const detalleTicket = document.getElementById('ticket-detalle-declarado');
+      if (detalleTicket) { detalleTicket.innerHTML = htmlDetalleDeclarado(ultimoDetalleArqueo); lucide.createIcons(); }
       
 
 
@@ -5712,7 +5630,9 @@ function htmlArqueoMetodos(ventasDet, abonosDet, declarados) {
     const declarado = parseFloat(declarados?.[m.declarado] || 0);
     const dif = declarado - esperado;
     // Tolerancia: 100 pesos en COP; 0,01 en USD/Bs
-    const tolerancia = m.moneda === 'COP' ? 100 : 0.01;
+    if (!esperado && !declarado) return '';
+    // Tolerancia: $100 en pesos; unos bolívares por el redondeo de la tasa; 5 centavos en dólares
+    const tolerancia = m.moneda === 'COP' ? 100 : m.moneda === 'VES' ? Math.max(2, esperado * 0.003) : 0.05;
     const color = Math.abs(dif) < tolerancia ? 'var(--success)' : (dif < 0 ? 'var(--danger)' : 'var(--warning)');
     const difTxt = Math.abs(dif) < tolerancia ? `${m.simbolo}0` : `${dif < 0 ? '-' : '+'}${m.simbolo}${fmt(Math.abs(dif))}`;
     return `<tr><td>${m.nombre}</td><td class="ctd-mono">${m.simbolo}${fmt(esperado)}</td><td class="ctd-mono">${m.simbolo}${fmt(declarado)}</td><td class="ctd-mono" style="color:${color}; font-weight:bold;">${difTxt}</td></tr>`;
@@ -5760,6 +5680,7 @@ window.verTicketTurno = async function(turnoId, fecha) {
     const tabla = (detalle) => metodos.map(m => {
       let monto = 0, cop = 0, tasaPago = null;
       m.claves.forEach(k => { const x = detalle?.[m.moneda]?.[k]; monto += parseFloat(x?.monto || 0); cop += parseFloat(x?.total_cop || 0); if (x && x.tasa) tasaPago = x.tasa; });
+      if (!monto && m.claves.includes('Zelle')) return ''; // Zelle ya no se usa
       // Tasa real guardada en los pagos (no total ÷ monto, que con redondeos da cosas como 3144,6541)
       const tasa = m.moneda === 'COP' ? '1' : fmtTasa(tasaPago || (monto > 0 ? cop / monto : 0));
       return `<tr><td>${m.nombre}</td><td class="ctd-mono">${m.simbolo}${fmt(monto)}</td><td class="ctd-mono">${tasa}</td><td class="ctd-mono">$${fmt(cop)}</td></tr>`;
@@ -5807,6 +5728,7 @@ window.verTicketTurno = async function(turnoId, fecha) {
       </section>
       ${htmlArqueoMetodos(d.ventas_detalle, d.abonos_detalle, d)}
       ${htmlConteoNevera(d.conteo_nevera)}
+      ${htmlDetalleDeclarado(d.detalle_declarado)}
       <section class="ctd-card">
         <div class="ctd-card-head"><span class="ctd-card-icon ctd-icon-gold"><i data-lucide="wallet"></i></span><span class="ctd-card-title">Fondo de Caja y Arqueo Final</span></div>
         <div class="ctd-row"><span>Fondo de Caja Base</span><strong class="ctd-mono">$${fmt(t.fondo_inicial_cop)} COP + $${fmt(t.fondo_inicial_usd)} USD</strong></div>
@@ -5930,7 +5852,6 @@ function showAddGastoModal() {
         <option value="Dueño">Pagado por el dueño (no sale de ninguna cuenta)</option>
         <option value="Efectivo USD">Efectivo USD</option>
         <option value="Bancolombia">Bancolombia</option>
-        <option value="Zelle">Zelle</option>
         <option value="Pago Móvil">Pago Móvil</option>
         <option value="Binance">Binance</option>
       </select>
@@ -6728,9 +6649,12 @@ async function iniciarTurno() {
       }
     }
 
-    const fondo = parseFloat(fondoInput.value) || 0;
+    const fondo = leerMonto(fondoInput.value);
+    if (fondo > 0 && fondo < 1000) {
+      throw new Error(`El fondo en pesos parece incompleto ($${fondo}). ¿Quisiste decir $${(fondo * 1000).toLocaleString('de-DE')}? Corrígelo y vuelve a intentar.`);
+    }
     const fondoUsdInput = document.getElementById('turno-fondo-usd');
-    const fondoUsd = fondoUsdInput ? (parseFloat(fondoUsdInput.value) || 0) : 0;
+    const fondoUsd = fondoUsdInput ? leerMonto(fondoUsdInput.value) : 0;
     
     const resCaja = await fetch('/api/caja/abrir', {
       method: 'POST',
@@ -8122,4 +8046,249 @@ function htmlCreditosTicket(porCliente) {
   if (!porCliente || !porCliente.length) return '';
   return `<div class="ctd-creditos">${porCliente.map(c =>
     `<div class="ctd-row"><span>• ${escHtml(c.cliente)}${c.ventas > 1 ? ` (${c.ventas} ventas)` : ''}</span><strong class="ctd-mono">$${numTicket(c.total)}</strong></div>`).join('')}</div>`;
+}
+
+// ============================================
+// MONTOS ESCRITOS A MANO: se leen con o sin puntos de miles y se muestran con puntos y en
+// palabras, para que no se confunda $50 con $50.000. En pesos, menos de $1.000 da aviso.
+// ============================================
+function leerMonto(txt) {
+  let s = String(txt ?? '').trim().replace(/[^\d.,]/g, '');
+  if (!s) return 0;
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');      // 3.226,45 o 3226,45
+  else if ((s.match(/\./g) || []).length > 1) s = s.replace(/\./g, '');  // 1.250.000
+  else if (/\.\d{3}$/.test(s)) s = s.replace('.', '');                   // 50.000 = cincuenta mil
+  const n = parseFloat(s);
+  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : 0;
+}
+
+function numeroEnLetras(n) {
+  n = Math.floor(Math.abs(n));
+  if (n === 0) return 'cero';
+  const U = ['', 'un', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve', 'diez', 'once', 'doce', 'trece', 'catorce', 'quince',
+    'dieciséis', 'diecisiete', 'dieciocho', 'diecinueve', 'veinte', 'veintiún', 'veintidós', 'veintitrés', 'veinticuatro', 'veinticinco',
+    'veintiséis', 'veintisiete', 'veintiocho', 'veintinueve'];
+  const D = ['', '', '', 'treinta', 'cuarenta', 'cincuenta', 'sesenta', 'setenta', 'ochenta', 'noventa'];
+  const C = ['', 'ciento', 'doscientos', 'trescientos', 'cuatrocientos', 'quinientos', 'seiscientos', 'setecientos', 'ochocientos', 'novecientos'];
+  const menor1000 = (x) => {
+    if (x === 100) return 'cien';
+    const c = Math.floor(x / 100), r = x % 100;
+    let t = c ? C[c] : '';
+    if (r) t += (t ? ' ' : '') + (r < 30 ? U[r] : D[Math.floor(r / 10)] + (r % 10 ? ' y ' + U[r % 10] : ''));
+    return t;
+  };
+  const millones = Math.floor(n / 1e6), miles = Math.floor((n % 1e6) / 1000), resto = n % 1000;
+  const partes = [];
+  if (millones) partes.push(millones === 1 ? 'un millón' : menor1000(millones) + ' millones');
+  if (miles) partes.push(miles === 1 ? 'mil' : menor1000(miles) + ' mil');
+  if (resto) partes.push(menor1000(resto));
+  return partes.join(' ');
+}
+
+function fmtMontoMoneda(v, moneda) {
+  const dec = moneda === 'COP' ? 0 : 2;
+  const t = (Number(v) || 0).toLocaleString('de-DE', { minimumFractionDigits: moneda === 'COP' ? 0 : (Number.isInteger(v) ? 0 : 2), maximumFractionDigits: dec });
+  return moneda === 'COP' ? `$${t}` : moneda === 'VES' ? `Bs ${t}` : `US$${t}`;
+}
+
+function montoEnPalabras(v, moneda) {
+  if (moneda === 'VES' || !v) return '';
+  const entero = Math.floor(v), cents = Math.round((v - entero) * 100);
+  if (moneda === 'COP') return `${numeroEnLetras(entero)} pesos`;
+  return `${numeroEnLetras(entero)} dólar${entero === 1 ? '' : 'es'}${cents ? ` con ${cents} centavos` : ''}`;
+}
+
+// Le pone a un campo de monto la ayuda visual: monto con puntos, en palabras y el aviso de ceros.
+// alCambiar(valor) se llama con el número leído cada vez que cambia.
+function conAyudaMonto(input, moneda, ayuda, alCambiar) {
+  if (!input || !ayuda) return;
+  const pintar = () => {
+    const v = leerMonto(input.value);
+    const palabras = montoEnPalabras(v, moneda);
+    let html = v ? `<span class="monto-eco">= ${fmtMontoMoneda(v, moneda)}</span>${palabras ? ` <span class="monto-palabras">(${palabras})</span>` : ''}` : '';
+    if (moneda === 'COP' && v > 0 && v < 1000) {
+      html += `<div class="monto-aviso">⚠️ ¿Escribiste ${fmtMontoMoneda(v, 'COP')} pesos? El billete más pequeño es de $1.000.
+        <button type="button" class="action-btn btn-mini monto-corregir">Sí, son ${fmtMontoMoneda(v * 1000, 'COP')}</button></div>`;
+    }
+    ayuda.innerHTML = html;
+    const fix = ayuda.querySelector('.monto-corregir');
+    if (fix) fix.onclick = () => { input.value = (v * 1000).toLocaleString('de-DE'); pintar(); };
+    if (alCambiar) alCambiar(v);
+  };
+  input.oninput = pintar;
+  input.onblur = () => { const v = leerMonto(input.value); if (v) input.value = v.toLocaleString('de-DE', { maximumFractionDigits: 2 }); };
+  pintar();
+}
+
+// Fondo al abrir el turno
+conAyudaMonto(document.getElementById('turno-fondo'), 'COP', document.getElementById('turno-fondo-ayuda'));
+conAyudaMonto(document.getElementById('turno-fondo-usd'), 'USD', document.getElementById('turno-fondo-usd-ayuda'));
+
+// ============================================
+// CIERRE DE CAJA A CIEGAS: el cajero no ve lo que dice el sistema. Los pagos digitales se
+// agregan uno por uno (el sistema los suma) y el efectivo se escribe en total. Antes de
+// cerrar, el servidor dice QUÉ métodos no cuadran (sin decir por cuánto) para revisarlos una vez.
+// ============================================
+const METODOS_CIEGO = [
+  { metodo: 'Pago Móvil', clave: 'pago-movil', moneda: 'VES', lista: true, nombre: 'Pago Móvil', icono: 'smartphone', ayuda: 'Agrega cada Pago Móvil que te llegó' },
+  { metodo: 'Bancolombia', clave: 'bancolombia', moneda: 'COP', lista: true, nombre: 'Bancolombia', icono: 'building-2', ayuda: 'Agrega cada transferencia que te llegó' },
+  { metodo: 'Binance', clave: 'binance', moneda: 'USD', lista: true, nombre: 'Binance', icono: 'bitcoin', ayuda: 'Agrega cada pago que te llegó' },
+  { metodo: 'Efectivo COP', clave: 'pesos', moneda: 'COP', lista: false, nombre: 'Pesos en efectivo', icono: 'banknote', ayuda: 'Total contado, sin el fondo' },
+  { metodo: 'Efectivo USD', clave: 'usd', moneda: 'USD', lista: false, nombre: 'Dólares en efectivo', icono: 'dollar-sign', ayuda: 'Total contado, sin el fondo' }
+];
+let arqueoCiego = null;      // { ventas: { metodo: [montos] }, abonos: {...} }
+let ultimoDetalleArqueo = null;
+
+function montarArqueoCiego() {
+  arqueoCiego = { ventas: {}, abonos: {} };
+  ultimoDetalleArqueo = null;
+  const revision = document.getElementById('cc-revision');
+  if (revision) { revision.style.display = 'none'; revision.innerHTML = ''; }
+  const btn = document.getElementById('btn-confirm-cierre');
+  if (btn) { delete btn.dataset.revisado; btn.disabled = false; btn.innerHTML = '<i data-lucide="check-square"></i> Confirmar Cierre'; }
+  const abonos = document.getElementById('cc-hubo-abonos');
+  const wrapAbonos = document.getElementById('cc-arqueo-abonos-wrap');
+  if (abonos) {
+    abonos.checked = false;
+    abonos.onchange = () => { wrapAbonos.style.display = abonos.checked ? '' : 'none'; recalcArqueoCiego(); };
+  }
+  if (wrapAbonos) wrapAbonos.style.display = 'none';
+  ['ventas', 'abonos'].forEach(seccion => {
+    const cont = document.getElementById(`cc-arqueo-${seccion}`);
+    if (!cont) return;
+    cont.innerHTML = METODOS_CIEGO.map(m => `
+      <div class="arqueo-metodo" data-seccion="${seccion}" data-metodo="${m.metodo}">
+        <div class="arqueo-metodo-head">
+          <span><i data-lucide="${m.icono}"></i> ${m.nombre} <small>(${m.moneda === 'VES' ? 'Bs' : m.moneda})</small></span>
+          <span class="arqueo-sub"></span>
+        </div>
+        <div class="arqueo-ayuda">${m.ayuda}</div>
+        <div class="arqueo-filas"></div>
+        ${m.lista ? '<button type="button" class="action-btn btn-mini arqueo-agregar"><i data-lucide="plus"></i> Agregar pago</button>' : ''}
+      </div>`).join('');
+    cont.querySelectorAll('.arqueo-metodo').forEach(card => {
+      const m = METODOS_CIEGO.find(x => x.metodo === card.dataset.metodo);
+      arqueoCiego[seccion][m.metodo] = [];
+      if (m.lista) card.querySelector('.arqueo-agregar').onclick = () => agregarFilaArqueo(card, m, seccion, true);
+      else agregarFilaArqueo(card, m, seccion, false);
+    });
+  });
+  recalcArqueoCiego();
+  lucide.createIcons();
+}
+
+function agregarFilaArqueo(card, m, seccion, enfocar) {
+  const filas = card.querySelector('.arqueo-filas');
+  const fila = document.createElement('div');
+  fila.className = 'arqueo-fila';
+  fila.innerHTML = `
+    <span class="arqueo-mon">${m.moneda === 'COP' ? '$' : m.moneda === 'VES' ? 'Bs' : 'US$'}</span>
+    <input type="text" inputmode="decimal" placeholder="${m.lista ? 'Monto del pago' : 'Total'}" autocomplete="off">
+    ${m.lista ? '<button type="button" class="arqueo-quitar" title="Quitar este pago"><i data-lucide="x"></i></button>' : ''}
+    <div class="monto-ayuda"></div>`;
+  filas.appendChild(fila);
+  const input = fila.querySelector('input');
+  const leerTodo = () => {
+    arqueoCiego[seccion][m.metodo] = [...filas.querySelectorAll('input')].map(i => leerMonto(i.value));
+    recalcArqueoCiego();
+  };
+  conAyudaMonto(input, m.moneda, fila.querySelector('.monto-ayuda'), leerTodo);
+  const quitar = fila.querySelector('.arqueo-quitar');
+  if (quitar) quitar.onclick = () => { fila.remove(); leerTodo(); };
+  lucide.createIcons();
+  if (enfocar) input.focus();
+}
+
+// Suma de cada método -> campos ocultos que lee el cierre (cc-dec-*), y subtotal visible
+function recalcArqueoCiego() {
+  if (!arqueoCiego) return;
+  const hayAbonos = document.getElementById('cc-hubo-abonos')?.checked;
+  ['ventas', 'abonos'].forEach(seccion => {
+    METODOS_CIEGO.forEach(m => {
+      const montos = (arqueoCiego[seccion][m.metodo] || []).filter(v => v > 0);
+      const total = seccion === 'abonos' && !hayAbonos ? 0 : montos.reduce((s, v) => s + v, 0);
+      const oculto = document.getElementById(`cc-dec-${seccion === 'abonos' ? 'abono-' : ''}${m.clave}`);
+      if (oculto) oculto.value = String(Math.round(total * 100) / 100);
+      const sub = document.querySelector(`.arqueo-metodo[data-seccion="${seccion}"][data-metodo="${m.metodo}"] .arqueo-sub`);
+      if (sub) sub.textContent = m.lista
+        ? `${montos.length} pago${montos.length === 1 ? '' : 's'} · ${fmtMontoMoneda(total, m.moneda)}`
+        : (total ? fmtMontoMoneda(total, m.moneda) : '');
+    });
+  });
+}
+
+function declaradoArqueoCiego() {
+  const hayAbonos = document.getElementById('cc-hubo-abonos')?.checked;
+  const out = { ventas: {}, abonos: {} };
+  ['ventas', 'abonos'].forEach(seccion => METODOS_CIEGO.forEach(m => {
+    const montos = (arqueoCiego?.[seccion]?.[m.metodo] || []).filter(v => v > 0);
+    out[seccion][m.metodo] = seccion === 'abonos' && !hayAbonos ? 0 : montos.reduce((s, v) => s + v, 0);
+  }));
+  return out;
+}
+
+// Devuelve la lista de métodos que no cuadran ([] si todo cuadra) o null si no se pudo verificar
+async function verificarArqueoCiego() {
+  try {
+    const res = await fetch('/api/caja/verificar-arqueo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(declaradoArqueoCiego())
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'No se pudo revisar el cierre.');
+    return d.revisar || [];
+  } catch (e) {
+    alert('Error: ' + e.message);
+    return null;
+  }
+}
+
+function mostrarRevisionArqueo(revisar) {
+  const nombre = (r) => `${(METODOS_CIEGO.find(m => m.metodo === r.metodo) || {}).nombre || r.metodo}${r.seccion === 'abonos' ? ' (abonos)' : ''}`;
+  document.querySelectorAll('.arqueo-metodo').forEach(c => c.classList.remove('arqueo-revisar'));
+  revisar.forEach(r => document.querySelector(`.arqueo-metodo[data-seccion="${r.seccion}"][data-metodo="${r.metodo}"]`)?.classList.add('arqueo-revisar'));
+  if (revisar.some(r => r.seccion === 'abonos')) {
+    const chk = document.getElementById('cc-hubo-abonos');
+    if (chk && !chk.checked) { chk.checked = true; chk.onchange(); }
+  }
+  const box = document.getElementById('cc-revision');
+  box.innerHTML = `⚠️ <strong>Revisa antes de cerrar.</strong> No cuadra: ${revisar.map(nombre).join(', ')}.
+    Mira otra vez la app del banco o vuelve a contar. Si ya lo revisaste y está bien, toca <strong>Cerrar de todos modos</strong>.`;
+  box.style.display = '';
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function detalleArqueoCiego(revisar) {
+  const hayAbonos = document.getElementById('cc-hubo-abonos')?.checked;
+  const det = { ventas: {}, abonos: {}, no_cuadraba: revisar || [] };
+  ['ventas', 'abonos'].forEach(seccion => {
+    if (seccion === 'abonos' && !hayAbonos) return;
+    METODOS_CIEGO.forEach(m => {
+      const montos = (arqueoCiego?.[seccion]?.[m.metodo] || []).filter(v => v > 0);
+      if (montos.length) det[seccion][m.metodo] = montos;
+    });
+  });
+  return det;
+}
+
+// Ticket: lo que el cajero agregó uno por uno y si el sistema le avisó que no cuadraba
+function htmlDetalleDeclarado(det) {
+  if (!det || (!Object.keys(det.ventas || {}).length && !Object.keys(det.abonos || {}).length)) return '';
+  const moneda = (metodo) => (METODOS_CIEGO.find(m => m.metodo === metodo) || {}).moneda || 'COP';
+  const filas = (seccion, titulo) => Object.entries(det[seccion] || {}).map(([metodo, montos]) => {
+    const lista = Array.isArray(montos) ? montos : [montos];
+    const total = lista.reduce((s, v) => s + (Number(v) || 0), 0);
+    const detalle = lista.length > 1 ? lista.map(v => fmtMontoMoneda(v, moneda(metodo))).join(' + ') + ' = ' : '';
+    return `<div class="ctd-row"><span>${escHtml(metodo)}${titulo}</span><strong class="ctd-mono" style="text-align:right;">${detalle}${fmtMontoMoneda(total, moneda(metodo))}</strong></div>`;
+  }).join('');
+  const aviso = (det.no_cuadraba || []).length
+    ? `<div class="ctd-row" style="font-size:12px;"><span style="color:var(--warning);">⚠️ Al cerrar, el sistema le avisó que no cuadraba: ${det.no_cuadraba.map(r => escHtml(r.metodo) + (r.seccion === 'abonos' ? ' (abonos)' : '')).join(', ')}</span></div>`
+    : '';
+  return `
+    <section class="ctd-card">
+      <div class="ctd-card-head"><span class="ctd-card-icon ctd-icon-cyan"><i data-lucide="list-plus"></i></span><span class="ctd-card-title">Lo que escribió el cajero</span></div>
+      ${filas('ventas', '')}${filas('abonos', ' (abonos)')}
+      ${aviso}
+    </section>`;
 }

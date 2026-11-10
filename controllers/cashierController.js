@@ -384,6 +384,7 @@ export async function ticketTurnoAdmin(req, res) {
       cantidad_ventas: parseInt(conteo?.ventas || 0, 10),
       cantidad_anuladas: parseInt(conteo?.anuladas || 0, 10),
       conteo_nevera: await conteoNeveraDeSesion(s.id),
+      detalle_declarado: (() => { try { return s.detalle_declarado ? JSON.parse(s.detalle_declarado) : null; } catch (e) { return null; } })(),
       creditos: (await ventasACredito(`pv.fecha >= $1 AND pv.fecha <= ${hastaExpr}`, params)).por_cliente
     });
   } catch (error) {
@@ -729,6 +730,13 @@ export async function cerrarCaja(req, res) {
 
     const result = await db.execute(sqlUpdate, [now, totalVentasReal, totalGastos, diferencia, decPagoMovil, decZelle, decBinance, decPesos, decBancolombia, decUsd, costoProduccion, utilidadNeta, declarado, totalVentasCreditoCop, decFondoPesos, decFondoUsd, fondoCompleto, totalAbonosCop, declaradoVentasCop, declaradoAbonosCop, diferenciaVentasCop, diferenciaAbonosCop, tasaUsd, tasaVes, currentSession.id]);
     
+    // Lista de pagos que el cajero agregó uno por uno (se muestra en el ticket del turno)
+    const detalle = req.body.detalle_declarado;
+    if (detalle && typeof detalle === 'object') {
+      const json = JSON.stringify(detalle);
+      if (json.length < 20000) await db.execute('UPDATE sesiones_caja SET detalle_declarado = $1 WHERE id = $2', [json, currentSession.id]);
+    }
+
     let sessionRes = result;
     if (!isPg) {
       const rows = await db.query('SELECT * FROM sesiones_caja WHERE id = $1', [currentSession.id]);
@@ -782,3 +790,54 @@ export async function cerrarCaja(req, res) {
   }
 }
 
+// ============================================
+// REVISIÓN A CIEGAS DEL CIERRE: el cajero escribe lo que recibió sin ver lo esperado.
+// Antes de cerrar se le dice QUÉ métodos no cuadran (sin decir por cuánto) para que revise.
+// ============================================
+const METODOS_ARQUEO_CIEGO = [
+  { metodo: 'Pago Móvil', moneda: 'VES', claves: ['Pago Móvil', 'Pago Movil'] },
+  { metodo: 'Bancolombia', moneda: 'COP', claves: ['Bancolombia'] },
+  { metodo: 'Binance', moneda: 'USD', claves: ['Binance'] },
+  { metodo: 'Efectivo COP', moneda: 'COP', claves: ['Efectivo COP', 'Efectivo'] },
+  { metodo: 'Efectivo USD', moneda: 'USD', claves: ['Efectivo USD', 'Efectivo'] }
+];
+
+// Margen para no marcar como error lo que es redondeo: $100 en pesos, unos bolívares por la tasa
+export function toleranciaArqueo(moneda, esperado) {
+  if (moneda === 'COP') return 100;
+  if (moneda === 'VES') return Math.max(2, Math.abs(esperado) * 0.003);
+  return 0.05;
+}
+
+// POST /api/caja/verificar-arqueo  { ventas: { metodo: monto }, abonos: { metodo: monto } }
+export async function verificarArqueo(req, res) {
+  try {
+    const session = await db.query('SELECT * FROM sesiones_caja WHERE fecha_cierre IS NULL ORDER BY id DESC LIMIT 1');
+    if (session.length === 0) return res.status(400).json({ error: 'No hay ninguna caja abierta' });
+    const desde = session[0].fecha_apertura;
+    const ventas = await db.query(`
+      SELECT pv.moneda, pv.metodo_pago, SUM(pv.monto_original) AS total
+      FROM pagos_ventas pv JOIN ventas v ON pv.venta_id = v.id
+      WHERE pv.fecha >= $1 AND pv.metodo_pago != 'Crédito' AND v.tipo_transaccion != 'Anulada'
+      GROUP BY pv.moneda, pv.metodo_pago`, [desde]);
+    const abonos = await db.query(`
+      SELECT pa.moneda, pa.metodo_pago, SUM(pa.monto_original) AS total
+      FROM pagos_abonos pa WHERE pa.fecha >= $1 GROUP BY pa.moneda, pa.metodo_pago`, [desde]);
+    const esperado = (filas, m) => filas
+      .filter(f => String(f.moneda).toUpperCase() === m.moneda && m.claves.includes(f.metodo_pago))
+      .reduce((s, f) => s + (parseFloat(f.total) || 0), 0);
+    const revisar = [];
+    for (const [seccion, filas] of [['ventas', ventas], ['abonos', abonos]]) {
+      const declarados = (req.body && req.body[seccion]) || {};
+      for (const m of METODOS_ARQUEO_CIEGO) {
+        const esp = esperado(filas, m);
+        const dec = parseFloat(declarados[m.metodo]) || 0;
+        if (Math.abs(dec - esp) > toleranciaArqueo(m.moneda, esp)) revisar.push({ seccion, metodo: m.metodo });
+      }
+    }
+    return res.json({ cuadra: revisar.length === 0, revisar });
+  } catch (err) {
+    console.error('Error al verificar el arqueo:', err);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+}

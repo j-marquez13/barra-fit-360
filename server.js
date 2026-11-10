@@ -9,7 +9,7 @@ import { createClient, getClients, getClientDetails, processAbono, registrarDeud
 import { getInsumos, createInsumo, updateInsumo, restockInsumo, getMermas, createMerma, toggleMermaGanancia, getProductos, createProducto, updateProducto, deleteProducto, deleteInsumo, getValorizacionInventario, getOrdenCompra, confirmarOrdenCompra, listarOrdenesCompra, getOrdenCompraDetalle, recibirOrdenCompra, borrarOrdenCompra, getProductoReceta, getRecetasBase, createRecetaBase, updateRecetaBase, deleteRecetaBase, toggleRecetaBaseBatido } from './controllers/inventoryController.js';
 import { cierreDiario, cierreSemanal, cierreRango, historialVentas } from './controllers/reportsController.js';
 import { listarGastos, registrarGasto } from './controllers/expensesController.js';
-import { estadoCaja, abrirCaja, cerrarCaja, cierreDia, listarCierresAdmin, ticketTurnoAdmin } from './controllers/cashierController.js';
+import { estadoCaja, abrirCaja, cerrarCaja, cierreDia, listarCierresAdmin, ticketTurnoAdmin, verificarArqueo } from './controllers/cashierController.js';
 import { getSaldos, transferirFondos, getResumen, getMovimientos, registrarAjuste } from './controllers/treasuryController.js';
 import { listarEspera, crearEspera, actualizarEspera, eliminarEspera } from './controllers/esperaController.js';
 import { getConteoNevera, verificarConteoNevera, guardarConteoNevera, listarConteosNevera, decidirItemNevera, getInventarioMensual, guardarInventarioMensual, ajustarInventarioMensual, reporteInventarioMes, autorizarInventarioMensual, requiereAutorizacionInventario, reabrirInventarioMensual } from './controllers/conteoController.js';
@@ -211,6 +211,7 @@ app.post('/api/gastos', caja, registrarGasto);
 app.get('/api/caja/estado', estadoCaja);
 app.post('/api/caja/abrir', abrirCaja);
 app.post('/api/caja/cerrar', cerrarCaja);
+app.post('/api/caja/verificar-arqueo', verificarArqueo); // revisión a ciegas antes de cerrar
 app.get('/api/caja/cierre-dia', cierreDia);
 
 // Conteo de la nevera: lo hace el cajero en cada cierre de caja (obligatorio para cerrar)

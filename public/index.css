@@ -4217,3 +4217,36 @@ select.receta-insumo option {
 .hist-tag-anulada { color: var(--danger); border-color: var(--danger); }
 .hist-anulada td { opacity: 0.6; background: rgba(239, 68, 68, 0.05); }
 .hist-anular { width: auto; background: transparent !important; color: var(--danger) !important; border: 1px solid var(--danger) !important; white-space: nowrap; }
+
+/* ============================================
+   CIERRE A CIEGAS Y MONTOS ESCRITOS A MANO
+   ============================================ */
+.arqueo-pasos { margin: 8px 0 12px 18px; font-size: 0.85rem; line-height: 1.5; color: var(--color-text); }
+.arqueo-titulo { font-size: 0.75rem; font-weight: 700; letter-spacing: 1px; color: var(--color-muted); margin: 12px 0 6px; text-transform: uppercase; border-bottom: 1px solid var(--border-glass); padding-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+.arqueo-titulo svg { width: 14px; height: 14px; }
+.arqueo-metodos { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.arqueo-metodo { border: 1px solid var(--border-glass); border-radius: 10px; padding: 10px 12px; background: var(--bg-surface); display: flex; flex-direction: column; gap: 6px; }
+.arqueo-metodo.arqueo-revisar { border-color: var(--warning); background: var(--warning-glow); }
+.arqueo-metodo-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 600; font-size: 0.9rem; }
+.arqueo-metodo-head span:first-child { display: flex; align-items: center; gap: 6px; }
+.arqueo-metodo-head svg { width: 16px; height: 16px; }
+.arqueo-metodo-head small { color: var(--color-muted); font-weight: 400; }
+.arqueo-sub { font-size: 0.8rem; color: var(--cyan-neon); font-weight: 600; }
+.arqueo-ayuda { font-size: 0.75rem; color: var(--color-muted); }
+.arqueo-fila { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 6px; }
+.arqueo-fila .monto-ayuda { grid-column: 1 / -1; }
+.arqueo-mon { font-size: 0.8rem; font-weight: 700; color: var(--color-muted); min-width: 28px; }
+.arqueo-fila input { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border-glass); background: var(--bg-app); color: var(--color-text); font-size: 1rem; }
+.arqueo-quitar { background: none; border: none; color: var(--danger); cursor: pointer; padding: 4px; }
+.arqueo-quitar svg { width: 16px; height: 16px; }
+.arqueo-metodo .arqueo-agregar { width: auto; align-self: flex-start; }
+.arqueo-abonos-toggle { display: flex; align-items: center; gap: 8px; margin: 12px 0 4px; font-size: 0.85rem; cursor: pointer; }
+.arqueo-revision { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--warning); background: var(--warning-glow); font-size: 0.85rem; line-height: 1.45; margin-bottom: 10px; }
+.monto-ayuda { font-size: 0.8rem; min-height: 0; }
+.monto-eco { font-weight: 700; color: var(--cyan-neon); }
+.monto-palabras { color: var(--color-muted); }
+.monto-aviso { margin-top: 4px; padding: 6px 8px; border-radius: 8px; background: var(--warning-glow); color: var(--warning); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.monto-aviso .action-btn { width: auto; }
+.caja-nota-cajero { display: none; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border-glass); background: var(--bg-card); font-size: 0.85rem; margin-bottom: 15px; }
+.vista-cajero .caja-nota-cajero { display: block; }
+.vista-cajero .caja-montos-turno { display: none !important; }

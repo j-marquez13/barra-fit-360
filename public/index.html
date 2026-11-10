@@ -15,7 +15,7 @@
        bloqueando la página ~3 s y cambiando de versión sin aviso) -->
   <script src="vendor/lucide-1.57.0.min.js"></script>
   <!-- Estilos CSS -->
-  <link rel="stylesheet" href="index.css?v=31">
+  <link rel="stylesheet" href="index.css?v=32">
   <!-- PWA: instalable como aplicación en Chrome/Android/escritorio -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#0b0f1a">
@@ -90,11 +90,13 @@
       <div style="display:flex; gap:10px;">
         <div class="form-group" style="flex:1;">
           <label for="turno-fondo">Fondo de Caja (COP)</label>
-          <input type="number" id="turno-fondo" placeholder="Ej: 50000" min="0" step="1000" value="0">
+          <input type="text" id="turno-fondo" inputmode="decimal" placeholder="100.000" value="" autocomplete="off">
+          <div class="monto-ayuda" id="turno-fondo-ayuda"></div>
         </div>
         <div class="form-group" style="flex:1;">
           <label for="turno-fondo-usd">Fondo (USD)</label>
-          <input type="number" id="turno-fondo-usd" placeholder="Ej: 20" min="0" step="1" value="0">
+          <input type="text" id="turno-fondo-usd" inputmode="decimal" placeholder="20" value="" autocomplete="off">
+          <div class="monto-ayuda" id="turno-fondo-usd-ayuda"></div>
         </div>
       </div>
       </div>
@@ -401,7 +403,6 @@
                 <button class="action-btn secondary quick-pay-btn" data-method="Efectivo COP" data-currency="COP" style="font-size: 0.8rem; padding: 6px;">💵 Efectivo COP</button>
                 <button class="action-btn secondary quick-pay-btn" data-method="Bancolombia" data-currency="COP" style="font-size: 0.8rem; padding: 6px; border-color: rgba(255, 216, 0, 0.4); color: #ffd800;">🏦 Bancolombia</button>
                 
-                <button class="action-btn secondary quick-pay-btn" data-method="Zelle" data-currency="USD" style="font-size: 0.8rem; padding: 6px; border-color: rgba(116, 67, 255, 0.4); color: #9d7bff;">🟣 Zelle USD</button>
                 <button class="action-btn secondary quick-pay-btn" data-method="Efectivo USD" data-currency="USD" style="font-size: 0.8rem; padding: 6px; border-color: rgba(34, 197, 94, 0.4); color: var(--success);">💵 Efectivo USD</button>
                 
                 <button class="action-btn secondary quick-pay-btn" data-method="Pago Móvil" data-currency="VES" style="font-size: 0.8rem; padding: 6px; border-color: rgba(56, 189, 248, 0.4); color: var(--cyan-neon);">📱 Pago Móvil</button>
@@ -642,7 +643,6 @@
                   <option value="Dueño">Pagado por el dueño (no sale de ninguna cuenta)</option>
                   <option value="Bancolombia">Bancolombia</option>
                   <option value="Pago Móvil">Pago Móvil (VES)</option>
-                  <option value="Zelle">Zelle (USD)</option>
                   <option value="Binance">Binance (USD)</option>
                   <option value="Efectivo USD">Efectivo USD</option>
                 </select>
@@ -1799,12 +1799,6 @@
                   <input type="number" class="payment-input" id="pay-usd-cash" placeholder="0.00" min="0">
                   <span class="live-calc" id="calc-usd-cash">= $0 COP</span>
                 </div>
-                <div class="form-group">
-                  <label for="pay-usd-zelle">Zelle (USD)</label>
-                  <input type="number" class="payment-input" id="pay-usd-zelle" placeholder="0.00" min="0" data-ref="ref-usd-zelle">
-                  <input type="text" class="ref-input" id="ref-usd-zelle" placeholder="Ref. Zelle">
-                  <span class="live-calc" id="calc-usd-zelle">= $0 COP</span>
-                </div>
               </div>
 
               <!-- VES & BINANCE -->
@@ -1914,33 +1908,14 @@
         </div>
         
         <div class="cierre-caja-grid">
-          <!-- Columna Izquierda: Valores Teóricos -->
+          <!-- Columna izquierda: cómo cerrar y el fondo. No se muestran montos esperados (cierre a ciegas) -->
           <div class="cierre-col-left">
-            <h3><i data-lucide="info"></i> Resumen del Turno</h3>
-
-            <div style="font-size:0.72rem; font-weight:700; letter-spacing:1px; color:var(--color-muted); margin:12px 0 6px; text-transform:uppercase; border-bottom:1px solid var(--border-glass); padding-bottom:4px;">Ventas</div>
-            <div class="cierre-stats-list">
-              <div class="cierre-stat-item">
-                <span>Total Ventas (Contado):</span>
-                <strong id="cc-total-ventas" style="color: var(--success);">$0</strong>
-              </div>
-              <div class="cierre-stat-item">
-                <span>Cuentas por Cobrar (Crédito):</span>
-                <strong id="cc-total-credito" style="color: var(--warning);">$0</strong>
-              </div>
-              <div class="cierre-stat-item">
-                <span>Abonos (Cobranza):</span>
-                <strong id="cc-total-abonos" style="color: var(--cyan-neon);">$0</strong>
-              </div>
-            </div>
-
-            <div style="font-size:0.72rem; font-weight:700; letter-spacing:1px; color:var(--color-muted); margin:12px 0 6px; text-transform:uppercase; border-bottom:1px solid var(--border-glass); padding-bottom:4px;">Tesorería (Informativo)</div>
-            <div class="cierre-stats-list">
-              <div class="cierre-stat-item">
-                <span>Total Gastos (no resta de caja):</span>
-                <strong id="cc-total-gastos" style="color: var(--color-muted);">$0</strong>
-              </div>
-            </div>
+            <h3><i data-lucide="info"></i> Cómo cerrar</h3>
+            <ol class="arqueo-pasos">
+              <li>Abre la app del banco y agrega <strong>cada pago</strong> que te llegó, uno por uno. El sistema los suma.</li>
+              <li>Cuenta el efectivo de las ventas <strong>sin el fondo</strong> y escribe el total.</li>
+              <li>Si algo no cuadra, el sistema te avisa para que lo revises.</li>
+            </ol>
 
             <div style="font-size:0.72rem; font-weight:700; letter-spacing:1px; color:var(--color-muted); margin:12px 0 6px; text-transform:uppercase; border-bottom:1px solid var(--border-glass); padding-bottom:4px;">Fondo de Caja</div>
             <div class="cierre-stats-list">
@@ -1957,118 +1932,35 @@
               </div>
             </div>
           </div>
-          
-          <!-- Columna Derecha: Ingreso de Efectivo Contado -->
+
+          <!-- Columna derecha: lo que recibió el cajero (lo arma app3.js) -->
           <div class="cierre-col-right">
-            <h3><i data-lucide="wallet"></i> Efectivo Contado en Caja</h3>
-            <p class="text-muted" style="margin-bottom: 15px; font-size: 0.85rem;">Ingresa los montos físicos separando ventas de abonos.</p>
-
-            <h4 style="font-size:0.72rem; font-weight:700; letter-spacing:1px; color:var(--color-muted); margin:12px 0 6px; text-transform:uppercase; border-bottom:1px solid var(--border-glass); padding-bottom:4px;"><i data-lucide="receipt" style="width:14px;height:14px;vertical-align:-2px;"></i> Ventas (Contado)</h4>
-            <div class="cierre-methods-grid">
-              <div class="cierre-method-card">
-                <div class="cierre-method-head">
-                  <span class="cierre-method-label"><i data-lucide="smartphone"></i> Pago Móvil (VES)</span>
-                  <span class="cierre-method-expected" id="cc-esp-pago-movil">Esperado: Bs 0</span>
-                </div>
-                <input type="number" class="cierre-input" id="cc-dec-pago-movil" value="0" min="0" step="any" placeholder="0.00">
-              </div>
-              <div class="cierre-method-card">
-                <div class="cierre-method-head">
-                  <span class="cierre-method-label"><i data-lucide="landmark"></i> Zelle (USD)</span>
-                  <span class="cierre-method-expected" id="cc-esp-zelle">Esperado: $0</span>
-                </div>
-                <input type="number" class="cierre-input" id="cc-dec-zelle" value="0" min="0" step="any" placeholder="0.00">
-              </div>
-              <div class="cierre-method-card">
-                <div class="cierre-method-head">
-                  <span class="cierre-method-label"><i data-lucide="bitcoin"></i> Binance (USD)</span>
-                  <span class="cierre-method-expected" id="cc-esp-binance">Esperado: $0</span>
-                </div>
-                <input type="number" class="cierre-input" id="cc-dec-binance" value="0" min="0" step="any" placeholder="0.00">
-              </div>
-              <div class="cierre-method-card">
-                <div class="cierre-method-head">
-                  <span class="cierre-method-label"><i data-lucide="banknote"></i> Pesos Efectivo (COP)</span>
-                  <span class="cierre-method-expected" id="cc-esp-pesos">Esperado: $0</span>
-                </div>
-                <input type="number" class="cierre-input" id="cc-dec-pesos" value="0" min="0" step="any" placeholder="0.00">
-              </div>
-              <div class="cierre-method-card">
-                <div class="cierre-method-head">
-                  <span class="cierre-method-label"><i data-lucide="building-2"></i> Bancolombia (COP)</span>
-                  <span class="cierre-method-expected" id="cc-esp-bancolombia">Esperado: $0</span>
-                </div>
-                <input type="number" class="cierre-input" id="cc-dec-bancolombia" value="0" min="0" step="any" placeholder="0.00">
-              </div>
-              <div class="cierre-method-card">
-                <div class="cierre-method-head">
-                  <span class="cierre-method-label"><i data-lucide="dollar-sign"></i> Efectivo (USD)</span>
-                  <span class="cierre-method-expected" id="cc-esp-usd">Esperado: $0</span>
-                </div>
-                <input type="number" class="cierre-input" id="cc-dec-usd" value="0" min="0" step="any" placeholder="0.00">
-              </div>
+            <h3><i data-lucide="wallet"></i> Lo que recibiste en el turno</h3>
+            <div id="cc-revision" class="arqueo-revision" style="display:none;"></div>
+            <h4 class="arqueo-titulo"><i data-lucide="receipt"></i> Ventas</h4>
+            <div id="cc-arqueo-ventas" class="arqueo-metodos"></div>
+            <label class="arqueo-abonos-toggle"><input type="checkbox" id="cc-hubo-abonos"> Recibí abonos de deudas en este turno</label>
+            <div id="cc-arqueo-abonos-wrap" style="display:none;">
+              <h4 class="arqueo-titulo"><i data-lucide="hand-coins"></i> Abonos (cobranza)</h4>
+              <div id="cc-arqueo-abonos" class="arqueo-metodos"></div>
             </div>
-
-            <h4 style="font-size:0.72rem; font-weight:700; letter-spacing:1px; color:var(--color-muted); margin:12px 0 6px; text-transform:uppercase; border-bottom:1px solid var(--border-glass); padding-bottom:4px;"><i data-lucide="hand-coins" style="width:14px;height:14px;vertical-align:-2px;"></i> Abonos (Cobranza)</h4>
-            <div class="cierre-methods-grid">
-              <div class="cierre-method-card">
-                <div class="cierre-method-head">
-                  <span class="cierre-method-label"><i data-lucide="smartphone"></i> Pago Móvil (VES)</span>
-                  <span class="cierre-method-expected" id="cc-esp-abono-pago-movil">Esperado: Bs 0</span>
-                </div>
-                <input type="number" class="cierre-input" id="cc-dec-abono-pago-movil" value="0" min="0" step="any" placeholder="0.00">
-              </div>
-              <div class="cierre-method-card">
-                <div class="cierre-method-head">
-                  <span class="cierre-method-label"><i data-lucide="landmark"></i> Zelle (USD)</span>
-                  <span class="cierre-method-expected" id="cc-esp-abono-zelle">Esperado: $0</span>
-                </div>
-                <input type="number" class="cierre-input" id="cc-dec-abono-zelle" value="0" min="0" step="any" placeholder="0.00">
-              </div>
-              <div class="cierre-method-card">
-                <div class="cierre-method-head">
-                  <span class="cierre-method-label"><i data-lucide="bitcoin"></i> Binance (USD)</span>
-                  <span class="cierre-method-expected" id="cc-esp-abono-binance">Esperado: $0</span>
-                </div>
-                <input type="number" class="cierre-input" id="cc-dec-abono-binance" value="0" min="0" step="any" placeholder="0.00">
-              </div>
-              <div class="cierre-method-card">
-                <div class="cierre-method-head">
-                  <span class="cierre-method-label"><i data-lucide="banknote"></i> Pesos Efectivo (COP)</span>
-                  <span class="cierre-method-expected" id="cc-esp-abono-pesos">Esperado: $0</span>
-                </div>
-                <input type="number" class="cierre-input" id="cc-dec-abono-pesos" value="0" min="0" step="any" placeholder="0.00">
-              </div>
-              <div class="cierre-method-card">
-                <div class="cierre-method-head">
-                  <span class="cierre-method-label"><i data-lucide="building-2"></i> Bancolombia (COP)</span>
-                  <span class="cierre-method-expected" id="cc-esp-abono-bancolombia">Esperado: $0</span>
-                </div>
-                <input type="number" class="cierre-input" id="cc-dec-abono-bancolombia" value="0" min="0" step="any" placeholder="0.00">
-              </div>
-              <div class="cierre-method-card">
-                <div class="cierre-method-head">
-                  <span class="cierre-method-label"><i data-lucide="dollar-sign"></i> Efectivo (USD)</span>
-                  <span class="cierre-method-expected" id="cc-esp-abono-usd">Esperado: $0</span>
-                </div>
-                <input type="number" class="cierre-input" id="cc-dec-abono-usd" value="0" min="0" step="any" placeholder="0.00">
-              </div>
-            </div>
+            <!-- Totales que se envían al cerrar (los llena app3.js con la suma de lo que se escribió) -->
+            <input type="hidden" id="cc-dec-pago-movil" value="0">
+            <input type="hidden" id="cc-dec-abono-pago-movil" value="0">
+            <input type="hidden" id="cc-dec-zelle" value="0">
+            <input type="hidden" id="cc-dec-abono-zelle" value="0">
+            <input type="hidden" id="cc-dec-binance" value="0">
+            <input type="hidden" id="cc-dec-abono-binance" value="0">
+            <input type="hidden" id="cc-dec-pesos" value="0">
+            <input type="hidden" id="cc-dec-abono-pesos" value="0">
+            <input type="hidden" id="cc-dec-bancolombia" value="0">
+            <input type="hidden" id="cc-dec-abono-bancolombia" value="0">
+            <input type="hidden" id="cc-dec-usd" value="0">
+            <input type="hidden" id="cc-dec-abono-usd" value="0">
           </div>
         </div>
 
-        <!-- Panel Inferior: Diferencia en Tiempo Real -->
         <div class="cierre-bottom-panel">
-          <div class="cierre-diff-box" id="cc-diff-ventas-box">
-            <span class="diff-label">Diferencia Ventas:</span>
-            <strong class="diff-value" id="cc-diferencia-ventas">$0 COP</strong>
-            <span class="diff-status" id="cc-diff-ventas-status">CUADRE PERFECTO</span>
-          </div>
-          <div class="cierre-diff-box" id="cc-diff-abonos-box" style="margin-top:10px;">
-            <span class="diff-label">Diferencia Abonos:</span>
-            <strong class="diff-value" id="cc-diferencia-abonos">$0 COP</strong>
-            <span class="diff-status" id="cc-diff-abonos-status">CUADRE PERFECTO</span>
-          </div>
           <div class="modal-footer" style="padding-top: 0; border-top: none; margin-top: 15px;">
             <button class="action-btn secondary" id="btn-cancel-cierre">Cancelar</button>
             <button class="action-btn btn-primary" id="btn-confirm-cierre">
@@ -2107,7 +1999,6 @@
               </thead>
               <tbody>
                 <tr><td>Pago Móvil (Bs)</td><td class="ctd-mono" id="v-m-pago-movil">Bs 0</td><td class="ctd-mono" id="v-t-pago-movil">—</td><td class="ctd-mono" id="v-c-pago-movil">$0</td></tr>
-                <tr><td>Zelle (USD)</td><td class="ctd-mono" id="v-m-zelle">$0</td><td class="ctd-mono" id="v-t-zelle">—</td><td class="ctd-mono" id="v-c-zelle">$0</td></tr>
                 <tr><td>Binance (USD)</td><td class="ctd-mono" id="v-m-binance">$0</td><td class="ctd-mono" id="v-t-binance">—</td><td class="ctd-mono" id="v-c-binance">$0</td></tr>
                 <tr><td>Efectivo (USD)</td><td class="ctd-mono" id="v-m-usd">$0</td><td class="ctd-mono" id="v-t-usd">—</td><td class="ctd-mono" id="v-c-usd">$0</td></tr>
                 <tr><td>Pesos Efectivo (COP)</td><td class="ctd-mono" id="v-m-pesos">$0</td><td class="ctd-mono" id="v-t-pesos">1</td><td class="ctd-mono" id="v-c-pesos">$0</td></tr>
@@ -2154,7 +2045,6 @@
               </thead>
               <tbody>
                 <tr><td>Pago Móvil (Bs)</td><td class="ctd-mono" id="a-m-pago-movil">Bs 0</td><td class="ctd-mono" id="a-t-pago-movil">—</td><td class="ctd-mono" id="a-c-pago-movil">$0</td></tr>
-                <tr><td>Zelle (USD)</td><td class="ctd-mono" id="a-m-zelle">$0</td><td class="ctd-mono" id="a-t-zelle">—</td><td class="ctd-mono" id="a-c-zelle">$0</td></tr>
                 <tr><td>Binance (USD)</td><td class="ctd-mono" id="a-m-binance">$0</td><td class="ctd-mono" id="a-t-binance">—</td><td class="ctd-mono" id="a-c-binance">$0</td></tr>
                 <tr><td>Efectivo (USD)</td><td class="ctd-mono" id="a-m-usd">$0</td><td class="ctd-mono" id="a-t-usd">—</td><td class="ctd-mono" id="a-c-usd">$0</td></tr>
                 <tr><td>Pesos Efectivo (COP)</td><td class="ctd-mono" id="a-m-pesos">$0</td><td class="ctd-mono" id="a-t-pesos">1</td><td class="ctd-mono" id="a-c-pesos">$0</td></tr>
@@ -2169,6 +2059,9 @@
 
           <!-- Conteo de nevera del turno (lo llena app3.js) -->
           <div id="ticket-conteo-nevera"></div>
+
+          <!-- Lo que escribió el cajero en el cierre (lo llena app3.js) -->
+          <div id="ticket-detalle-declarado"></div>
 
           <section class="ctd-card">
             <div class="ctd-card-head">
@@ -2284,7 +2177,6 @@
               </thead>
               <tbody>
                 <tr><td>Pago Móvil (Bs)</td><td class="ctd-mono" id="dv-m-pago-movil">Bs 0</td><td class="ctd-mono" id="dv-t-pago-movil">—</td><td class="ctd-mono" id="dv-c-pago-movil">$0</td></tr>
-                <tr><td>Zelle (USD)</td><td class="ctd-mono" id="dv-m-zelle">$0</td><td class="ctd-mono" id="dv-t-zelle">—</td><td class="ctd-mono" id="dv-c-zelle">$0</td></tr>
                 <tr><td>Binance (USD)</td><td class="ctd-mono" id="dv-m-binance">$0</td><td class="ctd-mono" id="dv-t-binance">—</td><td class="ctd-mono" id="dv-c-binance">$0</td></tr>
                 <tr><td>Efectivo (USD)</td><td class="ctd-mono" id="dv-m-usd">$0</td><td class="ctd-mono" id="dv-t-usd">—</td><td class="ctd-mono" id="dv-c-usd">$0</td></tr>
                 <tr><td>Pesos Efectivo (COP)</td><td class="ctd-mono" id="dv-m-pesos">$0</td><td class="ctd-mono" id="dv-t-pesos">1</td><td class="ctd-mono" id="dv-c-pesos">$0</td></tr>
@@ -2330,7 +2222,6 @@
               </thead>
               <tbody>
                 <tr><td>Pago Móvil (Bs)</td><td class="ctd-mono" id="da-m-pago-movil">Bs 0</td><td class="ctd-mono" id="da-t-pago-movil">—</td><td class="ctd-mono" id="da-c-pago-movil">$0</td></tr>
-                <tr><td>Zelle (USD)</td><td class="ctd-mono" id="da-m-zelle">$0</td><td class="ctd-mono" id="da-t-zelle">—</td><td class="ctd-mono" id="da-c-zelle">$0</td></tr>
                 <tr><td>Binance (USD)</td><td class="ctd-mono" id="da-m-binance">$0</td><td class="ctd-mono" id="da-t-binance">—</td><td class="ctd-mono" id="da-c-binance">$0</td></tr>
                 <tr><td>Efectivo (USD)</td><td class="ctd-mono" id="da-m-usd">$0</td><td class="ctd-mono" id="da-t-usd">—</td><td class="ctd-mono" id="da-c-usd">$0</td></tr>
                 <tr><td>Pesos Efectivo (COP)</td><td class="ctd-mono" id="da-m-pesos">$0</td><td class="ctd-mono" id="da-t-pesos">1</td><td class="ctd-mono" id="da-c-pesos">$0</td></tr>
@@ -2603,7 +2494,7 @@
     </div>
   </div>
 
-  <script src="app3.js?v=67"></script>
+  <script src="app3.js?v=68"></script>
   <script src="whatsapp.js?v=7"></script>
 <!-- Script to automatically replace commas with dots in number inputs -->
   <script>
